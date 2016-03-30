@@ -1,7 +1,5 @@
 require 'nn'
 require 'cunn'
-autograd = require 'autograd'
-t = require 'torch'
 require './GroupConvolutions'
 
 -- Network-in-Network

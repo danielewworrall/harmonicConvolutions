@@ -9,7 +9,7 @@ opt = lapp[[
    -b,--batchSize             (default 128)          batch size
    -r,--learningRate          (default 1)        learning rate
    --learningRateDecay        (default 1e-7)      learning rate decay
-   --weightDecay              (default 0.0005)      weightDecay
+   --weightDecay              (default 0.000)      weightDecay
    -m,--momentum              (default 0.9)         momentum
    --epoch_step               (default 25)          epoch step
    --model                    (default gconv)     model name
@@ -114,7 +114,7 @@ function train()
       local df_do = criterion:backward(outputs, targets)
       model:backward(inputs, df_do)
       confusion:batchAdd(outputs, targets)
-
+      
       return f,gradParameters
     end
     optim.sgd(feval, parameters, optimState)
