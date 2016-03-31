@@ -9,8 +9,8 @@ function GroupConv:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
   dW = dW or 1
   dH = dH or 1
 
-  self.nInputPlane = nInputPlane
-  self.nOutputPlane = nOutputPlane
+  self.nIn = nInputPlane
+  self.nOut = nOutputPlane
   self.kW = kW
   self.kH = kH
 
@@ -20,23 +20,16 @@ function GroupConv:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
   self.padH = padH or self.padW
 	
 	-- Objects for matrix rotations
-	self.productShape = self.nInputPlane * self.nOutputPlane / 4
+	self.productShape = self.nIn * self.nOut / 4
 	self.kernelShape = self.kH * self.kW
-	self.W1 = torch.CudaTensor(self.productShape, self.kernelShape)
-	self.W2 = torch.CudaTensor(self.productShape, self.kernelShape)
-	self.W3 = torch.CudaTensor(self.productShape, self.kernelShape)
-	self.W4 = torch.CudaTensor(self.productShape, self.kernelShape)
 
-  self.weight = torch.Tensor(nOutputPlane/4, nInputPlane, kH, kW)
-  self.bias = torch.Tensor(nOutputPlane)
-  self.gradWeight = torch.Tensor(nOutputPlane, nInputPlane, kH, kW)
-  self.gradBias = torch.Tensor(nOutputPlane)
+  self.weight = torch.Tensor(self.nOut/4, self.nIn, kH, kW)
+  self.bias = torch.Tensor(self.nOut)
+  self.gradWeight = torch.Tensor(self.nOut, self.nIn, kH, kW)
+  self.gradBias = torch.Tensor(self.nOut)
 	
 	-- The rotated weight
-	self.perm1 = self:permutationMatrix(1)
-	self.perm2 = self:permutationMatrix(2)
-	self.perm3 = self:permutationMatrix(3)
-	self.perm4 = self:permutationMatrix(4)
+	self.perm = self:permutationMatrices()
 	self.gW = self:groupRotate(self.weight)
 	
   self:reset()
@@ -46,7 +39,7 @@ function GroupConv:reset(stdv)
 	if stdv then
 		stdv = stdv * math.sqrt(3)
 	else
-		stdv = 1/math.sqrt(self.kW*self.kH*self.nInputPlane)
+		stdv = 1/math.sqrt(self.kW*self.kH*self.nIn)
 	end
 	if nn.oldSeed then
 		self.weight:apply(function()
@@ -83,13 +76,13 @@ local function backCompatibility(self)
 		 self.padH = self.padH or 0
 	end
 	if self.weight:dim() == 2 then
-		 self.weight = self.weight:view(self.nOutputPlane, self.nInputPlane, self.kH, self.kW)
+		 self.weight = self.weight:view(self.nOut, self.nIn, self.kH, self.kW)
 	end
 	if self.gW:dim() == 2 then
-		self.gW = self.gW:view(self.nOutputPlane, self.nInputPlane, self.kH, self.kW)
+		self.gW = self.gW:view(self.nOut, self.nIn, self.kH, self.kW)
 	end
 	if self.gradWeight and self.gradWeight:dim() == 2 then
-		 self.gradWeight = self.gradWeight:view(self.nOutputPlane, self.nInputPlane, self.kH, self.kW)
+		 self.gradWeight = self.gradWeight:view(self.nOut, self.nIn, self.kH, self.kW)
 	end
 end
 
@@ -111,16 +104,16 @@ end
 
 -- function to re-view the weight layout in a way that would make the MM ops happy
 local function viewWeight(self)
-	self.gW = self.gW:view(self.nOutputPlane, self.nInputPlane * self.kH * self.kW)
+	self.gW = self.gW:view(self.nOut, self.nIn * self.kH * self.kW)
 	if self.gradWeight and self.gradWeight:dim() > 0 then
-		 self.gradWeight = self.gradWeight:view(self.nOutputPlane, self.nInputPlane * self.kH * self.kW)
+		 self.gradWeight = self.gradWeight:view(self.nOut, self.nIn * self.kH * self.kW)
 	end
 end
 
 local function unviewWeight(self)
-	self.gW = self.gW:view(self.nOutputPlane, self.nInputPlane, self.kH, self.kW)
+	self.gW = self.gW:view(self.nOut, self.nIn, self.kH, self.kW)
 	if self.gradWeight and self.gradWeight:dim() > 0 then
-		 self.gradWeight = self.gradWeight:view(self.nOutputPlane, self.nInputPlane, self.kH, self.kW)
+		 self.gradWeight = self.gradWeight:view(self.nOut, self.nIn, self.kH, self.kW)
 	end
 end
 
@@ -206,24 +199,28 @@ function GroupConv:permutationMatrix(nQuarterTurns)
 	return rotation:cuda()
 end
 
+function GroupConv:permutationMatrices()
+	local perm1 = self:permutationMatrix(1)
+	local perm2 = self:permutationMatrix(2)
+	local perm3 = self:permutationMatrix(3)
+	local perm4 = self:permutationMatrix(4)
+	local perm = torch.cat({perm1, perm2, perm3, perm4})
+	return perm
+end
+	
 function GroupConv:groupRotate(weights)
 	local W = weights:view(self.productShape, self.kernelShape):cuda()
-	self.W1:mm(W, self.perm1)
-	self.W2:mm(W, self.perm2)
-	self.W3:mm(W, self.perm3)
-	self.W4:mm(W, self.perm4)
-	local gW = torch.cat({W1, W2, W3, W4}, 2)
+	local gW = torch.CudaTensor(self.productShape, self.kernelShape * 4)
+	gW = gW:mm(W, self.perm)
+	local _gW = gW:view(torch.LongStorage{self.nOut / 4, self.nIn, 4, self.kH, self.kW}):transpose(2,3)
+	gW:copy(_gW)
 	return gW
 end
 
 function GroupConv:groupWeightUpdate(gradGroupWeights)
-	gradGroupWeights = torch.reshape(gradGroupWeights,
-																	 torch.LongStorage{self.nOutputPlane/4, self.nInputPlane, 4, self.kH, self.kW})
-	gW1 = torch.reshape(gradGroupWeights[{{},{},1,{},{}}], self.productShape, self.kernelShape) * self.perm1:t()
-	gW2 = torch.reshape(gradGroupWeights[{{},{},2,{},{}}], self.productShape, self.kernelShape) * self.perm2:t()
-	gW3 = torch.reshape(gradGroupWeights[{{},{},3,{},{}}], self.productShape, self.kernelShape) * self.perm3:t()
-	gW4 = torch.reshape(gradGroupWeights[{{},{},4,{},{}}], self.productShape, self.kernelShape) * self.perm4:t()
-	gradWeights = gW1 + gW2 + gW3 + gW4
+	local gradWeights = torch.CudaTensor(self.productShape, self.kernelShape)
+	print(self.gW:view(torch.LongStorage{self.nOut / 4, 4, self.nIn, self.kH*self.kW}))
+	gradWeights:mm(gradGroupWeights:view(self.nOut / 4, self.kernelShape * 4), self.perm:t())
 	self.weight = self.weight - 0.2 * gradWeights --need to change to a gradParameter
 end
 
@@ -235,7 +232,7 @@ end
 
 function GroupConv:__tostring__()
    local s = string.format('%s(%d -> %d, %dx%d', torch.type(self),
-         self.nInputPlane, self.nOutputPlane, self.kW, self.kH)
+         self.nIn, self.nOut, self.kW, self.kH)
    if self.dW ~= 1 or self.dH ~= 1 or self.padW ~= 0 or self.padH ~= 0 then
      s = s .. string.format(', %d,%d', self.dW, self.dH)
    end
