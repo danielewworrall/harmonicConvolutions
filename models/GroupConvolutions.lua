@@ -18,6 +18,14 @@ function GroupConv:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
   self.dH = dH
   self.padW = padW or 0
   self.padH = padH or self.padW
+	
+	-- Objects for matrix rotations
+	self.productShape = self.nInputPlane * self.nOutputPlane / 4
+	self.kernelShape = self.kH * self.kW
+	self.W1 = torch.CudaTensor(self.productShape, self.kernelShape)
+	self.W2 = torch.CudaTensor(self.productShape, self.kernelShape)
+	self.W3 = torch.CudaTensor(self.productShape, self.kernelShape)
+	self.W4 = torch.CudaTensor(self.productShape, self.kernelShape)
 
   self.weight = torch.Tensor(nOutputPlane/4, nInputPlane, kH, kW)
   self.bias = torch.Tensor(nOutputPlane)
@@ -30,7 +38,7 @@ function GroupConv:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
 	self.perm3 = self:permutationMatrix(3)
 	self.perm4 = self:permutationMatrix(4)
 	self.gW = self:groupRotate(self.weight)
-
+	
   self:reset()
 end
 
@@ -55,6 +63,12 @@ function GroupConv:reset(stdv)
 			 self.bias:uniform(-stdv, stdv)
 		end
 	end
+end
+
+function GroupConv:parameters()
+	weights = {self.gW, self.bias}
+	gradWeights = {self.gradWeight, self.gradBias}
+	return weights, gradWeights
 end
 
 local function backCompatibility(self)
@@ -170,10 +184,7 @@ function GroupConv:accGradParameters(input, gradOutput, scale)
 		 scale
 	)
 	unviewWeight(self)
-	print(self.gradWeight:size())
-	print(self.gW:size())
-	print(self.bias:size())
-	print(self.gradBias:size())
+	self:groupWeightUpdate(self.gradWeight)
 end
 
 function GroupConv:permutationMatrix(nQuarterTurns)
@@ -196,14 +207,24 @@ function GroupConv:permutationMatrix(nQuarterTurns)
 end
 
 function GroupConv:groupRotate(weights)
-	local productShape = weights:size()[1] * weights:size()[2]
-	W = weights:view(productShape, 9):cuda()
-	local W1 = (W * self.perm1):viewAs(weights)
-	local W2 = (W * self.perm2):viewAs(weights)
-	local W3 = (W * self.perm3):viewAs(weights)
-	local W4 = (W * self.perm4):viewAs(weights)
-	local gW = torch.cat({W1, W2, W3, W4}, 1)
+	local W = weights:view(self.productShape, self.kernelShape):cuda()
+	self.W1:mm(W, self.perm1)
+	self.W2:mm(W, self.perm2)
+	self.W3:mm(W, self.perm3)
+	self.W4:mm(W, self.perm4)
+	local gW = torch.cat({W1, W2, W3, W4}, 2)
 	return gW
+end
+
+function GroupConv:groupWeightUpdate(gradGroupWeights)
+	gradGroupWeights = torch.reshape(gradGroupWeights,
+																	 torch.LongStorage{self.nOutputPlane/4, self.nInputPlane, 4, self.kH, self.kW})
+	gW1 = torch.reshape(gradGroupWeights[{{},{},1,{},{}}], self.productShape, self.kernelShape) * self.perm1:t()
+	gW2 = torch.reshape(gradGroupWeights[{{},{},2,{},{}}], self.productShape, self.kernelShape) * self.perm2:t()
+	gW3 = torch.reshape(gradGroupWeights[{{},{},3,{},{}}], self.productShape, self.kernelShape) * self.perm3:t()
+	gW4 = torch.reshape(gradGroupWeights[{{},{},4,{},{}}], self.productShape, self.kernelShape) * self.perm4:t()
+	gradWeights = gW1 + gW2 + gW3 + gW4
+	self.weight = self.weight - 0.2 * gradWeights --need to change to a gradParameter
 end
 
 function GroupConv:type(type,tensorCache)

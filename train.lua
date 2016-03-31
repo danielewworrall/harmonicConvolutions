@@ -69,7 +69,6 @@ testLogger.showPlot = false
 
 parameters,gradParameters = model:getParameters()
 
-
 print(c.blue'==>' ..' setting criterion')
 criterion = nn.CrossEntropyCriterion():cuda()
 
