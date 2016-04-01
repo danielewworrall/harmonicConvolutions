@@ -2,9 +2,9 @@ t = require 'torch'
 require 'nn'
 timer = torch.Timer()
 
-local GroupConv, parent = torch.class('nn.GroupConv', 'nn.Module')
+local GroupConvolution, parent = torch.class('nn.GroupConvolution', 'nn.Module')
 
-function GroupConv:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
+function GroupConvolution:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
   parent.__init(self)
 	assert(nOutputPlane % 4 == 0, "invalid input: " .. nOutputPlane .. " is not a multiple of 4")
   dW = dW or 1
@@ -37,7 +37,7 @@ function GroupConv:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
   self:reset()
 end
 
-function GroupConv:reset(stdv)
+function GroupConvolution:reset(stdv)
 	if stdv then
 		stdv = stdv * math.sqrt(3)
 	else
@@ -60,9 +60,9 @@ function GroupConv:reset(stdv)
 	end
 end
 
-function GroupConv:parameters()
-	weights = {self.weight, self.bias}
-	gradWeights = {self.gradWeight, self.gradBias}
+function GroupConvolution:parameters()
+	weights = {self.gW, self.weight, self.bias}
+	gradWeights = {self.gradGW, self.gradWeight, self.gradBias}
 	return weights, gradWeights
 end
 
@@ -119,7 +119,7 @@ local function unviewWeight(self)
 	end
 end
 
-function GroupConv:updateOutput(input)
+function GroupConvolution:updateOutput(input)
 	backCompatibility(self)
 	self.gW = self:groupRotate(self.weight)
 	viewWeight(self)
@@ -139,7 +139,7 @@ function GroupConv:updateOutput(input)
 	return self.output
 end
 
-function GroupConv:updateGradInput(input, gradOutput)
+function GroupConvolution:updateGradInput(input, gradOutput)
 	if self.gradInput then
 		backCompatibility(self)
 		viewWeight(self)
@@ -161,7 +161,7 @@ function GroupConv:updateGradInput(input, gradOutput)
 	end
 end
 
-function GroupConv:accGradParameters(input, gradOutput, scale)
+function GroupConvolution:accGradParameters(input, gradOutput, scale)
 	scale = scale or 1
 	backCompatibility(self)
 	input, gradOutput = makeContiguous(self, input, gradOutput)
@@ -179,10 +179,11 @@ function GroupConv:accGradParameters(input, gradOutput, scale)
 		 scale
 	)
 	unviewWeight(self)
-	self.gradWeight = self:groupWeightUpdate(self.gradGW)
+	self.gradWeight = self:groupWeightUpdate(self.gradGW):mul(0.02)
+	self.weight = self.weight - (self.gradWeight)
 end
 
-function GroupConv:permutationMatrix(nQuarterTurns)
+function GroupConvolution:permutationMatrix(nQuarterTurns)
 	--Generate a 3x3 permutation matrix for the p4 matrix rotation
 	local permutation = t.zeros(9,9)
 	permutation[1][7] = 1
@@ -201,7 +202,7 @@ function GroupConv:permutationMatrix(nQuarterTurns)
 	return rotation:cuda()
 end
 
-function GroupConv:permutationMatrices()
+function GroupConvolution:permutationMatrices()
 	local perm1 = self:permutationMatrix(1)
 	local perm2 = self:permutationMatrix(2)
 	local perm3 = self:permutationMatrix(3)
@@ -210,7 +211,7 @@ function GroupConv:permutationMatrices()
 	return perm
 end
 	
-function GroupConv:groupRotate(weights)
+function GroupConvolution:groupRotate(weights)
 	local W = weights:view(self.productShape, self.kernelShape):cuda()
 	local gW = torch.CudaTensor(self.productShape, self.kernelShape * 4)
 	gW = gW:mm(W, self.perm)
@@ -219,7 +220,7 @@ function GroupConv:groupRotate(weights)
 	return gW
 end
 
-function GroupConv:groupWeightUpdate(gradGroupWeights)
+function GroupConvolution:groupWeightUpdate(gradGroupWeights)
 	local gradWeights = torch.CudaTensor(self.productShape, self.kernelShape)
 	local reshapedWeights = torch.CudaTensor(self.productShape, self.kernelShape*4)
 	reshapedWeights:copy(gradGroupWeights:view(torch.LongStorage{self.nOut / 4, 4, self.nIn, self.kH*self.kW}):transpose(3,2))
@@ -227,13 +228,13 @@ function GroupConv:groupWeightUpdate(gradGroupWeights)
 	return gradWeights
 end
 
-function GroupConv:type(type,tensorCache)
+function GroupConvolution:type(type,tensorCache)
    self.finput = self.finput and torch.Tensor()
    self.fgradInput = self.fgradInput and torch.Tensor()
    return parent.type(self,type,tensorCache)
 end
 
-function GroupConv:__tostring__()
+function GroupConvolution:__tostring__()
    local s = string.format('%s(%d -> %d, %dx%d', torch.type(self),
          self.nIn, self.nOut, self.kW, self.kH)
    if self.dW ~= 1 or self.dH ~= 1 or self.padW ~= 0 or self.padH ~= 0 then
@@ -245,7 +246,7 @@ function GroupConv:__tostring__()
    return s .. ')'
 end
 
-function GroupConv:clearState()
+function GroupConvolution:clearState()
    nn.utils.clear(self, 'finput', 'fgradInput', '_input', '_gradOutput')
    return parent.clearState(self)
 end
