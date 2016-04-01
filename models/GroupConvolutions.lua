@@ -1,5 +1,6 @@
 t = require 'torch'
 require 'nn'
+timer = torch.Timer()
 
 local GroupConv, parent = torch.class('nn.GroupConv', 'nn.Module')
 
@@ -25,12 +26,13 @@ function GroupConv:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
 
   self.weight = torch.Tensor(self.nOut/4, self.nIn, kH, kW)
   self.bias = torch.Tensor(self.nOut)
-  self.gradWeight = torch.Tensor(self.nOut, self.nIn, kH, kW)
+	self.gradWeight = torch.Tensor(self.nOut/4, self.nIn, kH, kW)
   self.gradBias = torch.Tensor(self.nOut)
 	
 	-- The rotated weight
 	self.perm = self:permutationMatrices()
 	self.gW = self:groupRotate(self.weight)
+	self.gradGW = torch.Tensor(self.nOut, self.nIn, kH, kW)
 	
   self:reset()
 end
@@ -59,7 +61,7 @@ function GroupConv:reset(stdv)
 end
 
 function GroupConv:parameters()
-	weights = {self.gW, self.bias}
+	weights = {self.weight, self.bias}
 	gradWeights = {self.gradWeight, self.gradBias}
 	return weights, gradWeights
 end
@@ -81,8 +83,8 @@ local function backCompatibility(self)
 	if self.gW:dim() == 2 then
 		self.gW = self.gW:view(self.nOut, self.nIn, self.kH, self.kW)
 	end
-	if self.gradWeight and self.gradWeight:dim() == 2 then
-		 self.gradWeight = self.gradWeight:view(self.nOut, self.nIn, self.kH, self.kW)
+	if self.gradGW and self.gradGW:dim() == 2 then
+		 self.gradGW = self.gradGW:view(self.nOut, self.nIn, self.kH, self.kW)
 	end
 end
 
@@ -105,15 +107,15 @@ end
 -- function to re-view the weight layout in a way that would make the MM ops happy
 local function viewWeight(self)
 	self.gW = self.gW:view(self.nOut, self.nIn * self.kH * self.kW)
-	if self.gradWeight and self.gradWeight:dim() > 0 then
-		 self.gradWeight = self.gradWeight:view(self.nOut, self.nIn * self.kH * self.kW)
+	if self.gradGW and self.gradGW:dim() > 0 then
+		 self.gradGW = self.gradGW:view(self.nOut, self.nIn * self.kH * self.kW)
 	end
 end
 
 local function unviewWeight(self)
 	self.gW = self.gW:view(self.nOut, self.nIn, self.kH, self.kW)
-	if self.gradWeight and self.gradWeight:dim() > 0 then
-		 self.gradWeight = self.gradWeight:view(self.nOut, self.nIn, self.kH, self.kW)
+	if self.gradGW and self.gradGW:dim() > 0 then
+		 self.gradGW = self.gradGW:view(self.nOut, self.nIn, self.kH, self.kW)
 	end
 end
 
@@ -167,7 +169,7 @@ function GroupConv:accGradParameters(input, gradOutput, scale)
 	input.THNN.SpatialConvolutionMM_accGradParameters(
 		 input:cdata(),
 		 gradOutput:cdata(),
-		 self.gradWeight:cdata(),
+		 self.gradGW:cdata(),
 		 self.gradBias:cdata(),
 		 self.finput:cdata(),
 		 self.fgradInput:cdata(),
@@ -177,7 +179,7 @@ function GroupConv:accGradParameters(input, gradOutput, scale)
 		 scale
 	)
 	unviewWeight(self)
-	self:groupWeightUpdate(self.gradWeight)
+	self.gradWeight = self:groupWeightUpdate(self.gradGW)
 end
 
 function GroupConv:permutationMatrix(nQuarterTurns)
@@ -219,9 +221,10 @@ end
 
 function GroupConv:groupWeightUpdate(gradGroupWeights)
 	local gradWeights = torch.CudaTensor(self.productShape, self.kernelShape)
-	print(self.gW:view(torch.LongStorage{self.nOut / 4, 4, self.nIn, self.kH*self.kW}))
-	gradWeights:mm(gradGroupWeights:view(self.nOut / 4, self.kernelShape * 4), self.perm:t())
-	self.weight = self.weight - 0.2 * gradWeights --need to change to a gradParameter
+	local reshapedWeights = torch.CudaTensor(self.productShape, self.kernelShape*4)
+	reshapedWeights:copy(gradGroupWeights:view(torch.LongStorage{self.nOut / 4, 4, self.nIn, self.kH*self.kW}):transpose(3,2))
+	gradWeights:mm(reshapedWeights, self.perm:t())
+	return gradWeights
 end
 
 function GroupConv:type(type,tensorCache)

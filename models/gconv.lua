@@ -16,11 +16,15 @@ local function Block(...)
 end
 
 --model:add(nn.SpatialConvolution(3, 40, 3, 3, 1, 1, 1, 1))
-model:add(nn.GroupConv(3, 40, 3, 3, 1, 1, 1, 1))
-model:add(nn.SpatialMaxPooling(32,32,1,1):ceil())
-model:add(nn.View(40))
-model:add(nn.Linear(40, 10))
+model:add(nn.GroupConv(3, 96, 3, 3, 1, 1, 1, 1))
+model:add(nn.GroupConv(96, 96, 3, 3, 1, 1, 1, 1))
+model:add(nn.SpatialMaxPooling(3,3,2,2):ceil())
+model:add(nn.GroupConv(96, 192, 3, 3, 1, 1, 1, 1))
+model:add(nn.GroupConv(192, 192, 3, 3, 1, 1, 1, 1))
+model:add(nn.SpatialMaxPooling(16, 16, 1, 1):ceil())
+model:add(nn.View(192))
+model:add(nn.Dropout(0.5))
+model:add(nn.Linear(192, 10))
 
---print(#model:cuda():forward(torch.CudaTensor(1,3,32,32)))
 
 return model
