@@ -7,7 +7,7 @@ local c = require 'trepl.colorize'
 opt = lapp[[
    -s,--save                  (default "logs")      subdirectory to save logs
    -b,--batchSize             (default 128)          batch size
-   -r,--learningRate          (default 0.1)        learning rate
+   -r,--learningRate          (default 1)        learning rate
    --learningRateDecay        (default 1e-7)      learning rate decay
    --weightDecay              (default 0.0005)      weightDecay
    -m,--momentum              (default 0.9)         momentum
@@ -72,7 +72,6 @@ parameters,gradParameters = model:getParameters()
 print(c.blue'==>' ..' setting criterion')
 criterion = nn.CrossEntropyCriterion():cuda()
 
-
 print(c.blue'==>' ..' configuring optimizer')
 optimState = {
   learningRate = opt.learningRate,
@@ -80,7 +79,6 @@ optimState = {
   momentum = opt.momentum,
   learningRateDecay = opt.learningRateDecay,
 }
-
 
 function train()
   model:training()
@@ -93,7 +91,6 @@ function train()
 
   local targets = torch.CudaTensor(opt.batchSize)
   local indices = torch.randperm(provider.trainData.data:size(1)):long():split(opt.batchSize)
-  --local indices = torch.range(1,provider.trainData.data:size(1)):long():split(opt.batchSize)
   -- remove last element so that all the batches have equal size
   indices[#indices] = nil
 
@@ -113,7 +110,8 @@ function train()
       local df_do = criterion:backward(outputs, targets)
       model:backward(inputs, df_do)
       confusion:batchAdd(outputs, targets)
-      
+      --print(model:get(3):get(1).weight[1][1])
+      model:updateParameters(optimState.learningRate*0.1)
       return f,gradParameters
     end
     optim.sgd(feval, parameters, optimState)

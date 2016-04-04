@@ -180,7 +180,6 @@ function GroupConvolution:accGradParameters(input, gradOutput, scale)
 	)
 	unviewWeight(self)
 	self.gradWeight = self:groupWeightUpdate(self.gradGW):mul(0.02)
-	self.weight = self.weight - (self.gradWeight)
 end
 
 function GroupConvolution:permutationMatrix(nQuarterTurns)
@@ -244,9 +243,4 @@ function GroupConvolution:__tostring__()
      s = s .. ', ' .. self.padW .. ',' .. self.padH
    end
    return s .. ')'
-end
-
-function GroupConvolution:clearState()
-   nn.utils.clear(self, 'finput', 'fgradInput', '_input', '_gradOutput')
-   return parent.clearState(self)
 end
