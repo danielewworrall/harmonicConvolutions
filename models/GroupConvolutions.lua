@@ -61,8 +61,8 @@ function GroupConvolution:reset(stdv)
 end
 
 function GroupConvolution:parameters()
-	weights = {self.gW, self.weight, self.bias}
-	gradWeights = {self.gradGW, self.gradWeight, self.gradBias}
+	weights = {self.bias, self.gW, self.weight}
+	gradWeights = {self.gradBias, self.gradGW, self.gradWeight}
 	return weights, gradWeights
 end
 
@@ -179,7 +179,7 @@ function GroupConvolution:accGradParameters(input, gradOutput, scale)
 		 scale
 	)
 	unviewWeight(self)
-	self.gradWeight = self:groupWeightUpdate(self.gradGW):mul(0.02)
+	self.gradWeight = self:groupWeightUpdate(self.gradGW):mul(0.25)
 end
 
 function GroupConvolution:permutationMatrix(nQuarterTurns)
