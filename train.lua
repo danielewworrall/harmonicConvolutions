@@ -72,7 +72,6 @@ parameters,gradParameters = model:getParameters()
 print(c.blue'==>' ..' setting criterion')
 criterion = nn.CrossEntropyCriterion():cuda()
 
-
 print(c.blue'==>' ..' configuring optimizer')
 optimState = {
   learningRate = opt.learningRate,
@@ -80,7 +79,6 @@ optimState = {
   momentum = opt.momentum,
   learningRateDecay = opt.learningRateDecay,
 }
-
 
 function train()
   model:training()
@@ -93,7 +91,6 @@ function train()
 
   local targets = torch.CudaTensor(opt.batchSize)
   local indices = torch.randperm(provider.trainData.data:size(1)):long():split(opt.batchSize)
-  --local indices = torch.range(1,provider.trainData.data:size(1)):long():split(opt.batchSize)
   -- remove last element so that all the batches have equal size
   indices[#indices] = nil
 
@@ -113,7 +110,8 @@ function train()
       local df_do = criterion:backward(outputs, targets)
       model:backward(inputs, df_do)
       confusion:batchAdd(outputs, targets)
-      
+      --print(model:get(3):get(1).weight[1][1])
+      model:updateParameters(optimState.learningRate*0.1)
       return f,gradParameters
     end
     optim.sgd(feval, parameters, optimState)
