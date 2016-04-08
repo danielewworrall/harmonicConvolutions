@@ -125,6 +125,17 @@ class RotConv():
 		patch = numpy.random.randn(3,3)
 		patchUnrav = self.unravel(patch)
 		return (kernel, kernelUnrav, patch, patchUnrav)
+	
+	def lazyRotate(self, Q, kernelUnrav, patch, N):
+		'''Multiple the patch with a rotated filter, the brute force way'''
+		y = []
+		for i in xrange(N):
+			M = numpy.dot(Q, kernelUnrav)
+			shift = self.getRotation(0.2*2*numpy.pi*i)
+			recon = numpy.dot(Q.T, numpy.dot(shift, numpy.dot(Q, kernelUnrav)))
+			reconr = numpy.real(self.ravel(recon))
+			y.append(numpy.sum(reconr*patch))
+		return y
 		
 	def demo1(self):
 		'''Using a simple oriented Gabor filter'''
@@ -154,6 +165,7 @@ class RotConv():
 	
 	def demo2(self):
 		'''The slow patch mixture of cosine demo'''
+		N = 100
 		# Generate the data
 		kernel = cv2.getGaborKernel((3,3), 5., numpy.pi/4., 10., 0.1)
 		kernelUnrav = self.unravel(kernel)
@@ -161,25 +173,21 @@ class RotConv():
 		kernel, kernelUnrav, patch, __ = self.genData()
 		# Generate transformation matrix
 		Q = self.getQ(9)
-		
-		y = []
-		for i in xrange(100):
-			M = numpy.dot(Q, kernelUnrav)
-			shift = self.getRotation(0.2*2*numpy.pi*i)
-			recon = numpy.dot(Q.T, numpy.dot(shift, numpy.dot(Q, kernelUnrav)))
-			reconr = numpy.real(self.ravel(recon))
-			y.append(numpy.sum(reconr*patch))
+		# Generate response
+		y = self.lazyRotate(Q, kernelUnrav, patch, N)
 		# Plot
 		fig = plt.figure(1)
-		plt.plot(numpy.arange(100), y)
+		plt.plot(numpy.arange(1000), y)
 		plt.show()
 	
 	def demo3(self):
 		'''The fast patch mixture of cosines demo'''
+		N = 100
 		# Generate the data
 		kernel, kernelUnrav, patch, patchUnrav = self.genData()
 		# Generate transformation on rotation basis
 		Q = rc.getQ(9)
+		s = time.time()
 		Qm, Qpatch = self.transformQ(Q, kernelUnrav, patchUnrav)
 		# Decompose signal into magnitude and normalized vectors
 		mVec, mMag, mConst = self.decomposeVectors(Qm)
@@ -189,14 +197,24 @@ class RotConv():
 		angles = numpy.arccos(numpy.sum(patchVec*mVec, axis=0))
 		# Get signs
 		rot90 = numpy.asarray([[0,-1],[1,0]])
-		sign = (numpy.sum(numpy.dot(rot90, patchVec)*mVec, axis=0) >= 0)*2. - 1.
+		sign = (numpy.sum(numpy.dot(rot90, patchVec)*mVec, axis=0) <= 0)*2. - 1.
 		angles = angles*sign
-		y = numpy.zeros((100,))
-		for i in xrange(100):
-			y[i] = numpy.dot(mag[:-1], numpy.cos(0.04*numpy.pi*i - angles[:-1]))
+		y = numpy.zeros((N,))
+		artefact0 = Qm[0]*Qpatch[0]
+		mag[0] = Qm[1]*Qpatch[1]
+		sign[0] = 1
+		phiBase = 0.2*2.*numpy.pi*numpy.asarray([4,1,2,3])/8.
+		for i in xrange(N):
+			phi = phiBase*i
+			y[i] = numpy.dot(mag, numpy.cos(phi - angles)) + artefact0
 		y += mConst*patchConst
+		print(time.time()-s)
+		s = time.time()
+		z = self.lazyRotate(Q, kernelUnrav, patch, N)
+		print(time.time() - s)
 		fig = plt.figure(1)
-		plt.plot(numpy.arange(100), y)
+		plt.plot(numpy.arange(N), y)
+		plt.plot(numpy.arange(N), z, '--')
 		plt.show()
 
 if __name__ == '__main__':
