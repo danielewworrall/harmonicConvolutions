@@ -8,7 +8,7 @@ learning_rate = 1e-2 * 0.15
 i_numRows = 28
 i_numCols = 28
 i_numChannels = 1
-alpha = 10000
+alpha = 1
 fully_connected_size = 32
 
 TRAIN_FILE = 'data/MNIST/train.tfrecords'
@@ -64,10 +64,12 @@ def pipeline(fileName, batch_size, num_epochs):
 image_batch, label_batch = pipeline(TRAIN_FILE, batch_size, num_epochs)
 input_summary = tf.image_summary("InputImages", image_batch, max_images=5)
 
+#Gradient update for Q now done in python - we feed it at every iteration
 Q_identity = tf.placeholder(tf.float32, shape=[9,9], name="Q_identity")
 
 #matrix Q input
-Q = tf.Variable(tf.random_normal(shape=[9,9],mean=0.0, stddev=0.05), name="Q")
+#Q = tf.Variable(tf.random_normal(shape=[9,9],mean=0.0, stddev=0.05), name="Q")
+Q = tf.placeholder(tf.float32, shape=[9,9], name="Q_identity")
 
 #weight parameters of the convolution
 w = tf.Variable(tf.random_normal(shape=[3,3],mean=0.0, stddev=0.05), name="w")
@@ -122,13 +124,11 @@ with tf.name_scope('FullyConnected') as scope:
 	logits = tf.add(tf.matmul(linear0, linearW1), linearb1)
 
 #define loss
-cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, label_batch, name='xentropy')
+cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, label_batch, name='Xentropy')
 
-with tf.name_scope('QConstraints') as scope:
-	Q_loss = tf.scalar_mul(alpha, tf.reduce_sum(tf.pow(tf.add(tf.matmul(tf.transpose(Q), Q), tf.neg(Q_identity)), 2)))
-	#Q_loss = tf.trace(tf.matmul(lagrangianMatrix, tf.add(tf.matmul(Q, tf.transpose(Q)), tf.neg(Q_identity))))
+loss = tf.reduce_mean(cross_entropy, name="Loss")
 
-loss = tf.add(Q_loss, tf.reduce_mean(cross_entropy))
+Q_gradients = tf.gradients(tf.add(loss, tf.trace(tf.add(tf.matmul(tf.transpose(Q), Q), tf.neg(Q_identity)))), [Q])[0]
 
 #save some stuff to tensorboard
 lossSummary = tf.scalar_summary("Loss", loss)
@@ -167,14 +167,19 @@ summary = tf.train.SummaryWriter('logs', tf.get_default_graph())
 
 #generate tensors to feed from python
 inputQ_identity = np.identity(9)
+Q_python = np.random.rand(9, 9)
 
 loop_step = 0
 try:
 	while not coordinator.should_stop():
-		# Run training steps or whatever
-		result, currentLoss, currentAccuracy, summaryResult = sess.run([train_op, loss, accuracy, summary_op], feed_dict={Q_identity: inputQ_identity, graph_learning_rate: learning_rate})
+		# Run tensorflow graph
+		result, currentLoss, currentAccuracy, summaryResult, gradientsQ = sess.run([train_op, loss, accuracy, summary_op, Q_gradients], feed_dict={Q_identity: inputQ_identity, Q: Q_python, graph_learning_rate: learning_rate})
 		summary.add_summary(summaryResult, loop_step)
 		print(currentLoss, currentAccuracy)
+
+		#update Q
+		Q_python = np.add(Q_python, np.multiply(np.full((9,9), learning_rate), np.multiply(gradientsQ, (np.identity(9) - np.multiply(np.transpose(Q_python), Q_python)))))
+
 		loop_step += 1
 
 		if(loop_step > 0 and loop_step % 500 == 0):
