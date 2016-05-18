@@ -19,10 +19,8 @@ VALIDATION_FILE = 'data/MNIST/validation.tfrecords'
 def read_decode(filename_string_queue):
 	with tf.name_scope('IO') as scope:
 		reader = tf.TFRecordReader()
-
 		#get next example
 		key, example = reader.read(filename_string_queue)
-
 		#parse
 		features = tf.parse_single_example(serialized=example,
 			features={
@@ -36,7 +34,6 @@ def read_decode(filename_string_queue):
 
 		#cast to float and normalise
 		image = tf.cast(image, tf.float32) * (1.0 / 255.0) - 0.5
-
 		label = tf.cast(features['label'], tf.int64)
 
 		return image, label
@@ -45,15 +42,12 @@ def pipeline(fileName, batch_size, num_epochs):
 	with tf.name_scope('IO') as scope:
 		#only one filename for MNIST, so no need to shuffle
 		filename_string_queue = tf.train.string_input_producer([fileName], num_epochs=num_epochs, shuffle=False)
-
 		#add nodes to read and decode a single example
 		image, label = read_decode(filename_string_queue)
-
+		
 		min_after_capacity = 10000
 		capacity = min_after_capacity * batch_size * 4
-
 		image_batch, label_batch = tf.train.shuffle_batch([image, label], batch_size=batch_size, capacity=capacity, min_after_dequeue=min_after_capacity)
-
 		return image_batch, label_batch
 
 #-----------------------MODEL-------------------------
@@ -65,14 +59,11 @@ image_batch, label_batch = pipeline(TRAIN_FILE, batch_size, num_epochs)
 input_summary = tf.image_summary("InputImages", image_batch, max_images=5)
 
 #Gradient update for Q now done in python - we feed it at every iteration
-Q_identity = tf.placeholder(tf.float32, shape=[9,9], name="Q_identity")
-
-#matrix Q input
-#Q = tf.Variable(tf.random_normal(shape=[9,9],mean=0.0, stddev=0.05), name="Q")
+Q_identity = tf.identity(Q, 'Q_identity')
 Q = tf.placeholder(tf.float32, shape=[9,9], name="Q_identity")
 
 #weight parameters of the convolution
-w = tf.Variable(tf.random_normal(shape=[3,3],mean=0.0, stddev=0.05), name="w")
+w = tf.Variable(tf.random_normal(shape=[3,3], mean=0.0, stddev=0.05), name="w")
 
 #lagrangian matrix
 lagrangianMatrix = tf.Variable(tf.random_normal(shape=[9,9],mean=0.0, stddev=0.05), name="lagrangianMultipliersQ")
@@ -82,8 +73,6 @@ linearb0 = tf.Variable(tf.random_normal([fully_connected_size]), name='linear_bi
 
 linearW1 = tf.Variable(tf.random_normal([fully_connected_size, 10]), name='linear_weight1')
 linearb1 = tf.Variable(tf.random_normal([10]), name='linear_bias1')
-
-
 
 #calculate this once (9 * 1)
 Q_t_w = tf.matmul(Q, tf.reshape(w, [9, 1]))
@@ -173,7 +162,9 @@ loop_step = 0
 try:
 	while not coordinator.should_stop():
 		# Run tensorflow graph
-		result, currentLoss, currentAccuracy, summaryResult, gradientsQ = sess.run([train_op, loss, accuracy, summary_op, Q_gradients], feed_dict={Q_identity: inputQ_identity, Q: Q_python, graph_learning_rate: learning_rate})
+		result, currentLoss, currentAccuracy, summaryResult, gradientsQ = sess.run(
+			[train_op,loss, accuracy, summary_op, Q_gradients],
+			feed_dict={Q: Q_python, graph_learning_rate: learning_rate})
 		summary.add_summary(summaryResult, loop_step)
 		print(currentLoss, currentAccuracy)
 
