@@ -60,7 +60,7 @@ input_summary = tf.image_summary("InputImages", image_batch, max_images=5)
 
 #Gradient update for Q now done in python - we feed it at every iteration
 Q_identity = tf.identity(Q, 'Q_identity')
-Q = tf.placeholder(tf.float32, shape=[9,9], name="Q_identity")
+Q = tf.placeholder(tf.float32, shape=[9,9], name="Q")
 
 #weight parameters of the convolution
 w = tf.Variable(tf.random_normal(shape=[3,3], mean=0.0, stddev=0.05), name="w")
