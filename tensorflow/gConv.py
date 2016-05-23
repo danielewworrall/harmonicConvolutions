@@ -4,13 +4,14 @@ import os
 import sys
 import time
 
+import numpy as np
 import tensorflow as tf
 import input_data
 
 mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 
 # Metaparameters
-learning_rate = 0.0001
+learning_rate = 0.00001
 training_epochs = 150
 batch_size = 50
 display_step = 1
@@ -56,7 +57,7 @@ biases = {
     'out': tf.Variable(tf.random_normal([n_classes], mean=0.1, stddev=0.01))
 }
 Q = {
-    'Q1' : tf.Variable(tf.random_normal([3,3,1,9], mean=1., stddev=0.06)),
+    'Q1' : tf.Variable(np.eye(9).reshape(3,3,1,9).astype(np.float32)),
     'Q2' : tf.Variable(tf.random_normal([3,3,1,9], mean=1., stddev=0.06))
 }
 W = {
