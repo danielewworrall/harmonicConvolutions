@@ -42,15 +42,12 @@ def gConv(X, Q, W, eps=1e-6):
     # Get L2-norms of subvectors---ordering of segments is arbitrary
     normQx = tf.sqrt(tf.segment_sum(tf.pow(Qx,2), [0,0,1,1,2,2,3,3,4]))
     normQw = tf.sqrt(tf.segment_sum(tf.pow(Qw,2), [0,0,1,1,2,2,3,3,4]))
-    # Elementwise add Qw to Qx along output axis of channelwise conv2d
-    wQQx = Qx * Qw
-    # Find the subvector angles for the rotations
-    # Segment_xxx performs op xxx on segmentation of first dimension
-    
-    normQx = tf.sqrt(tf.segment_sum(tf.pow(Qx,2), [0,0,1,1,2,2,3,3,4]))
-    normQw = tf.sqrt(tf.segment_sum(tf.pow(Qw,2), [0,0,1,1,2,2,3,3,4]))
-    dot = tf.segment_sum(wX, [0,0,1,1,2,2,3,3,4])
-    normDot = tf.truediv(tf.truediv(dot, normQx + eps), tf.reshape(normQw, [5,1,1,1]) + eps)
+    norm = normQx * normQw
+    # Elementwise multiply Qw and Qx along output axis of channelwise conv2d
+    wQtQx = Qx * Qw
+    dotSum = tf.segment_sum(wQtQx, [0,0,1,1,2,2,3,3,4])
+    # Find the subvector angles for the rotations---eps is for regularization
+    normDot = tf.truediv(tf.truediv(dotSum, normQx + eps), tf.reshape(normQw, [5,1,1,1]) + eps)
     # normDot is a tensor of dotProducts, we can return the angle using acos
     return tf.transpose(normDot, perm=[1,2,3,0])
 
