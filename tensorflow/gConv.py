@@ -18,7 +18,7 @@ display_step = 1
 
 # Architectural Hyperparameters
 n_in = 784
-n_hid1 = 576*5
+n_hid1 = 576
 n_hid2 = 676
 n_classes = 10 # MNIST total classes (0-9 digits)
 
@@ -28,15 +28,15 @@ y = tf.placeholder("float", [None, n_classes])
 
 # Create model
 def multilayer_perceptron(_X, _weights, _biases, _Q):
-    gc1 = tf.nn.relu(gConv(_X, Q['Q1'], W['W1'], 1))
-    gc2 = tf.nn.relu(gConv(gc1, Q['Q2'], W['W2'], 5))
+    gc1 = tf.nn.relu(gConv(_X, Q['Q1'], W['W1']))
+    gc2 = tf.nn.relu(gConv(gc1, Q['Q2'], W['W2']))
     cv1 = tf.reshape(gc2, [-1,n_hid1])
     fc2 = tf.nn.relu(tf.add(tf.matmul(cv1, _weights['h2']), _biases['b2']))
     return tf.matmul(fc2, _weights['out']) + _biases['out']
 
-def gConv(_X, _Q, _W, tiling, eps=1e-6):
+def gConv(_X, _Q, _W, eps=1e-6):
     # Compute the projection of X and W into Q-space
-    Qtile = tf.tile(_Q, (1,1,tiling,1))
+    Qtile = tf.tile(_Q, (1,1,1,1))
     Qx = tf.nn.depthwise_conv2d(_X, Qtile, strides=(1,1,1,1), padding="VALID")
     Qw = tf.matmul(tf.transpose(tf.reshape(_Q, [9,9])), _W)    # Each col. a filter
     # Find the subvector angles for the rotations
@@ -46,7 +46,7 @@ def gConv(_X, _Q, _W, tiling, eps=1e-6):
     normQx = tf.sqrt(tf.segment_sum(tf.pow(Qx,2), [0,0,1,1,2,2,3,3,4]))
     normQw = tf.sqrt(tf.segment_sum(tf.pow(Qw,2), [0,0,1,1,2,2,3,3,4]))
     dot = tf.segment_sum(wX, [0,0,1,1,2,2,3,3,4])
-    normDot = tf.truediv(tf.truediv(dot, normQx + eps), tf.reshape(normQw, [5,1,1,1]) + eps)
+    normDot = tf.truediv(tf.truediv(dot, normQx + eps), tf.reshape(normQw, [1,1,1,1]) + eps)
     # normDot is a tensor of dotProducts, we can return the angle using acos
     return tf.transpose(normDot, perm=[1,2,3,0])
 
