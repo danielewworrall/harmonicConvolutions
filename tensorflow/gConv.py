@@ -48,7 +48,7 @@ def gConv(_X, _Q, _W, eps=1e-6):
     # normDot is a tensor of dotProducts, we can return the angle using acos
     return tf.transpose(normDot, perm=[1,2,3,0])
 
-def channelwise_conv2d(X, W):
+def channelwise_conv2d(X, W, strides=(1,1,1,1), padding="VALID"):
     """Convolve _X with _W on each channel independently. The input _X will be a 
     tensor of shape [b,h,w,c], so reshape to [b*c,h,w,1], then apply conv2d. The
     result is a tensor of shape [b*c,h,w,m], we then reshape to [b,h,w,c,m].
