@@ -46,7 +46,7 @@ def gConv(_X, _Q, _W, eps=1e-6):
     dot = tf.segment_sum(wX, [0,0,1,1,2,2,3,3,4])
     print normQx
     print normQw
-    normDot = tf.truediv(tf.truediv(dot, normQx + eps), tf.reshape(normQw, [1,1,1,1]) + eps)
+    normDot = tf.truediv(tf.truediv(dot, normQx + eps), tf.reshape(normQw, [5,1,1,1]) + eps)
     # normDot is a tensor of dotProducts, we can return the angle using acos
     return tf.transpose(normDot, perm=[1,2,3,0])
 
