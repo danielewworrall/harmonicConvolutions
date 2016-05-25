@@ -55,7 +55,7 @@ def channelwise_conv2d(X, W, strides=(1,1,1,1), padding="VALID"):
     """
     Xsh = tf.shape(X)
     print Xsh
-    print
+    print Xsh[1]
     print
     print
     X = tf.transpose(X, perm=[0,3,1,2])
