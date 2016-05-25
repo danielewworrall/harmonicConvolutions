@@ -58,7 +58,8 @@ def channelwise_conv2d(X, W, strides=(1,1,1,1), padding="VALID"):
     print
     print
     print
-    X = tf.reshape(tf.transpose(X, perm=[0,3,1,2]),[Xsh[0]*Xsh[3],Xsh[1],Xsh[2],1])
+    X = tf.transpose(X, perm=[0,3,1,2])
+    X = tf.reshape(X,[Xsh[0]*Xsh[3],Xsh[1],Xsh[2],1])
     return X
 
 weights = {
