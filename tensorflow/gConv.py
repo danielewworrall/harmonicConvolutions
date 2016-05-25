@@ -47,9 +47,9 @@ def gConv(X, Q, W, eps=1e-6):
     wQtQx = Qx * Qw
     dotSum = tf.segment_sum(wQtQx, [0,0,1,1,2,2,3,3,4])
     # Find the subvector angles for the rotations---eps is for regularization
-    normDot = tf.truediv(tf.truediv(dotSum, normQx + eps), tf.reshape(normQw, [5,1,1,1]) + eps)
+    normDotSum = tf.truediv(dotSum, normDotSum + eps)
     # normDot is a tensor of dotProducts, we can return the angle using acos
-    return tf.transpose(normDot, perm=[1,2,3,0])
+    return tf.transpose(normDotSum, perm=[1,2,3,0])
 
 def channelwise_conv2d(X, W, strides=(1,1,1,1), padding="VALID"):
     """Convolve _X with _W on each channel independently. The input _X will be a 
