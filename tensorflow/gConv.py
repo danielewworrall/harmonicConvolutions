@@ -56,11 +56,12 @@ def channelwise_conv2d(X, W, strides=(1,1,1,1), padding="VALID"):
     tensor of shape [b,h,w,c], so reshape to [b*c,h,w,1], then apply conv2d. The
     result is a tensor of shape [b*c,h,w,m], we then reshape to [m,b,h,w,c].
     """
-    sh = tf.shape(X)
+    Xsh = tf.shape(X)
     X = tf.transpose(X, perm=[0,3,1,2])
-    X = tf.reshape(X, tf.pack([sh[0]*sh[3],sh[1],sh[2],1]))
+    X = tf.reshape(X, tf.pack([Xsh[0]*Xsh[3],Xsh[1],Xsh[2],1]))
     Z = tf.nn.conv2d(X, W, strides=strides, padding=padding)
-    Z = tf.reshape(Z, tf.pack([sh[0],sh[3],sh[1],sh[2],-1]))
+    Zsh = tf.shape(Z)
+    Z = tf.reshape(Z, tf.pack([Xsh[0],Xsh[3],Zsh[1],Zsh[2],Zsh[3]]))
     return tf.transpose(Z, perm=[1,0,2,3,4])
 
 weights = {
