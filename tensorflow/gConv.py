@@ -29,6 +29,7 @@ y = tf.placeholder("float", [None, n_classes])
 # Create model
 def multilayer_perceptron(_X, _weights, _biases, _Q):
     gc1 = tf.nn.relu(gConv(_X, Q['Q1'], W['W1']))
+    print gc1
     cv1 = tf.reshape(gc1, [-1,n_hid1*5])
     fc2 = tf.nn.relu(tf.add(tf.matmul(cv1, _weights['h2']), _biases['b2']))
     return tf.matmul(fc2, _weights['out']) + _biases['out']
