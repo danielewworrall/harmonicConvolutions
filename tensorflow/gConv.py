@@ -18,7 +18,7 @@ display_step = 1
 
 # Architectural Hyperparameters
 n_in = 784
-n_hid1 = 576
+n_hid1 = 676
 n_hid2 = 676
 n_classes = 10 # MNIST total classes (0-9 digits)
 
@@ -29,8 +29,7 @@ y = tf.placeholder("float", [None, n_classes])
 # Create model
 def multilayer_perceptron(_X, _weights, _biases, _Q):
     gc1 = tf.nn.relu(gConv(_X, Q['Q1'], W['W1']))
-    gc2 = tf.nn.relu(gConv(gc1, Q['Q2'], W['W2']))
-    cv1 = tf.reshape(gc2, [-1,n_hid1])
+    cv1 = tf.reshape(gc1, [-1,n_hid1])
     fc2 = tf.nn.relu(tf.add(tf.matmul(cv1, _weights['h2']), _biases['b2']))
     return tf.matmul(fc2, _weights['out']) + _biases['out']
 
