@@ -42,14 +42,14 @@ def gConv(X, Q, W, eps=1e-6):
     # Get L2-norms of subvectors---ordering of segments is arbitrary
     normQx = tf.sqrt(tf.segment_sum(tf.pow(Qx,2), [0,0,1,1,2,2,3,3,4]))
     normQw = tf.sqrt(tf.segment_sum(tf.pow(Qw,2), [0,0,1,1,2,2,3,3,4]))
-    norm = normQx * normQw
+    normQ = normQx * normQw
     # Elementwise multiply Qw and Qx along output axis of channelwise conv2d
     wQtQx = Qx * Qw
     dotSum = tf.segment_sum(wQtQx, [0,0,1,1,2,2,3,3,4])
     # Find the subvector angles for the rotations---eps is for regularization
     normDotSum = tf.truediv(dotSum, normDotSum + eps)
     # normDot is a tensor of dotProducts, we can return the angle using acos
-    return tf.transpose(normDotSum, perm=[1,2,3,0])
+    return tf.transpose(normQ, perm=[1,2,3,0])
 
 def channelwise_conv2d(X, W, strides=(1,1,1,1), padding="VALID"):
     """Convolve _X with _W on each channel independently. The input _X will be a 
