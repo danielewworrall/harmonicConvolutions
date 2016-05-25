@@ -40,6 +40,9 @@ def gConv(X, Q, W, eps=1e-6):
     Qw = tf.matmul(tf.transpose(tf.reshape(Q, [9,9])), W)
     # Get L2-norms of subvectors---ordering of segments is arbitrary
     print Qw
+    print
+    print
+    print
     normQx = tf.sqrt(tf.segment_sum(tf.pow(Qx,2), [0,0,1,1,2,2,3,3,4]))
     normQw = tf.sqrt(tf.segment_sum(tf.pow(Qw,2), [0,0,1,1,2,2,3,3,4]))
     # Elementwise add Qw to Qx along output axis of channelwise conv2d
