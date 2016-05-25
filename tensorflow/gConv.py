@@ -35,7 +35,7 @@ def multilayer_perceptron(_X, _weights, _biases, _Q):
 
 def gConv(_X, _Q, _W, eps=1e-6):
     # Compute the projection of X and W into Q-space
-    Qx = tf.nn.channelwise_conv2d(_X, _Q, strides=(1,1,1,1), padding="VALID")
+    Qx = channelwise_conv2d(_X, _Q, strides=(1,1,1,1), padding="VALID")
     Qw = tf.matmul(tf.transpose(tf.reshape(_Q, [9,9])), _W)    # Each col. a filter
     # Find the subvector angles for the rotations
     # Segment_xxx performs op xxx on segmentation of first dimension
