@@ -53,7 +53,7 @@ def channelwise_conv2d(X, W, strides=(1,1,1,1), padding="VALID"):
     tensor of shape [b,h,w,c], so reshape to [b*c,h,w,1], then apply conv2d. The
     result is a tensor of shape [b*c,h,w,m], we then reshape to [b,h,w,c,m].
     """
-    Xsh = tf.get_shape(X)
+    Xsh = tf.shape(X)
     print Xsh
     print Xsh[1]
     print
