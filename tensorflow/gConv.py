@@ -33,14 +33,21 @@ def multilayer_perceptron(_X, _weights, _biases, _Q):
     fc2 = tf.nn.relu(tf.add(tf.matmul(cv1, _weights['h2']), _biases['b2']))
     return tf.matmul(fc2, _weights['out']) + _biases['out']
 
-def gConv(_X, _Q, _W, eps=1e-6):
+def gConv(X, Q, W, eps=1e-6):
     # Compute the projection of X and W into Q-space
-    Qx = channelwise_conv2d(_X, _Q, strides=(1,1,1,1), padding="VALID")
-    Qw = tf.matmul(tf.transpose(tf.reshape(_Q, [9,9])), _W)    # Each col. a filter
-    # Find the subvector angles for the rotations
-    # Segment_xxx performs op xxx on segmentation of first dimension
+    Qx = channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID")
+    # Transform the weights W into the Q-feature space
+    Qw = tf.matmul(tf.transpose(tf.reshape(Q, [9,9])), W)
+    # Get L2-norms of subvectors---ordering of segments is arbitrary
     Qx = tf.transpose(Qx, perm=[3,0,1,2])
     wX = tf.reshape(Qw, [9,1,1,1])* Qx
+    normQx = tf.sqrt(tf.segment_sum(tf.pow(Qx,2), [0,0,1,1,2,2,3,3,4]))
+    normQw = tf.sqrt(tf.segment_sum(tf.pow(Qw,2), [0,0,1,1,2,2,3,3,4]))
+    # Elementwise add Qw to Qx along output axis of channelwise conv2d
+    wQQx = Qx * Qw
+    # Find the subvector angles for the rotations
+    # Segment_xxx performs op xxx on segmentation of first dimension
+    
     normQx = tf.sqrt(tf.segment_sum(tf.pow(Qx,2), [0,0,1,1,2,2,3,3,4]))
     normQw = tf.sqrt(tf.segment_sum(tf.pow(Qw,2), [0,0,1,1,2,2,3,3,4]))
     dot = tf.segment_sum(wX, [0,0,1,1,2,2,3,3,4])
@@ -51,15 +58,14 @@ def gConv(_X, _Q, _W, eps=1e-6):
 def channelwise_conv2d(X, W, strides=(1,1,1,1), padding="VALID"):
     """Convolve _X with _W on each channel independently. The input _X will be a 
     tensor of shape [b,h,w,c], so reshape to [b*c,h,w,1], then apply conv2d. The
-    result is a tensor of shape [b*c,h,w,m], we then reshape to [b,h,w,c,m].
+    result is a tensor of shape [b*c,h,w,m], we then reshape to [m,b,h,w,c].
     """
     sh = tf.shape(X)
     X = tf.transpose(X, perm=[0,3,1,2])
     X = tf.reshape(X, tf.pack([sh[0]*sh[3],sh[1],sh[2],1]))
     Z = tf.nn.conv2d(X, W, strides=strides, padding=padding)
     Z = tf.reshape(Z, tf.pack([sh[0],sh[3],sh[1],sh[2],-1]))
-    Z = tf.transpose(X, perm=[0,2,3,1,4])
-    return Z
+    return tf.transpose(X, perm=[1,0,2,3,4])
 
 weights = {
     'h2': tf.Variable(tf.random_normal([n_hid1, n_hid2], mean=0.06)),
