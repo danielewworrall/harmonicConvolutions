@@ -67,7 +67,7 @@ def channelwise_conv2d(X, W, strides=(1,1,1,1), padding="VALID"):
     X = tf.reshape(X, tf.pack([sh[0]*sh[3],sh[1],sh[2],1]))
     Z = tf.nn.conv2d(X, W, strides=strides, padding=padding)
     Z = tf.reshape(Z, tf.pack([sh[0],sh[3],sh[1],sh[2],-1]))
-    return tf.transpose(X, perm=[1,0,2,3,4])
+    return tf.transpose(Z, perm=[1,0,2,3,4])
 
 weights = {
     'h2': tf.Variable(tf.random_normal([n_hid1, n_hid2], mean=0.06)),
