@@ -9,10 +9,10 @@ import tensorflow as tf
 
 from gConv2 import *
 
-x = tf.placeholder("float", [32,60,60,32], name='x')
+x = tf.placeholder("float", [5,6,6,3], name='x')
 z = gConv(x, 3, 7, name='gConv')
 
-X = np.random.randn(32,60,60,32).astype(np.float32)
+X = np.random.randn(5,6,6,3).astype(np.float32)
 
 with tf.Session() as sess:
 	init = tf.initialize_all_variables()

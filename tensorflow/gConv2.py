@@ -24,20 +24,24 @@ def gConv(X, filter_size, n_filters, name=''):
     # Get angle
     Xqsh = tf.shape(Xq)
     Xq = to_filter_patch_pairs(Xq, Xqsh)
-    angle = get_signed_angle(Vq[:,:,:,:,:2],Xq[:,:,:,:,:2])
-    angle = angle_to_image(angle, Xqsh)
+    Vq, Xq = mutual_tile(Vq, Xq)    # Do we need a sanity check on this?
+    angle = get_angle(Vq[:,:,:,:,:2],Xq[:,:,:,:,:2])
     # Get response
+    rot_vec = get_rotation_as_vector(angle, k)
     response = Xq
-    return angle, Xq 
+    
+    # Reshape to image-like shape
+    angle = angle_to_image(angle, Xqsh)
+    return angle, response
 
 def get_rotation_as_vector(phi,k):
     """Return the Jordan block rotation matrix for the Lie Group"""
     R = []
-    for i in xrange(np.floor((k*k)/2.)):
+    for i in xrange(np.floor((k*k)/2.).astype(int)):
         R.append(tf.cos((i+1)*phi))
         R.append(tf.sin((i+1)*phi))
     if k % 2 == 1:
-        R.append(1.)
+        R.append(tf.ones_like(R[-1]))
     return tf.pack(R)
     
 def channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID"):
@@ -56,19 +60,19 @@ def channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID"):
     return tf.reshape(Z, tf.pack([Xsh[0],Xsh[3],Zsh[1],Zsh[2],Zsh[3]]))
 
 def to_filter_patch_pairs(X, Xsh):
-    '''Convert tensor [b,c,h,w,m] -> [b,c,hw,1,m]'''
+    """Convert tensor [b,c,h,w,m] -> [b,c,hw,1,m]"""
     return tf.reshape(X, tf.pack([Xsh[0],Xsh[1],Xsh[2]*Xsh[3],1,Xsh[4]]))
 
 def from_filter_patch_pairs(X, Xsh):
-    '''Convert from filter-patch pairings'''
+    """Convert from filter-patch pairings"""
     return tf.reshape(X, tf.pack([Xsh[0],Xsh[1],Xsh[2],Xsh[3],Xsh[4]]))
 
 def angle_to_image(X, Xsh):
-    '''Convert from angular filter-patch pairings to standard image format'''
+    """Convert from angular filter-patch pairings to standard image format"""
     return tf.reshape(X, tf.pack([Xsh[0],Xsh[2],Xsh[3],-1]))
 
 def atan2(y,x):
-    '''Compute the classic atan2 function between y and x'''
+    """Compute the classic atan2 function between y and x"""
     arg1 = y / (tf.sqrt(tf.pow(y,2) + tf.pow(x,2)) + x)
     z1 = 2*tf.atan(arg1)
     
@@ -81,21 +85,25 @@ def atan2(y,x):
     z = tf.select(tf.equal(y*x,0),tf.zeros_like(z_),z_)
     return z
 
-def get_signed_angle(u,v):
-    '''Get the signed angle from one vector to another'''
-    # Reshape tensors
-    ush = tf.shape(u)
-    vsh = tf.shape(v)
-    u = tf.tile(u,[vsh[0],1,vsh[2],1,1])
-    v = tf.tile(v,[1,1,1,ush[3],1])
+def get_angle(u,v):
+    """Get the angle in [0,2*pi] from one vector to another"""
     # Compute angles
     dot = tf.reduce_sum(u*v,reduction_indices=[1,4])
     ext = v[:,:,:,:,1]*u[:,:,:,:,0] - v[:,:,:,:,0]*u[:,:,:,:,1]
     ext = tf.reduce_sum(ext, reduction_indices=[1])
-    return atan2(ext, dot)
+    return modulus(atan2(ext, dot), 2*np.pi)
+
+def mutual_tile(u,v):
+    """Tile u and v to be the same shape"""
+    ush = tf.shape(u)
+    vsh = tf.shape(v)
+    maxsh = tf.maximum(ush,vsh)
+    u = tf.tile(u, maxsh/ush)
+    v = tf.tile(v, maxsh/vsh)
+    return u, v
 
 def modulus(x,y):
-    '''Perform x % y and maintain sgn(x) = sgn(y)'''
+    """Perform x % y and maintain sgn(x) = sgn(y)"""
     return x - y*tf.floordiv(x, y)
 
 def get_weights(filter_shape, collection=None, name=''):
