@@ -14,35 +14,39 @@ def gConv(X, filter_size, n_filters, name=''):
     n_channels = int(X.get_shape()[3])
     Q = get_weights([k,k,1,k*k], name=name+'_Q')
     V = get_weights([k*k,n_channels*n_filters], name=name+'_V')
-    b = get_weights([n_filters], name=name+'_b')
     # Project input X to Q-space
     Xq = channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID")
     # Project V to Q-space: each col of Q is a filter transformation
     Vq = tf.matmul(tf.transpose(tf.reshape(Q, [k*k,k*k])), V)
-    Vq = tf.reshape(Vq, [1,1,k*k,n_channels,n_filters])
-    Vq = tf.transpose(Vq, perm=[0,3,1,4,2])
+    Vq = tf.reshape(Vq, [1,k*k,n_channels,n_filters])
+    Vq = tf.transpose(Vq, perm=[1,2,0,3])
     # Get angle
     Xqsh = tf.shape(Xq)
     Xq = to_filter_patch_pairs(Xq, Xqsh)
     Vq, Xq = mutual_tile(Vq, Xq)    # Do we need a sanity check on this?
-    angle = get_angle(Vq[:,:,:,:,:2],Xq[:,:,:,:,:2])
+    dot, ext = dot_ext_transform(Xq,Vq)         # Shape [d,bhw,f]
+    angle = get_angle(dot[0,:,:], ext[0,:,:])   # Shape [bhw,f]
     # Get response
-    rot_vec = get_rotation_as_vector(angle, k)
-    response = Xq
-    
+    Rcos, Rsin = get_rotation_as_vectors(angle, k)
+    cos_response = tf.reduce_sum(dot*Rcos, reduction_indices=[0])
+    sin_response = tf.reduce_sum(ext*Rsin, reduction_indices=[0])
+    response = cos_response + sin_response
     # Reshape to image-like shape
-    angle = angle_to_image(angle, Xqsh)
+    angle = fp_to_image(angle, Xqsh)
+    response = fp_to_image(response, Xqsh)
     return angle, response
 
-def get_rotation_as_vector(phi,k):
+def get_rotation_as_vectors(phi,k):
     """Return the Jordan block rotation matrix for the Lie Group"""
-    R = []
+    Rcos = []
+    Rsin = []
     for i in xrange(np.floor((k*k)/2.).astype(int)):
-        R.append(tf.cos((i+1)*phi))
-        R.append(tf.sin((i+1)*phi))
+        Rcos.append(tf.cos((i+1)*phi))
+        Rsin.append(tf.sin((i+1)*phi))
     if k % 2 == 1:
-        R.append(tf.ones_like(R[-1]))
-    return tf.pack(R)
+        Rcos.append(tf.ones_like(Rcos[-1]))
+        Rsin.append(tf.zeros_like(Rsin[-1]))
+    return tf.pack(Rcos), tf.pack(Rsin)
     
 def channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID"):
     """Convolve X with Q on each channel independently.
@@ -50,26 +54,27 @@ def channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID"):
     X: input tensor of shape [b,h,w,c]
     Q: rotation tensor of shape [h*w,h*w]
     
-    returns: tensor of shape [b,c,h,w,m].
+    returns: tensor of shape [m,c,b,h,w].
     """
     Xsh = tf.shape(X)
     X = tf.transpose(X, perm=[0,3,1,2])
     X = tf.reshape(X, tf.pack([Xsh[0]*Xsh[3],Xsh[1],Xsh[2],1]))
     Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding)
     Zsh = tf.shape(Z)
-    return tf.reshape(Z, tf.pack([Xsh[0],Xsh[3],Zsh[1],Zsh[2],Zsh[3]]))
+    Z = tf.reshape(Z, tf.pack([Xsh[0],Xsh[3],Zsh[1],Zsh[2],Zsh[3]]))
+    return tf.transpose(Z, perm=[4,1,0,2,3])
 
 def to_filter_patch_pairs(X, Xsh):
-    """Convert tensor [b,c,h,w,m] -> [b,c,hw,1,m]"""
-    return tf.reshape(X, tf.pack([Xsh[0],Xsh[1],Xsh[2]*Xsh[3],1,Xsh[4]]))
+    """Convert tensor [m,c,b,h,w] -> [m,c,bhw,1]"""
+    return tf.reshape(X, tf.pack([Xsh[0],Xsh[1],Xsh[2]*Xsh[3]*Xsh[4],1]))
 
 def from_filter_patch_pairs(X, Xsh):
     """Convert from filter-patch pairings"""
     return tf.reshape(X, tf.pack([Xsh[0],Xsh[1],Xsh[2],Xsh[3],Xsh[4]]))
 
-def angle_to_image(X, Xsh):
+def fp_to_image(X, Xsh):
     """Convert from angular filter-patch pairings to standard image format"""
-    return tf.reshape(X, tf.pack([Xsh[0],Xsh[2],Xsh[3],-1]))
+    return tf.reshape(X, tf.pack([Xsh[2],Xsh[3],Xsh[4],-1]))
 
 def atan2(y,x):
     """Compute the classic atan2 function between y and x"""
@@ -85,14 +90,34 @@ def atan2(y,x):
     z = tf.select(tf.equal(y*x,0),tf.zeros_like(z_),z_)
     return z
 
-def get_angle(u,v):
+def get_angle(dot, ext):
     """Get the angle in [0,2*pi] from one vector to another"""
     # Compute angles
-    dot = tf.reduce_sum(u*v,reduction_indices=[1,4])
-    ext = v[:,:,:,:,1]*u[:,:,:,:,0] - v[:,:,:,:,0]*u[:,:,:,:,1]
-    ext = tf.reduce_sum(ext, reduction_indices=[1])
     return modulus(atan2(ext, dot), 2*np.pi)
 
+def dot_ext_transform(U,V):
+    """Convert {U,V} to the dot-ext domain (vector representation of SO(N))"""
+    # Dot
+    dot = tf.reduce_sum(U*V,reduction_indices=[1])
+    dotsh = tf.to_int32(tf.shape(dot)[0])
+    seg_indices = tf.range(dotsh)/2
+    dot = tf.segment_sum(dot, seg_indices)
+    # Ext
+    Vsh = tf.shape(V)
+    V = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]*Vsh[3]])
+    V = tf.reshape(tf.matmul(blade_matrix(9),V), [Vsh[0],Vsh[1],Vsh[2],Vsh[3]])
+    ext = tf.reduce_sum(U*V, reduction_indices=[1])
+    return dot, tf.segment_sum(ext, seg_indices)
+
+def blade_matrix(k):
+    """Build the blade product matrix of order k"""
+    blade = np.zeros([k,k])
+    blade[k-1,k-1] = 1
+    for i in xrange(int(np.floor(k/2.))):
+        blade[(2*i)+1,2*i] = 1
+        blade[2*i,(2*i)+1] = -1
+    return tf.to_float(tf.identity(blade))
+        
 def mutual_tile(u,v):
     """Tile u and v to be the same shape"""
     ush = tf.shape(u)
@@ -107,7 +132,7 @@ def modulus(x,y):
     return x - y*tf.floordiv(x, y)
 
 def get_weights(filter_shape, collection=None, name=''):
-    W_init = tf.random_normal(filter_shape)
+    W_init = tf.random_normal(filter_shape, stddev=0.01)
     return tf.Variable(W_init, collections=collection, name=name)
 
 
