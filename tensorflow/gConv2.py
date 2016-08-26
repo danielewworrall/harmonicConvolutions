@@ -18,7 +18,10 @@ def gConv(X, filter_size, n_filters, q, name=''):
     # Project input X to Q-space
     Xq = channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID")   # [m,c,b,h',w']
     # Project V to Q-space: each col of Q is a filter transformation
-    Vq = tf.matmul(tf.transpose(tf.reshape(Q, [k*k,k*k])), V)   #################### MAY HAVE TO TRANSPOSE TRAIN
+    #Vq = tf.matmul(tf.transpose(tf.reshape(Q, [k*k,k*k])), V)   #################### MAY HAVE TO TRANSPOSE TRAIN
+    Q_ = tf.reshape(tf.transpose(Q, perm=[3,0,1,2]), [k*k,k*k])
+    Vq = tf.matmul(Q_, V)
+    
     Vq = tf.reshape(Vq, [1,k*k,n_channels,n_filters])                   # [1,m,c,f]
     Vq = tf.transpose(Vq, perm=[1,2,0,3])                               # [m,c,1,f]
     # Get angle

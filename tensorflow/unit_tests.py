@@ -27,8 +27,8 @@ def rot_mat(theta):
 
 def gen_data(X, N):
 	# Get feature transform
-	#Q_ = get_Q(9)
-	Q_ = np.eye(9)
+	Q_ = get_Q(9)
+	#Q_ = np.eye(9)
 	X_ = np.dot(Q_,X)
 	# Get rotation
 	theta = np.linspace(0, 2*np.pi, N)
@@ -50,8 +50,8 @@ def gConv_test():
 	X, Q = gen_data(X, N)
 	X = np.reshape(X, [N,3,3,1])
 	#X = np.transpose(X, [0,2,1,3])
+	Q = np.transpose(Q)
 	Q = np.reshape(Q, [3,3,1,9])
-	#Q = np.transpose(Q, [1,0,2,3])
 	
 	# tf conv
 	x = tf.placeholder('float', [None,3,3,1], name='x')
