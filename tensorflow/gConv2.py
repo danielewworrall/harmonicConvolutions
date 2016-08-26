@@ -12,14 +12,13 @@ def gConv(X, filter_size, n_filters, q, name=''):
     # Create variables
     k = filter_size
     n_channels = int(X.get_shape()[3])
-    #Q = get_weights([k,k,1,k*k], name=name+'_Q')################################################
+    #Q = get_weights([k,k,1,k*k], name=name+'_Q')#################################
     Q = q
     V = get_weights([k*k,n_channels*n_filters], name=name+'_V')         # [h*w,c*f]
     # Project input X to Q-space
     Xq = channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID")   # [m,c,b,h',w']
     # Project V to Q-space: each col of Q is a filter transformation
-    #Vq = tf.matmul(tf.transpose(tf.reshape(Q, [k*k,k*k])), V)   #################### MAY HAVE TO TRANSPOSE TRAIN
-    Q_ = tf.reshape(tf.transpose(Q, perm=[3,0,1,2]), [k*k,k*k])
+    Q_ = tf.transpose(tf.reshape(Q, [k*k,k*k]))
     Vq = tf.matmul(Q_, V)
     
     Vq = tf.reshape(Vq, [1,k*k,n_channels,n_filters])                   # [1,m,c,f]
@@ -28,16 +27,17 @@ def gConv(X, filter_size, n_filters, q, name=''):
     Xqsh = tf.shape(Xq)                                                 # [m,c,b,h',w']
     Xq = to_filter_patch_pairs(Xq, Xqsh)                                # [m,c,bh'w',1]
     Vq, Xq = mutual_tile(Vq, Xq)    # Do we need a sanity check on this?# [m,c,bh'w',f]
-    dot, ext = dot_ext_transform(Xq,Vq)                                 # [d,bhw,f] []
-    angle = get_angle(dot[0,:,:], ext[0,:,:])                           # [bhw,f]
+    dot, ext = dot_ext_transform(Xq,Vq)                                 # [d,bh'w',f] [d,bh'w',f]
+    angle = get_angle(dot[0,:,:], ext[0,:,:])                           # [bh'w',f]
+    # WORKS DOWN TO HERE
     # Get response
-    Rcos, Rsin = get_rotation_as_vectors(angle, k)
-    cos_response = tf.reduce_sum(dot*Rcos, reduction_indices=[0])
-    sin_response = tf.reduce_sum(ext*Rsin, reduction_indices=[0])
-    response = cos_response + sin_response
+    Rcos, Rsin = get_rotation_as_vectors(angle, k)                      # [d,bh'w',f]
+    cos_response = tf.reduce_sum(dot*Rcos, reduction_indices=[0])       # [bh'w',f]
+    sin_response = tf.reduce_sum(ext*Rsin, reduction_indices=[0])       # [bh'w',f]
+    response = cos_response + sin_response                              # [bh'w',f]
     # Reshape to image-like shape
-    angle = fp_to_image(angle, Xqsh)
-    response = fp_to_image(response, Xqsh)
+    angle = fp_to_image(angle, Xqsh)                                    # [b,h',w',f]
+    response = fp_to_image(response, Xqsh)                              # [b,h',w',f]
     return angle, response
 
 def orthogonalize(Q):
