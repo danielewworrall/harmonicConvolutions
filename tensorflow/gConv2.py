@@ -7,25 +7,26 @@ import time
 import numpy as np
 import tensorflow as tf
 
-def gConv(X, filter_size, n_filters, name=''):
+def gConv(X, filter_size, n_filters, q, name=''):
     """Create a group convolutional module"""
     # Create variables
     k = filter_size
     n_channels = int(X.get_shape()[3])
-    Q = get_weights([k,k,1,k*k], name=name+'_Q')
-    V = get_weights([k*k,n_channels*n_filters], name=name+'_V')
+    #Q = get_weights([k,k,1,k*k], name=name+'_Q')################################################
+    Q = q
+    V = get_weights([k*k,n_channels*n_filters], name=name+'_V')         # [h*w,c*f]
     # Project input X to Q-space
-    Xq = channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID")
+    Xq = channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID")   # [m,c,b,h',w']
     # Project V to Q-space: each col of Q is a filter transformation
-    Vq = tf.matmul(tf.transpose(tf.reshape(Q, [k*k,k*k])), V)
-    Vq = tf.reshape(Vq, [1,k*k,n_channels,n_filters])
-    Vq = tf.transpose(Vq, perm=[1,2,0,3])
+    Vq = tf.matmul(tf.transpose(tf.reshape(Q, [k*k,k*k])), V)   #################### MAY HAVE TO TRANSPOSE TRAIN
+    Vq = tf.reshape(Vq, [1,k*k,n_channels,n_filters])                   # [1,m,c,f]
+    Vq = tf.transpose(Vq, perm=[1,2,0,3])                               # [m,c,1,f]
     # Get angle
-    Xqsh = tf.shape(Xq)
-    Xq = to_filter_patch_pairs(Xq, Xqsh)
-    Vq, Xq = mutual_tile(Vq, Xq)    # Do we need a sanity check on this?
-    dot, ext = dot_ext_transform(Xq,Vq)         # Shape [d,bhw,f]
-    angle = get_angle(dot[0,:,:], ext[0,:,:])   # Shape [bhw,f]
+    Xqsh = tf.shape(Xq)                                                 # [m,c,b,h',w']
+    Xq = to_filter_patch_pairs(Xq, Xqsh)                                # [m,c,bh'w',1]
+    Vq, Xq = mutual_tile(Vq, Xq)    # Do we need a sanity check on this?# [m,c,bh'w',f]
+    dot, ext = dot_ext_transform(Xq,Vq)                                 # [d,bhw,f] []
+    angle = get_angle(dot[0,:,:], ext[0,:,:])                           # [bhw,f]
     # Get response
     Rcos, Rsin = get_rotation_as_vectors(angle, k)
     cos_response = tf.reduce_sum(dot*Rcos, reduction_indices=[0])
@@ -35,6 +36,12 @@ def gConv(X, filter_size, n_filters, name=''):
     angle = fp_to_image(angle, Xqsh)
     response = fp_to_image(response, Xqsh)
     return angle, response
+
+def orthogonalize(Q):
+    """Orthogonalize square Q"""
+    Q = tf.reshape(Q, [9,9])
+    S, U, V = tf.svd(Q, compute_uv=True, full_matrices=True)
+    return tf.reshape(tf.matmul(U,tf.transpose(V)), [3,3,1,9])
 
 def get_rotation_as_vectors(phi,k):
     """Return the Jordan block rotation matrix for the Lie Group"""
@@ -52,17 +59,17 @@ def channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID"):
     """Convolve X with Q on each channel independently.
     
     X: input tensor of shape [b,h,w,c]
-    Q: rotation tensor of shape [h*w,h*w]
+    Q: orthogonal tensor of shape [hw,hw]. Note h = w, m = hw
     
-    returns: tensor of shape [m,c,b,h,w].
+    returns: tensor of shape [m,c,b,h',w'].
     """
-    Xsh = tf.shape(X)
-    X = tf.transpose(X, perm=[0,3,1,2])
-    X = tf.reshape(X, tf.pack([Xsh[0]*Xsh[3],Xsh[1],Xsh[2],1]))
-    Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding)
+    Xsh = tf.shape(X)                                           # [b,h,w,c]
+    X = tf.transpose(X, perm=[0,3,1,2])                         # [b,c,h,w]
+    X = tf.reshape(X, tf.pack([Xsh[0]*Xsh[3],Xsh[1],Xsh[2],1])) # [bc,h,w,1]
+    Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding)    # [bc,h',w',m]
     Zsh = tf.shape(Z)
-    Z = tf.reshape(Z, tf.pack([Xsh[0],Xsh[3],Zsh[1],Zsh[2],Zsh[3]]))
-    return tf.transpose(Z, perm=[4,1,0,2,3])
+    Z = tf.reshape(Z, tf.pack([Xsh[0],Xsh[3],Zsh[1],Zsh[2],Zsh[3]])) # [b,c,h',w',m]
+    return tf.transpose(Z, perm=[4,1,0,2,3])                    # [m,c,b,h',w']
 
 def to_filter_patch_pairs(X, Xsh):
     """Convert tensor [m,c,b,h,w] -> [m,c,bhw,1]"""
@@ -88,7 +95,7 @@ def atan2(y,x):
     z = tf.select(tf.logical_and(tf.equal(y,0),(x<0)),np.pi*tf.ones_like(z_),z_)
     
     z = tf.select(tf.equal(y*x,0),tf.zeros_like(z_),z_)
-    return z
+    return z #tf.zeros_like(z)####################################################################
 
 def get_angle(dot, ext):
     """Get the angle in [0,2*pi] from one vector to another"""
@@ -97,17 +104,17 @@ def get_angle(dot, ext):
 
 def dot_ext_transform(U,V):
     """Convert {U,V} to the dot-ext domain (vector representation of SO(N))"""
-    # Dot
-    dot = tf.reduce_sum(U*V,reduction_indices=[1])
+    # Dot: input [m,c,bh'w',f], [m,c,bh'w',f]
+    dot = tf.reduce_sum(U*V,reduction_indices=[1])  # [m,bh'w',f]
     dotsh = tf.to_int32(tf.shape(dot)[0])
     seg_indices = tf.range(dotsh)/2
-    dot = tf.segment_sum(dot, seg_indices)
+    dot = tf.segment_sum(dot, seg_indices)          # [ceil(m/2),bh'w',f]
     # Ext
     Vsh = tf.shape(V)
-    V = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]*Vsh[3]])
-    V = tf.reshape(tf.matmul(blade_matrix(9),V), [Vsh[0],Vsh[1],Vsh[2],Vsh[3]])
-    ext = tf.reduce_sum(U*V, reduction_indices=[1])
-    return dot, tf.segment_sum(ext, seg_indices)
+    V = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]*Vsh[3]])# [m,cbh'w'f]   # Fishy
+    V = tf.reshape(tf.matmul(blade_matrix(9),V), [Vsh[0],Vsh[1],Vsh[2],Vsh[3]]) # [m,c,bh'w',f]
+    ext = tf.reduce_sum(U*V, reduction_indices=[1]) # [m,bh'w',f]
+    return dot, tf.segment_sum(ext, seg_indices)    # [ceil(m/2),bh'w',f] [ceil(m/2),bh'w',f]
 
 def blade_matrix(k):
     """Build the blade product matrix of order k"""

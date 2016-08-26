@@ -14,8 +14,7 @@ from gConv2 import *
 mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 
 # Parameters
-learning_rate = 0.001
-momentum = 0.9
+learning_rate = 1e-2
 training_iters = 200000
 batch_size = 50
 display_step = 10
@@ -40,8 +39,8 @@ def conv2d(x, W, b, strides=1):
 def lieConv2d(X, n_filters, b, name):
 	# Lie Conv 2D wrapper, with bias and relu activation
 	phi, y = gConv(X, 3, n_filters, name=name)
-	x = tf.concat(3, [phi, y])
-	x = tf.nn.bias_add(x, b)
+	#x = tf.concat(3, [phi, y])
+	x = tf.nn.bias_add(y, b)
 	return tf.nn.relu(x)
 
 def maxpool2d(x, k=2):
@@ -56,17 +55,16 @@ def conv_net(x, weights, biases, dropout):
 	
 	# Convolution Layer
 	#conv1 = conv2d(x, weights['wc1'], biases['bc1'])
-	conv1 = lieConv2d(x, 16, biases['bc1'], name='gc1')
+	conv1 = lieConv2d(x, 32, biases['bc1'], name='gc1')
 	
 	# Max Pooling (down-sampling)
 	conv1 = maxpool2d(conv1, k=2)
 	
 	# Convolution Layer
 	#conv2 = conv2d(conv1, weights['wc2'], biases['bc2'])
-	conv2 = lieConv2d(conv1, 16, biases['bc2'], name='gc2')
+	conv2 = lieConv2d(conv1, 32, biases['bc2'], name='gc2')
 	# Max Pooling (down-sampling)
 	conv2 = maxpool2d(conv2, k=2)
-
 	# Fully connected layer
 	# Reshape conv2 output to fit fully connected layer input
 	fc1 = tf.reshape(conv2, [-1, weights['wd1'].get_shape().as_list()[0]])
@@ -82,9 +80,9 @@ def conv_net(x, weights, biases, dropout):
 # Store layers weight & bias
 weights = {
     # 5x5 conv, 1 input, 32 outputs
-    #'wc1': tf.Variable(tf.random_normal([5, 5, 1, 32])),
+    #'wc1': tf.Variable(tf.random_normal([3, 3, 1, 32])),
     # 5x5 conv, 32 inputs, 64 outputs
-    #wc2': tf.Variable(tf.random_normal([5, 5, 32, 64])),
+    #'wc2': tf.Variable(tf.random_normal([3, 3, 32, 32])),
     # fully connected, 7*7*64 inputs, 1024 outputs
     'wd1': tf.Variable(tf.random_normal([6*6*32, 1024])),
     # 1024 inputs, 10 outputs (class prediction)
@@ -103,13 +101,28 @@ pred = conv_net(x, weights, biases, keep_prob)
 
 # Define loss and optimizer
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
-optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate,
-									   momentum=momentum).minimize(cost)
+optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost) 
 
 # Evaluate model
 correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-
+'''
+# Create orthogonalization routine
+Q_var = []
+orthogonalize_ops = []
+for var in tf.all_variables():
+	if 'Momentum' not in var.name:
+		if '_Q' in var.name:
+			Q_var.append(var)
+Q_1 = tf.placeholder(tf.float32, [3,3,1,9], 'Q_1')
+Q_2 = tf.placeholder(tf.float32, [3,3,1,9], 'Q_2')
+orthogonalize_ops.append(Q_var[0].assign(Q_1))
+orthogonalize_ops.append(Q_var[1].assign(Q_2))
+'''
+def ortho(Q):
+	U, __, V = np.linalg.svd(Q)
+	return np.dot(U,V)
+			
 # Initializing the variables
 init = tf.initialize_all_variables()
 
@@ -121,6 +134,12 @@ with tf.Session() as sess:
 	while step * batch_size < training_iters:
 		batch_x, batch_y = mnist.train.next_batch(batch_size)
 		# Run optimization op (backprop)
+		'''
+		Q1, Q2 = sess.run(Q_var)
+		Q1 = np.reshape(ortho(np.reshape(Q1, [9,9])), [3,3,1,9])
+		Q2 = np.reshape(ortho(np.reshape(Q2, [9,9])), [3,3,1,9])
+		sess.run(orthogonalize_ops, feed_dict={Q_1 : Q1, Q_2 : Q2})
+		'''
 		sess.run(optimizer, feed_dict={x: batch_x, y: batch_y,
 									   keep_prob: dropout})
 		if step % display_step == 0:
