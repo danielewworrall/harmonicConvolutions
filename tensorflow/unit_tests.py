@@ -25,15 +25,31 @@ def rot_mat(theta):
 	R[8,8] = 1
 	return R
 
+def rot_mat_low(theta):
+	"""Lowest harmonic only"""
+	R = np.zeros((9,9))
+	R[0,0] = np.cos(theta)
+	R[1,1] = np.cos(theta)
+	R[1,0] = np.sin(theta)
+	R[0,1] = -np.sin(theta)
+	R[8,8] = 1
+	return R
+
 def gen_data(X, N, Q):
 	X_ = np.dot(Q,X)
 	# Get rotation
 	theta = np.linspace(0, 2*np.pi, N)
 	Y = []
+	Ylow = []
 	for t in theta:
 		R = rot_mat(t)
+		Rlow = rot_mat_low(t)
 		Y.append(np.dot(Q.T,np.dot(R,X_)))
-	return np.vstack(Y)
+		Ylow.append(np.dot(Q.T,np.dot(Rlow,X_)))
+	Y = np.vstack(Y)
+	Ylow = np.vstack(Ylow)
+	
+	return Y, Ylow
 
 def get_Q(n):
 	Q = np.random.randn(9,9)
@@ -45,12 +61,10 @@ def gConv_test():
 	N = 360
 	X = np.random.randn(9)
 	Q = get_Q(9)
-	#Q = np.eye(9)
-	X = gen_data(X, N, Q)
+	X, Xlow = gen_data(X, N, Q)
 	X = np.reshape(X, [N,3,3,1])
 	Q = np.transpose(Q)
 	Q = np.reshape(Q, [3,3,1,9])
-	#Q = np.transpose(Q, [1,0,2,3])
 	
 	# tf conv
 	x = tf.placeholder('float', [None,3,3,1], name='x')
@@ -60,13 +74,17 @@ def gConv_test():
 	with tf.Session() as sess:
 		init_op = tf.initialize_all_variables()
 		sess.run(init_op)
-		A, Y = sess.run(y, feed_dict={x : X, q : Q})
+		A, Y, V_ = sess.run(y, feed_dict={x : X, q : Q})
+	
+	V_ = np.squeeze(V_)
+	Yrlow = np.dot(Xlow,V_)
+	Yr = np.dot(np.reshape(np.squeeze(X),[-1,9]),V_)
 	
 	fig = plt.figure(1)
-	plt.plot(np.squeeze(Y))
-	plt.ylim([-0.05, 0.05])
+	plt.plot(np.squeeze(Yrlow), 'g')
+	plt.plot(np.squeeze(Yr), 'r')
+	plt.scatter(360-180*A[0,...]/np.pi,Y[0])
 	plt.show()
-	
 	
 def channelwise_conv2d_test():
 	"""Test channelwise conv2d"""
@@ -145,10 +163,32 @@ def get_rotation_as_vectors_test():
 	print
 	print Rsin_
 
-
+def grad_atan2_test():
+	num=200
+	x = tf.placeholder('float', [num], name='x')
+	y = tf.placeholder('float', [num], name='y')
+	
+	z = atan2(y, x)
+	
+	g = tf.gradients(z, x)
+	
+	Y = np.linspace(-10.,10.,num=num)
+	X = np.ones_like(Y)
+	with tf.Session() as sess:
+		Z, G = sess.run([z, g], feed_dict={x : X, y : Y})
+		print sess.run([z, g], feed_dict={x : 0.*np.ones((200)), y : np.ones((200))})
+	
+	Y = np.squeeze(Y)
+	Z = np.squeeze(np.asarray(Z))
+	G = np.squeeze(np.asarray(G))
+	fig = plt.figure(1)
+	plt.plot(Y, Z, 'b')
+	plt.plot(Y, G, 'r')
+	plt.show()
 
 if __name__ == '__main__':
 	#get_rotation_as_vectors_test()
 	#mutual_tile_test()
 	#channelwise_conv2d_test()
-	gConv_test()
+	#gConv_test()
+	grad_atan2_test()

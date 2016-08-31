@@ -14,7 +14,7 @@ from gConv2 import *
 mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 
 # Parameters
-learning_rate = 1e-2
+learning_rate = 1e-3
 training_iters = 200000
 batch_size = 50
 display_step = 10
@@ -40,7 +40,7 @@ def lieConv2d(X, n_filters, b, name):
 	# Lie Conv 2D wrapper, with bias and relu activation
 	phi, y = gConv(X, 3, n_filters, name=name)
 	#x = tf.concat(3, [phi, y])
-	x = tf.nn.bias_add(y, b)
+	x = tf.nn.bias_add(phi, b)
 	return tf.nn.relu(x)
 
 def maxpool2d(x, k=2):
@@ -84,9 +84,9 @@ weights = {
     # 5x5 conv, 32 inputs, 64 outputs
     #'wc2': tf.Variable(tf.random_normal([3, 3, 32, 32])),
     # fully connected, 7*7*64 inputs, 1024 outputs
-    'wd1': tf.Variable(tf.random_normal([6*6*32, 1024])),
+    'wd1': tf.Variable(tf.sqrt(6.0/(2176.))*tf.random_normal([6*6*32, 1024]), name='W'),
     # 1024 inputs, 10 outputs (class prediction)
-    'out': tf.Variable(tf.random_normal([1024, n_classes]))
+    'out': tf.Variable(tf.sqrt(6.0/(1034.))*tf.random_normal([1024, n_classes]))
 }
 
 biases = {
@@ -106,19 +106,24 @@ optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
 # Evaluate model
 correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-'''
+
 # Create orthogonalization routine
 Q_var = []
+W_var = []
 orthogonalize_ops = []
 for var in tf.all_variables():
-	if 'Momentum' not in var.name:
+	if 'Adam' not in var.name:
 		if '_Q' in var.name:
 			Q_var.append(var)
+			print var.name
+		if 'W' in var.name:
+			W_var.append(var)
+			print var.name
 Q_1 = tf.placeholder(tf.float32, [3,3,1,9], 'Q_1')
 Q_2 = tf.placeholder(tf.float32, [3,3,1,9], 'Q_2')
 orthogonalize_ops.append(Q_var[0].assign(Q_1))
 orthogonalize_ops.append(Q_var[1].assign(Q_2))
-'''
+
 def ortho(Q):
 	U, __, V = np.linalg.svd(Q)
 	return np.dot(U,V)
@@ -134,14 +139,23 @@ with tf.Session() as sess:
 	while step * batch_size < training_iters:
 		batch_x, batch_y = mnist.train.next_batch(batch_size)
 		# Run optimization op (backprop)
-		'''
+		
 		Q1, Q2 = sess.run(Q_var)
+		W = sess.run(W_var)
+		print Q1
 		Q1 = np.reshape(ortho(np.reshape(Q1, [9,9])), [3,3,1,9])
 		Q2 = np.reshape(ortho(np.reshape(Q2, [9,9])), [3,3,1,9])
 		sess.run(orthogonalize_ops, feed_dict={Q_1 : Q1, Q_2 : Q2})
-		'''
+		
+		#p = sess.run(pred, feed_dict={x: batch_x, y: batch_y, keep_prob: dropout})
+		#print(p)
+		
 		sess.run(optimizer, feed_dict={x: batch_x, y: batch_y,
 									   keep_prob: dropout})
+		
+		#p = sess.run(pred, feed_dict={x: batch_x, y: batch_y, keep_prob: dropout})
+		#print(p)
+		
 		if step % display_step == 0:
 			# Calculate batch loss and accuracy
 			loss, acc = sess.run([cost, accuracy], feed_dict={x: batch_x,
