@@ -85,6 +85,23 @@ def gConv_test():
 	plt.plot(np.squeeze(Yr), 'r')
 	plt.scatter(360-180*A[0,...]/np.pi,Y[0])
 	plt.show()
+
+def gConv_polar_test():
+	"""Test gConv"""
+	N = 1
+	X = np.random.randn(9,N)
+	X = np.reshape(X, [N,3,3,1])
+	
+	# tf conv
+	x = tf.placeholder('float', [None,3,3,1], name='x')
+	y = gConv_polar(x, 3, 2, name='gc')
+	
+	with tf.Session() as sess:
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
+		A, Y = sess.run(y, feed_dict={x : X})
+	
+	print A.shape, Y.shape
 	
 def channelwise_conv2d_test():
 	"""Test channelwise conv2d"""
@@ -170,13 +187,13 @@ def grad_atan2_test():
 	
 	z = atan2(y, x)
 	
-	g = tf.gradients(z, x)
+	g = tf.gradients(z, y)
 	
 	Y = np.linspace(-10.,10.,num=num)
-	X = np.ones_like(Y)
+	X = 0.3*np.ones_like(Y)
 	with tf.Session() as sess:
 		Z, G = sess.run([z, g], feed_dict={x : X, y : Y})
-		print sess.run([z, g], feed_dict={x : 0.*np.ones((200)), y : np.ones((200))})
+		print sess.run([z, g], feed_dict={x : 0.*np.ones((200)), y : 0.*np.ones((200))})
 	
 	Y = np.squeeze(Y)
 	Z = np.squeeze(np.asarray(Z))
@@ -186,9 +203,42 @@ def grad_atan2_test():
 	plt.plot(Y, G, 'r')
 	plt.show()
 
+def gConv_grad_test():
+	N = 360
+	X = np.random.randn(9)
+	Q = get_Q(9)
+	X, Xlow = gen_data(X, N, Q)
+	X = np.maximum(X,0.)
+	X = np.reshape(X, [N,3,3,1])
+	#Q = np.transpose(Q)
+	Q_ = get_Q(9)
+	Q = np.reshape(Q_, [3,3,1,9])
+	
+	# tf conv
+	x = tf.placeholder('float', [None,3,3,1], name='x')
+	q = tf.placeholder('float', [3,3,1,9], name='q')
+	y = gConv(x, 3, 1, q, name='gc')
+	f = tf.reduce_sum(tf.pow(tf.nn.relu(y[1]), 2))
+	g = tf.gradients(f, q)
+	
+	with tf.Session() as sess:
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
+		A, Y = sess.run(y, feed_dict={x : X, q : Q})
+		G = sess.run(g, feed_dict={x : X, q : Q})
+	
+	print np.sum(np.isnan(G[0]))
+	print G[0]
+	
+	fig = plt.figure(1)
+	plt.plot(np.squeeze(G[0][2,2,0,:]))
+	plt.show()
+
 if __name__ == '__main__':
 	#get_rotation_as_vectors_test()
 	#mutual_tile_test()
 	#channelwise_conv2d_test()
 	#gConv_test()
-	grad_atan2_test()
+	#gConv_polar_test()
+	#grad_atan2_test()
+	gConv_grad_test()

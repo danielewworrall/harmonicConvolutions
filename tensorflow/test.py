@@ -14,9 +14,9 @@ from gConv2 import *
 mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 
 # Parameters
-learning_rate = 1e-3
+learning_rate = 1e-4
 training_iters = 200000
-batch_size = 50
+batch_size = 5
 display_step = 10
 
 # Network Parameters
@@ -58,11 +58,11 @@ def conv_net(x, weights, biases, dropout):
 	conv1 = lieConv2d(x, 32, biases['bc1'], name='gc1')
 	
 	# Max Pooling (down-sampling)
-	conv1 = maxpool2d(conv1, k=2)
+	conv1_ = maxpool2d(conv1, k=2)
 	
 	# Convolution Layer
 	#conv2 = conv2d(conv1, weights['wc2'], biases['bc2'])
-	conv2 = lieConv2d(conv1, 32, biases['bc2'], name='gc2')
+	conv2 = lieConv2d(conv1_, 32, biases['bc2'], name='gc2')
 	# Max Pooling (down-sampling)
 	conv2 = maxpool2d(conv2, k=2)
 	# Fully connected layer
@@ -75,7 +75,7 @@ def conv_net(x, weights, biases, dropout):
 	
 	# Output, class prediction
 	out = tf.add(tf.matmul(fc1, weights['out']), biases['out'])
-	return out
+	return conv1_, out
 
 # Store layers weight & bias
 weights = {
@@ -97,15 +97,21 @@ biases = {
 }
 
 # Construct model
-pred = conv_net(x, weights, biases, keep_prob)
+c1, pred = conv_net(x, weights, biases, keep_prob)
 
 # Define loss and optimizer
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
-optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost) 
+opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
+gvs = opt.compute_gradients(cost)
+clip = 1.
+capped_gvs = [(tf.clip_by_value(gv[0], -clip, clip),gv[1]) for gv in gvs]
+optimizer = opt.apply_gradients(capped_gvs)
 
 # Evaluate model
 correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+
+c1_grads = tf.gradients(cost, c1)
 
 # Create orthogonalization routine
 Q_var = []
@@ -133,42 +139,40 @@ init = tf.initialize_all_variables()
 
 # Launch the graph
 with tf.Session() as sess:
-	sess.run(init)
-	step = 1
-	# Keep training until reach max iterations
-	while step * batch_size < training_iters:
-		batch_x, batch_y = mnist.train.next_batch(batch_size)
-		# Run optimization op (backprop)
-		
-		Q1, Q2 = sess.run(Q_var)
-		W = sess.run(W_var)
-		print Q1
-		Q1 = np.reshape(ortho(np.reshape(Q1, [9,9])), [3,3,1,9])
-		Q2 = np.reshape(ortho(np.reshape(Q2, [9,9])), [3,3,1,9])
-		sess.run(orthogonalize_ops, feed_dict={Q_1 : Q1, Q_2 : Q2})
-		
-		#p = sess.run(pred, feed_dict={x: batch_x, y: batch_y, keep_prob: dropout})
-		#print(p)
-		
-		sess.run(optimizer, feed_dict={x: batch_x, y: batch_y,
-									   keep_prob: dropout})
-		
-		#p = sess.run(pred, feed_dict={x: batch_x, y: batch_y, keep_prob: dropout})
-		#print(p)
-		
-		if step % display_step == 0:
-			# Calculate batch loss and accuracy
-			loss, acc = sess.run([cost, accuracy], feed_dict={x: batch_x,
-															  y: batch_y,
-															  keep_prob: 1.})
-			print "Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
-				  "{:.6f}".format(loss) + ", Training Accuracy= " + \
-				  "{:.5f}".format(acc)
-		step += 1
-	print "Optimization Finished!"
-	
-	# Calculate accuracy for 256 mnist test images
-	print "Testing Accuracy:", \
-		sess.run(accuracy, feed_dict={x: mnist.test.images[:256],
-									  y: mnist.test.labels[:256],
-									  keep_prob: 1.})
+    sess.run(init)
+    step = 1
+    # Keep training until reach max iterations
+    while step * batch_size < training_iters:
+        batch_x, batch_y = mnist.train.next_batch(batch_size)
+        # Run optimization op (backprop)
+        # THIS BIT IS UNSTABLE!
+        
+        Q1, Q2 = sess.run(Q_var)
+        print step #, np.squeeze(Q1)
+        Q1 = np.reshape(ortho(np.reshape(Q1, [9,9])), [3,3,1,9])
+        Q2 = np.reshape(ortho(np.reshape(Q2, [9,9])), [3,3,1,9])
+        sess.run(orthogonalize_ops, feed_dict={Q_1 : Q1, Q_2 : Q2})
+        Q1, Q2 = sess.run(Q_var)
+        
+        sess.run(optimizer, feed_dict={x: batch_x, y: batch_y,
+                                       keep_prob: dropout})
+        
+        print sess.run(c1_grads, feed_dict={x: batch_x, y: batch_y,
+                                            keep_prob: dropout})
+        
+        if step % display_step == 0:
+            # Calculate batch loss and accuracy
+            loss, acc = sess.run([cost, accuracy], feed_dict={x: batch_x,
+                                                              y: batch_y,
+                                                              keep_prob: 1.})
+            print "Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
+                  "{:.6f}".format(loss) + ", Training Accuracy= " + \
+                  "{:.5f}".format(acc)
+        step += 1
+    print "Optimization Finished!"
+    
+    # Calculate accuracy for 256 mnist test images
+    print "Testing Accuracy:", \
+        sess.run(accuracy, feed_dict={x: mnist.test.images[:256],
+                                      y: mnist.test.labels[:256],
+                                      keep_prob: 1.})

@@ -7,6 +7,28 @@ import time
 import numpy as np
 import tensorflow as tf
 
+def gConv_polar(X, filter_size, n_filters, name=''):
+    """Create a group convolutional module"""
+    # Create variables
+    k = filter_size
+    n_channels = int(X.get_shape()[3])
+    Q = get_weights([k,k,1,k*k], name=name+'_Q')
+    #Q = q
+    V = get_weights([k*k,n_channels*n_filters], name=name+'_V')         # [h*w,c*f]
+    # Project input X to Q-space
+    Xq = channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID")   # [m,c,b,h',w']
+    # Project V to Q-space: each col of Q is a filter transformation
+    Q_ = tf.transpose(tf.reshape(Q, [k*k,k*k]))
+    Vq = tf.matmul(Q_, V)
+    
+    Vq = tf.reshape(Vq, [1,1,k*k,n_channels,n_filters])                 # [1,1,m,c,f]
+    Vq = tf.transpose(Vq, perm=[2,3,0,1,4])                             # [m,c,1,1,f]
+    # Get angle
+    Xr, Xt = cart_to_polar(Xq)                                          # [d,c,b,h',w']
+    Vr, Vt = cart_to_polar(Vq)                                          # [d,c,b,h',w']
+    angle = Vt[0,:,:,:,:] - Xt[0,:,:,:,:]
+    return Xt, Vt
+
 def gConv(X, filter_size, n_filters, name=''):
     """Create a group convolutional module"""
     # Create variables
@@ -93,18 +115,33 @@ def fp_to_image(X, Xsh):
     """Convert from angular filter-patch pairings to standard image format"""
     return tf.reshape(X, tf.pack([Xsh[2],Xsh[3],Xsh[4],-1]))
 
+def cart_to_polar(X):
+    """Input shape [m,:,:,:,:], output (r, theta). Assume d=9"""
+    t = []
+    r = []
+    for i in xrange(4):
+        t_ = atan2(X[2*i+1,:,:,:,:], X[2*i,:,:,:,:])
+        r_ = tf.sqrt(tf.pow(X[2*i,:,:,:,:],2) + tf.pow(X[2*i+1,:,:,:,:],2))
+        t.append(t_)
+        r.append(r_)
+    t.append(tf.zeros_like(t[3]))
+    r.append(X[8,:,:,:,:])
+    t = tf.pack(t)
+    r = tf.pack(r)
+    return (r,t)
+
 def atan2(y, x, reg=1e-6):
     """Compute the classic atan2 function between y and x"""
-    arg1 = y / safe_reg(tf.sqrt(tf.pow(y,2) + tf.pow(x,2)) + x, reg)
+    x = safe_reg(x)
+    y = safe_reg(y)
+    
+    arg1 = y / (tf.sqrt(tf.pow(y,2) + tf.pow(x,2)) + x)
     z1 = 2*tf.atan(arg1)
     
-    arg2 = (tf.sqrt(tf.pow(y,2) + tf.pow(x,2)) - x) / safe_reg(y, reg)
+    arg2 = (tf.sqrt(tf.pow(y,2) + tf.pow(x,2)) - x) / y
     z2 = 2*tf.atan(arg2)
     
-    z_ = tf.select(x>0,z1,z2)
-    z = tf.select(tf.logical_and(tf.equal(y,0.),(x<0.)),np.pi+0.*z_,z_)
-    
-    return tf.select(tf.equal(y*x,0.),0.*z_,z_)
+    return tf.select(x>0,z1,z2)
 
 def safe_reg(x, reg=1e-6):
     """Return the x, such that |x| >= reg"""
