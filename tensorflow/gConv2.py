@@ -5,6 +5,7 @@ import sys
 import time
 
 import numpy as np
+import scipy.linalg as scilin
 import tensorflow as tf
 
 
@@ -13,8 +14,9 @@ def gConv(X, filter_size, n_filters, name=''):
     # Create variables
     k = filter_size
     n_channels = int(X.get_shape()[3])
-    Q = get_weights([k,k,1,k*k], name=name+'_Q')
-    #Q = q
+    print('N_channels: %i' % (n_channels,))
+    print('N_filters: %i' % (n_filters,))
+    Q = get_weights([k,k,1,k*k], W_init=Q_init(), name=name+'_Q')
     V = get_weights([k*k,n_channels*n_filters], name=name+'_V')         # [h*w,c*f]
     # Project input X to Q-space
     Xq = channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID")   # [m,c,b,h',w']
@@ -35,7 +37,7 @@ def gConv(X, filter_size, n_filters, name=''):
     # Reshape to image-like shape
     angle = fp_to_image(angle, Xqsh)                                    # [b,h',w',f]
     response = fp_to_image(response, Xqsh)                              # [b,h',w',f]
-    return angle, response #, V
+    return angle, response
 
 def orthogonalize(Q):
     """Orthogonalize square Q"""
@@ -167,11 +169,55 @@ def modulus(x,y):
     """Perform x % y and maintain sgn(x) = sgn(y)"""
     return x - y*tf.floordiv(x, y)
 
-def get_weights(filter_shape, collection=None, name=''):
-    W_init = tf.random_normal(filter_shape, stddev=0.01)
+def get_weights(filter_shape, W_init=None, collection=None, name=''):
+    if W_init == None:
+        W_init = tf.random_normal(filter_shape, stddev=0.01)
     return tf.Variable(W_init, collections=collection, name=name)
 
+def Q_init():
+    Q = getQ()
+    P = permuation_matrix()
+    Q_ = np.real(np.dot(Q,P))
+    return np.reshape(Q_, [3,3,1,9]).astype(np.float32)
 
+def getQ():
+    n = 9
+    Q = np.eye(n, dtype=np.complex)
+    Q[:n-1,:n-1] = scilin.dft(n-1)/(np.sqrt(n-1.))
+    P = permuteFourier(Q)
+    u = np.asarray([[1,1],[1j,-1j]])
+    U = np.eye(n, dtype=np.complex)
+    U[2:4,2:4] = u
+    U[4:6,4:6] = u
+    U[6:8,6:8] = u
+    Q = np.real(np.dot(U,P))
+    return Q
+
+def permuteFourier(F):
+    P = np.zeros((9,9))
+    P[0,0] = 1
+    P[1,4] = 1
+    P[2,1] = 1
+    P[3,7] = 1
+    P[4,2] = 1
+    P[5,6] = 1
+    P[6,3] = 1
+    P[7,5] = 1
+    P[8,8] = 1
+    return np.dot(P, F)
+
+def permuation_matrix():
+    P = np.zeros((9,9))
+    P[0,0] = 1
+    P[1,1] = 1
+    P[2,2] = 1
+    P[3,5] = 1
+    P[4,8] = 1
+    P[5,7] = 1
+    P[6,6] = 1
+    P[7,3] = 1
+    P[8,4] = 1
+    return P
 
 
 

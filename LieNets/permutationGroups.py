@@ -140,7 +140,7 @@ class RotConv():
 	def demo1(self):
 		'''Using a simple oriented Gabor filter'''
 		# Generate demo data
-		im = skio.imread('/home/daniel/Code/LieGroups/kingfisher.jpg')
+		im = skio.imread('./kingfisher.jpg')
 		kernel = cv2.getGaborKernel((3,3), 5., numpy.pi/4., 10., 0.1)
 		kernelUnrav = rc.unravel(kernel)
 		kernel, kernelUnrav, __, __ = self.genData()
@@ -155,7 +155,7 @@ class RotConv():
 			# Projection of filter onto rotation basis
 			M = numpy.dot(Q, kernelUnrav)
 			shift = self.getRotation(0.2*2*numpy.pi*i)
-			recon = numpy.dot(Q.T, numpy.dot(shift, numpy.dot(Q, kernelUnrav)))
+			recon = numpy.dot(Q.T, numpy.dot(shift, M))
 			reconr = numpy.real(self.ravel(recon))
 			# Perform the correlation/convolution
 			res = self.correlate(im, reconr)
@@ -219,8 +219,8 @@ class RotConv():
 
 if __name__ == '__main__':
 	rc = RotConv()
-	#rc.demo1()
-	rc.demo2()
+	rc.demo1()
+	#rc.demo2()
 	#rc.demo3()
 		
 		

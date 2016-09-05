@@ -10,6 +10,7 @@ import tensorflow as tf
 import input_data
 
 from gConv2 import *
+from matplotlib import pyplot as plt
 
 # Create some wrappers for simplicity
 def conv2d(x, W, b, strides=1):
@@ -21,7 +22,7 @@ def conv2d(x, W, b, strides=1):
 def lieConv2d(X, n_filters, b, name):
 	# Lie Conv 2D wrapper, with bias and relu activation
 	phi, y = gConv(X, 3, n_filters, name=name)
-	#x = tf.concat(3, [phi, y])
+	#y = tf.concat(3, [phi, y])
 	x = tf.nn.bias_add(y, b)
 	return tf.nn.relu(x)
 
@@ -61,7 +62,7 @@ def run():
 	# Parameters
 	learning_rate = 1e-3
 	training_iters = 200000
-	batch_size = 50
+	batch_size = 40
 	display_step = 10
 	save_step = 100
 	
@@ -173,6 +174,56 @@ def run():
 			tacc += sess.run(accuracy, feed_dict=feed_dict)
 		print('Test accuracy: %f' % (tacc/200.,))
 
+def restore_weights():
+	# Network Parameters
+	n_input = 784 # MNIST data input (img shape: 28*28)
+	n_classes = 10 # MNIST total classes (0-9 digits)
+	
+	# tf Graph input
+	x = tf.placeholder(tf.float32, [None, n_input])
+	y = tf.placeholder(tf.float32, [None, n_classes])
+	keep_prob = 1.
+	
+	# Store layers weight & bias
+	weights = {
+		# fully connected, 6*6*32 inputs, 1024 outputs
+		'wd1': tf.Variable(tf.sqrt(6.0/(1652.))*tf.random_normal([6*6*32, 500]), name='W'),
+		# 1024 inputs, 10 outputs (class prediction)
+		'out': tf.Variable(tf.sqrt(6.0/(510.))*tf.random_normal([500, n_classes]))
+	}
+	
+	biases = {
+		'bc1': tf.Variable(tf.random_normal([32])),
+		'bc2': tf.Variable(tf.random_normal([32])),
+		'bd1': tf.Variable(tf.random_normal([500])),
+		'out': tf.Variable(tf.random_normal([n_classes]))
+	}
+	
+	# Construct model
+	pred = conv_net(x, weights, biases, keep_prob)
+	
+	# Create a saver
+	saver = tf.train.Saver()
+	
+	# Launch the graph
+	with tf.Session() as sess:
+		saver.restore(sess, './checkpoints/model.ckpt-1300')
+		print('Weights restored')
+		
+		V_op = []
+		for var in tf.all_variables():
+			if 'Adam' not in var.name:
+				if '_V' in var.name:
+					V_op.append(var)
+		V_eval = sess.run(V_op)
+		
+		for V in V_eval:
+			V = np.reshape(V,[3,3,32])
+			for i in xrange(32):
+				fig = plt.figure(1)
+				plt.imshow(V[:,:,i], cmap='gray', interpolation='nearest')
+				plt.show()
 
 if __name__ == '__main__':
 	run()
+	#restore_weights()
