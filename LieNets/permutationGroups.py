@@ -220,8 +220,8 @@ class RotConv():
 if __name__ == '__main__':
 	rc = RotConv()
 	#rc.demo1()
-	#rc.demo2()
-	rc.demo3()
+	rc.demo2()
+	#rc.demo3()
 		
 		
 		

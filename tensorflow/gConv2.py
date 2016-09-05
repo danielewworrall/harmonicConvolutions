@@ -7,27 +7,6 @@ import time
 import numpy as np
 import tensorflow as tf
 
-def gConv_polar(X, filter_size, n_filters, name=''):
-    """Create a group convolutional module"""
-    # Create variables
-    k = filter_size
-    n_channels = int(X.get_shape()[3])
-    Q = get_weights([k,k,1,k*k], name=name+'_Q')
-    #Q = q
-    V = get_weights([k*k,n_channels*n_filters], name=name+'_V')         # [h*w,c*f]
-    # Project input X to Q-space
-    Xq = channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID")   # [m,c,b,h',w']
-    # Project V to Q-space: each col of Q is a filter transformation
-    Q_ = tf.transpose(tf.reshape(Q, [k*k,k*k]))
-    Vq = tf.matmul(Q_, V)
-    
-    Vq = tf.reshape(Vq, [1,1,k*k,n_channels,n_filters])                 # [1,1,m,c,f]
-    Vq = tf.transpose(Vq, perm=[2,3,0,1,4])                             # [m,c,1,1,f]
-    # Get angle
-    Xr, Xt = cart_to_polar(Xq)                                          # [d,c,b,h',w']
-    Vr, Vt = cart_to_polar(Vq)                                          # [d,c,b,h',w']
-    angle = Vt[0,:,:,:,:] - Xt[0,:,:,:,:]
-    return Xt, Vt
 
 def gConv(X, filter_size, n_filters, name=''):
     """Create a group convolutional module"""

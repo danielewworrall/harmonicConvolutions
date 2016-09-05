@@ -14,10 +14,11 @@ from gConv2 import *
 mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 
 # Parameters
-learning_rate = 1e-4
+learning_rate = 1e-3
 training_iters = 200000
-batch_size = 5
+batch_size = 40
 display_step = 10
+save_step = 100
 
 # Network Parameters
 n_input = 784 # MNIST data input (img shape: 28*28)
@@ -40,7 +41,7 @@ def lieConv2d(X, n_filters, b, name):
 	# Lie Conv 2D wrapper, with bias and relu activation
 	phi, y = gConv(X, 3, n_filters, name=name)
 	#x = tf.concat(3, [phi, y])
-	x = tf.nn.bias_add(phi, b)
+	x = tf.nn.bias_add(y, b)
 	return tf.nn.relu(x)
 
 def maxpool2d(x, k=2):
@@ -54,16 +55,11 @@ def conv_net(x, weights, biases, dropout):
 	x = tf.reshape(x, shape=[-1, 28, 28, 1])
 	
 	# Convolution Layer
-	#conv1 = conv2d(x, weights['wc1'], biases['bc1'])
 	conv1 = lieConv2d(x, 32, biases['bc1'], name='gc1')
-	
-	# Max Pooling (down-sampling)
 	conv1_ = maxpool2d(conv1, k=2)
 	
 	# Convolution Layer
-	#conv2 = conv2d(conv1, weights['wc2'], biases['bc2'])
 	conv2 = lieConv2d(conv1_, 32, biases['bc2'], name='gc2')
-	# Max Pooling (down-sampling)
 	conv2 = maxpool2d(conv2, k=2)
 	# Fully connected layer
 	# Reshape conv2 output to fit fully connected layer input
@@ -75,15 +71,11 @@ def conv_net(x, weights, biases, dropout):
 	
 	# Output, class prediction
 	out = tf.add(tf.matmul(fc1, weights['out']), biases['out'])
-	return conv1_, out
+	return out
 
 # Store layers weight & bias
 weights = {
-    # 5x5 conv, 1 input, 32 outputs
-    #'wc1': tf.Variable(tf.random_normal([3, 3, 1, 32])),
-    # 5x5 conv, 32 inputs, 64 outputs
-    #'wc2': tf.Variable(tf.random_normal([3, 3, 32, 32])),
-    # fully connected, 7*7*64 inputs, 1024 outputs
+    # fully connected, 6*6*32 inputs, 1024 outputs
     'wd1': tf.Variable(tf.sqrt(6.0/(2176.))*tf.random_normal([6*6*32, 1024]), name='W'),
     # 1024 inputs, 10 outputs (class prediction)
     'out': tf.Variable(tf.sqrt(6.0/(1034.))*tf.random_normal([1024, n_classes]))
@@ -97,21 +89,23 @@ biases = {
 }
 
 # Construct model
-c1, pred = conv_net(x, weights, biases, keep_prob)
+pred = conv_net(x, weights, biases, keep_prob)
 
 # Define loss and optimizer
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
 opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
 gvs = opt.compute_gradients(cost)
-clip = 1.
+clip = 2.
 capped_gvs = [(tf.clip_by_value(gv[0], -clip, clip),gv[1]) for gv in gvs]
+#capped_gvs = [(gv[0],gv[1]) for gv in gvs]
 optimizer = opt.apply_gradients(capped_gvs)
 
 # Evaluate model
 correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
-c1_grads = tf.gradients(cost, c1)
+with tf.name_scope('model'):
+	tf.scalar_summary('accuracy', accuracy)
 
 # Create orthogonalization routine
 Q_var = []
@@ -137,42 +131,46 @@ def ortho(Q):
 # Initializing the variables
 init = tf.initialize_all_variables()
 
+# Create a saver
+saver = tf.train.Saver()
+merged = tf.merge_all_summaries()
+
 # Launch the graph
 with tf.Session() as sess:
-    sess.run(init)
-    step = 1
-    # Keep training until reach max iterations
-    while step * batch_size < training_iters:
-        batch_x, batch_y = mnist.train.next_batch(batch_size)
-        # Run optimization op (backprop)
-        # THIS BIT IS UNSTABLE!
-        
-        Q1, Q2 = sess.run(Q_var)
-        print step #, np.squeeze(Q1)
-        Q1 = np.reshape(ortho(np.reshape(Q1, [9,9])), [3,3,1,9])
-        Q2 = np.reshape(ortho(np.reshape(Q2, [9,9])), [3,3,1,9])
-        sess.run(orthogonalize_ops, feed_dict={Q_1 : Q1, Q_2 : Q2})
-        Q1, Q2 = sess.run(Q_var)
-        
-        sess.run(optimizer, feed_dict={x: batch_x, y: batch_y,
-                                       keep_prob: dropout})
-        
-        print sess.run(c1_grads, feed_dict={x: batch_x, y: batch_y,
-                                            keep_prob: dropout})
-        
-        if step % display_step == 0:
-            # Calculate batch loss and accuracy
-            loss, acc = sess.run([cost, accuracy], feed_dict={x: batch_x,
-                                                              y: batch_y,
-                                                              keep_prob: 1.})
-            print "Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
-                  "{:.6f}".format(loss) + ", Training Accuracy= " + \
-                  "{:.5f}".format(acc)
-        step += 1
-    print "Optimization Finished!"
-    
-    # Calculate accuracy for 256 mnist test images
-    print "Testing Accuracy:", \
-        sess.run(accuracy, feed_dict={x: mnist.test.images[:256],
-                                      y: mnist.test.labels[:256],
-                                      keep_prob: 1.})
+	sess.run(init)
+	writer = tf.train.SummaryWriter('./logs/', sess.graph_def)
+	step = 1
+	# Keep training until reach max iterations
+	while step * batch_size < training_iters:
+		batch_x, batch_y = mnist.train.next_batch(batch_size)
+		
+		Q1, Q2 = sess.run(Q_var)
+		Q1 = np.reshape(ortho(np.reshape(Q1, [9,9])), [3,3,1,9])
+		Q2 = np.reshape(ortho(np.reshape(Q2, [9,9])), [3,3,1,9])
+		sess.run(orthogonalize_ops, feed_dict={Q_1 : Q1, Q_2 : Q2})
+		
+		feed_dict = {x: batch_x, y: batch_y, keep_prob: dropout}
+		sess.run(optimizer, feed_dict=feed_dict)
+		
+		if step % display_step == 0:
+			# Calculate batch loss and accuracy
+			feed_dict = {x: batch_x, y: batch_y, keep_prob: 1.}
+			summary, loss, acc = sess.run([merged, cost, accuracy],
+				feed_dict=feed_dict)
+			print "Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
+				  "{:.6f}".format(loss) + ", Training Accuracy= " + \
+				  "{:.5f}".format(acc)
+			writer.add_summary(summary, step)
+		step += 1
+		
+		if step % save_step == 0:
+			saver.save(sess, './checkpoints/model.ckpt', global_step=step)
+	print "Testing"
+	
+	# Test accuracy
+	tacc = 0.
+	for i in xrange(200):
+		feed_dict={ x: mnist.test.images[50*i:50*(i+1)],
+				   y: mnist.test.labels[50*i:50*(i+1)], keep_prob: 1.}
+		tacc += sess.run(accuracy, feed_dict=feed_dict)
+	print('Test accuracy: %f' % (tacc/200.,))
