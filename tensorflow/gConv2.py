@@ -38,7 +38,7 @@ def gConv(X, filter_size, n_filters, name=''):
     # Reshape to image-like shape
     angle = fp_to_image(angle, Xqsh)                                    # [b,h',w',f]
     response = fp_to_image(response, Xqsh)                              # [b,h',w',f]
-    return angle, response
+    return angle, response, V
 
 def orthogonalize(Q):
     """Orthogonalize square Q"""

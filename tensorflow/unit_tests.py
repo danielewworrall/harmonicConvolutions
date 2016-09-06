@@ -203,6 +203,29 @@ def grad_atan2_test():
 	plt.plot(Y, G, 'r')
 	plt.show()
 
+def zConv_test():
+	"""Manually set the angle to zero, and see if conv2d is equivalent"""
+	x_shape = [1,10,10,3]
+	filter_size = 3
+	n_filters = 10
+	f_shape = [filter_size,filter_size,x_shape[3],n_filters]
+	x = tf.placeholder('float', x_shape, name='x')
+	v = tf.placeholder('float', f_shape, name='f')
+	y = gConv(x, filter_size, n_filters, name='gc')
+	z = tf.nn.conv2d(x, v, strides=(1,1,1,1), padding='VALID')
+	
+	X = np.random.randn(x_shape[0],x_shape[1],x_shape[2],x_shape[3])
+	with tf.Session() as sess:
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
+		Phi, Y, V = sess.run(y, feed_dict={x : X})
+		
+	V = V.reshape([filter_size,filter_size,x_shape[3],n_filters])
+	with tf.Session() as sess:
+		Z = sess.run(z, feed_dict={x : X, v : V})
+		
+	print np.sum((Y-Z)**2)
+
 def gConv_grad_test():
 	N = 360
 	X = np.random.randn(9)
@@ -348,4 +371,5 @@ if __name__ == '__main__':
 	#gConv_polar_test()
 	#grad_atan2_test()
 	#gConv_grad_test()
-	grad_descent_test()
+	#grad_descent_test()
+	zConv_test()
