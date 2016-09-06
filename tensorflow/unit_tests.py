@@ -234,6 +234,112 @@ def gConv_grad_test():
 	plt.plot(np.squeeze(G[0][2,2,0,:]))
 	plt.show()
 
+def grad_descent_test():
+	"""Discriminate between two shapes"""
+	A = np.eye(3)
+	B = 0.*(A + np.fliplr(A) > 0.)
+	
+	N = 360
+	Q = get_Q(9)
+	A, __ = gen_data(A.reshape([9,]), N, Q)
+	B, __ = gen_data(B.reshape([9,]), N, Q)
+	
+	# Parameters
+	lr = 1e-3
+	training_iters = 200000
+	batch_size = 1000
+	display_step = 10
+	
+	# Network Parameters
+	n_input = 9 # MNIST data input (img shape: 28*28)
+	n_classes = 2 # MNIST total classes (0-9 digits)
+	n_filters = 2
+	
+	# tf Graph input
+	x = tf.placeholder(tf.float32, [None, n_input])
+	y = tf.placeholder(tf.float32, [None, n_classes])
+	learning_rate = tf.placeholder(tf.float32)
+	
+	biases = {
+		'by': tf.Variable(tf.random_normal([n_filters])),
+		'bphi': tf.Variable(tf.random_normal([n_filters]))
+	}
+	
+	# Construct model
+	x_ = tf.reshape(x, shape=[-1, 3, 3, 1])
+	phi, resp = gConv(x_, 3, n_filters, name='gc')
+	pred = tf.nn.relu(tf.nn.bias_add(resp,biases['by']))
+	pred = tf.reshape(pred, [-1,2])
+	#phi = modulus(tf.nn.bias_add(phi,biases['b_phi']), 2*np.pi)
+	
+	
+	# Define loss and optimizer
+	cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
+	opt = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.)
+	gvs = opt.compute_gradients(cost)
+	clip = 2.
+	new_gvs = []
+	print gvs
+	for g, v in gvs:
+		if g is not None:
+			new_gvs.append((tf.clip_by_value(g, -clip, clip), v))
+		else:
+			new_gvs.append((g, v))
+	optimizer = opt.apply_gradients(new_gvs)
+	#optimizer = opt.apply_gradients(gvs)
+	
+	# Evaluate model
+	correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+	accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+	
+	# Create orthogonalization routine
+	Q_var = []
+	orthogonalize_ops = []
+	for var in tf.all_variables():
+		if 'Momentum' not in var.name:
+			if '_Q' in var.name:
+				Q_var.append(var)
+				print var.name
+	Q_1 = tf.placeholder(tf.float32, [3,3,1,9], 'Q_1')
+	orthogonalize_ops.append(Q_var[0].assign(Q_1))
+	
+	def ortho(Q):
+		U, __, V = np.linalg.svd(Q)
+		return np.dot(U,V)
+	
+	def sample_data(A, B, N):
+		bit = (np.random.rand(N) > 0.5).reshape([-1,1])
+		angle = np.random.randint(360, size=N)
+		A_ = A[angle,:]
+		B_ = B[angle,:]
+		Z = bit*A_ + (1.-bit)*B_
+		bit = np.hstack([bit,1-bit])
+		return (Z, bit)
+			
+	# Initializing the variables
+	init = tf.initialize_all_variables()
+
+	# Launch the graph
+	with tf.Session() as sess:
+		sess.run(init)
+		step = 1
+		# Keep training until reach max iterations
+		while step < training_iters:
+			lr_ = lr / np.sqrt(step + 1.)
+			batch_x, batch_y = sample_data(A, B, batch_size)
+			
+			# Orthogonalize Q
+			Q1 = sess.run(Q_var)
+			Q1 = np.reshape(ortho(np.reshape(Q1, [9,9])), [3,3,1,9])
+			sess.run(orthogonalize_ops, feed_dict={Q_1 : Q1})
+			
+			# Optimize
+			feed_dict = {x: batch_x, y: batch_y, learning_rate : lr_}
+			__, acc = sess.run([optimizer, accuracy], feed_dict=feed_dict)
+			if step % display_step == 0:
+				print str(step) + '   ' + str(acc)
+			step += 1
+
 if __name__ == '__main__':
 	#get_rotation_as_vectors_test()
 	#mutual_tile_test()
@@ -241,4 +347,5 @@ if __name__ == '__main__':
 	#gConv_test()
 	#gConv_polar_test()
 	#grad_atan2_test()
-	gConv_grad_test()
+	#gConv_grad_test()
+	grad_descent_test()

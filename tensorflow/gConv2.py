@@ -32,8 +32,9 @@ def gConv(X, filter_size, n_filters, name=''):
     Vq, Xq = mutual_tile(Vq, Xq)    # Do we need a sanity check on this?# [m,c,bh'w',f]
     dot, ext = dot_ext_transform(Xq,Vq)                                 # [d,bh'w',f] [d,bh'w',f]
     angle = get_angle(dot[0,:,:], ext[0,:,:])                           # [bh'w',f]
+    angle = tf.zeros_like(angle)
     # Get response
-    response = get_response(angle, k, dot, ext, n_harmonics=1)
+    response = get_response(angle, k, dot, ext, n_harmonics=4)
     # Reshape to image-like shape
     angle = fp_to_image(angle, Xqsh)                                    # [b,h',w',f]
     response = fp_to_image(response, Xqsh)                              # [b,h',w',f]
@@ -83,6 +84,22 @@ def channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID"):
     Zsh = tf.shape(Z)
     Z = tf.reshape(Z, tf.pack([Xsh[0],Xsh[3],Zsh[1],Zsh[2],Zsh[3]])) # [b,c,h',w',m]
     return tf.transpose(Z, perm=[4,1,0,2,3])                    # [m,c,b,h',w']
+
+def channelwise_conv2d_(X, Q, strides=(1,1,1,1), padding="VALID"):
+    """Convolve X with Q on each channel independently. Using depthwise conv
+    
+    X: input tensor of shape [b,h,w,c]
+    Q: orthogonal tensor of shape [hw,hw]. Note h = w, m = hw
+    
+    returns: tensor of shape [m,c,b,h',w'].
+    """
+    Xsh = tf.shape(X)
+    Xsh_ = X.get_shape().as_list()
+    Q_ = tf.tile(Q, [1,1,Xsh_[3],1])                             # [k,k,c,m]
+    Z = tf.nn.depthwise_conv2d(X, Q_, strides=strides, padding=padding) # [b,h',w',c*k*k]
+    Zsh = tf.shape(Z)
+    Z_ = tf.reshape(Z, tf.pack([Xsh[0],Zsh[1],Zsh[2],Xsh[3],Zsh[3]/Xsh_[3]])) # [b,h',w',c,m]
+    return tf.transpose(Z_, perm=[4,3,0,1,2])                    # [m,c,b,h',w']
 
 def to_filter_patch_pairs(X, Xsh):
     """Convert tensor [m,c,b,h,w] -> [m,c,bhw,1]"""
