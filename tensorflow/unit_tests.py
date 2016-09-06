@@ -205,26 +205,56 @@ def grad_atan2_test():
 
 def zConv_test():
 	"""Manually set the angle to zero, and see if conv2d is equivalent"""
-	x_shape = [1,10,10,3]
+	x_shape = [10,13,12,5]
 	filter_size = 3
 	n_filters = 10
 	f_shape = [filter_size,filter_size,x_shape[3],n_filters]
 	x = tf.placeholder('float', x_shape, name='x')
 	v = tf.placeholder('float', f_shape, name='f')
+	q = tf.placeholder('float', [3,3,1,9], name='q')
 	y = gConv(x, filter_size, n_filters, name='gc')
 	z = tf.nn.conv2d(x, v, strides=(1,1,1,1), padding='VALID')
 	
 	X = np.random.randn(x_shape[0],x_shape[1],x_shape[2],x_shape[3])
+
+	# Get Q variables for evaluationg
+	Qvar = []
+	for var in tf.all_variables():
+		if '_Q' in var.name:
+			Qvar.append(var)
+	Qop = Qvar[0].assign(q)
+
+	def orth(W):
+		U, __, V = np.linalg.svd(W)
+		return np.dot(U,V)
+
 	with tf.Session() as sess:
 		init_op = tf.initialize_all_variables()
 		sess.run(init_op)
+		
+		# Orthogonalize Q before forward propping
+		Q = sess.run(Qvar)
+		Q = orth(Q[0].reshape([9,9])).reshape([3,3,1,9])
+		sess.run(Qop, feed_dict={q : Q})
 		Phi, Y, V = sess.run(y, feed_dict={x : X})
 		
 	V = V.reshape([filter_size,filter_size,x_shape[3],n_filters])
+	print(V.shape)
+	print(f_shape)
 	with tf.Session() as sess:
 		Z = sess.run(z, feed_dict={x : X, v : V})
 		
 	print np.sum((Y-Z)**2)
+	
+	# Gradients
+	g_G = tf.gradients(y[1], x)
+	g_Z = tf.gradients(z, x)
+	mse = tf.reduce_sum(tf.pow(g_G[0]-g_Z[0],2.))
+	
+	with tf.Session() as sess:
+		sess.run(Qop, feed_dict={q : Q})
+		MSE = sess.run(mse, feed_dict={x : X, v : V})
+	print(MSE) 
 
 def gConv_grad_test():
 	N = 360
