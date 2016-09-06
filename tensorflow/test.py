@@ -97,6 +97,7 @@ def run():
 	
 	# Store layers weight & bias
 	weights = {
+		
 		# fully connected, 6*6*32 inputs, 1024 outputs
 		'wd1': tf.Variable(tf.sqrt(6.0/(1652.))*tf.random_normal([6*6*n_filters*2, 500]), name='W'),
 		# 1024 inputs, 10 outputs (class prediction)
