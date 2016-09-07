@@ -9,10 +9,13 @@ import scipy.linalg as scilin
 import tensorflow as tf
 
 
-def gConv(X, V, strides=(1,1,1,1), padding='VALID', name='gConv'):
+def gConv(X, V, b, strides=(1,1,1,1), padding='VALID', name='gConv'):
     """Run a Taco Cohen G-convolution module"""
     V_ = get_rotation_stack(V, name=name+'stack')
-    return tf.nn.conv2d(X, V_, strides=strides, padding=padding, name=name+'2d')
+    VX = tf.nn.conv2d(X, V_, strides=strides, padding=padding, name=name+'2d')
+    VXsh = tf.shape(VX)
+    VX = tf.reshape(VX, [VXsh[0],VXsh[1],VXsh[2],4,VXsh[3]/4])
+    return tf.reshape(tf.nn.bias_add(VX, b), [VXsh[0],VXsh[1],VXsh[2],VXsh[3]])
 
 def get_rotation_stack(V, name='rot_stack_concat'):
     """Return stack of 90 degree rotated V"""

@@ -13,10 +13,10 @@ from matplotlib import pyplot as plt
 
 def rotation_stack_test():
 	"""This test should return the filter at 4 orientations"""
-	v = tf.placeholder(tf.float32, [3,3,1,1], name='V')
+	v = tf.placeholder(tf.float32, [3,3,1,2], name='V')
 	v_ = get_rotation_stack(v)
 	
-	V = np.random.randn(3,3,1,1)
+	V = np.random.randn(3,3,1,2)
 	
 	with tf.Session() as sess:
 		V_ = sess.run(v_, feed_dict={v : V})
