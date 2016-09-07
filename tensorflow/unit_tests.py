@@ -252,6 +252,8 @@ def zConv_test():
 	mse = tf.reduce_sum(tf.pow(g_G[0]-g_Z[0],2.))
 	
 	with tf.Session() as sess:
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
 		sess.run(Qop, feed_dict={q : Q})
 		MSE = sess.run(mse, feed_dict={x : X, v : V})
 	print(MSE) 

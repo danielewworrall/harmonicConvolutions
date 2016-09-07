@@ -9,7 +9,27 @@ import scipy.linalg as scilin
 import tensorflow as tf
 
 
-def gConv(X, filter_size, n_filters, name=''):
+def gConv(X, V, strides=(1,1,1,1), padding='VALID', name='gConv'):
+    """Run a Taco Cohen G-convolution module"""
+    V_ = get_rotation_stack(V, name=name+'stack')
+    return tf.nn.conv2d(X, V_, strides=strides, padding=padding, name=name+'2d')
+
+def get_rotation_stack(V, name='rot_stack_concat'):
+    """Return stack of 90 degree rotated V"""
+    V0 = V
+    V1 = rotate_90_clockwise(V0)
+    V2 = rotate_90_clockwise(V1)
+    V3 = rotate_90_clockwise(V2)
+    return tf.concat(3, [V0,V1,V2,V3], name=name)
+
+def rotate_90_clockwise(V):
+    """Rotate a square filter clockwise by 90 degrees"""
+    Vsh = V.get_shape().as_list()
+    V = tf.reshape(V, [Vsh[0],Vsh[1],Vsh[2]*Vsh[3]])
+    V_ = tf.image.rot90(V, k=1)
+    return tf.reshape(V_, [Vsh[0],Vsh[1],Vsh[2],Vsh[3]])
+
+def gConv_(X, filter_size, n_filters, name=''):
     """Create a group convolutional module"""
     # Create variables
     k = filter_size
