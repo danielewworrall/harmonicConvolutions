@@ -9,13 +9,22 @@ import scipy.linalg as scilin
 import tensorflow as tf
 
 
-def gConv(X, V, b, strides=(1,1,1,1), padding='VALID', name='gConv'):
+def gConv(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='gConv'):
     """Run a Taco Cohen G-convolution module"""
     V_ = get_rotation_stack(V, name=name+'stack')
     VX = tf.nn.conv2d(X, V_, strides=strides, padding=padding, name=name+'2d')
-    VXsh = tf.shape(VX)
-    VX = tf.reshape(VX, [VXsh[0],VXsh[1],VXsh[2],4,VXsh[3]/4])
-    return tf.reshape(tf.nn.bias_add(VX, b), [VXsh[0],VXsh[1],VXsh[2],VXsh[3]])
+    if b is not None:
+        VXsh = tf.shape(VX)
+        VX = tf.reshape(VX, [VXsh[0],VXsh[1],VXsh[2],4,VXsh[3]/4])
+        VX = tf.reshape(tf.nn.bias_add(VX, b), [VXsh[0],VXsh[1],VXsh[2],VXsh[3]])
+    return VX
+
+def coset_pooling(X):
+    # Coset pooling is max-pooling over local subgroups
+    Xsh = tf.shape(X)
+    X = tf.reshape(X, [Xsh[0],Xsh[1]*Xsh[2],4,Xsh[3]/4])
+    X = tf.nn.max_pool(X, ksize=[1,1,4,1], strides=[1,1,4,1], padding='SAME')
+    return tf.reshape(X, [Xsh[0],Xsh[1],Xsh[2],Xsh[3]/4])
 
 def get_rotation_stack(V, name='rot_stack_concat'):
     """Return stack of 90 degree rotated V"""
@@ -31,6 +40,34 @@ def rotate_90_clockwise(V):
     V = tf.reshape(V, [Vsh[0],Vsh[1],Vsh[2]*Vsh[3]])
     V_ = tf.image.rot90(V, k=1)
     return tf.reshape(V_, [Vsh[0],Vsh[1],Vsh[2],Vsh[3]])
+
+def steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='steerConv'):
+    Q = get_basis(k=3,n=2)
+    Z = channelwise_conv2d(X, Q, strides=strides, padding=padding, name=name)
+    # 1d convolution to combine filters
+    Y = tf.nn.conv2d(Z, V, strides=(1,1,1,1), padding='VALID', name=name+'1d')
+    #Y, T = steer_pool(Z)
+    #if b is not None:
+    #    Y = tf.nn.bias_add(Y, b)
+    return Y
+
+def steer_pool(X):
+    """Return the max and argmax over steering rotation"""
+    R = tf.sqrt(tf.reduce_sum(tf.pow(X, 2.), reduction_indices=4))
+    T = atan2(X[:,:,:,:,1],X[:,:,:,:,0])
+    return R, T
+
+def get_basis(k=3,n=2):
+    """Return a tensor of steerable filter bases"""
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+    x, y = np.meshgrid(lin, lin)
+    G0 = np.reshape(gaussian_derivative(x, y, x), [k,k,1,1])
+    G1 = np.reshape(gaussian_derivative(x, y, y), [k,k,1,1])
+    Q = tf.Variable(np.concatenate([G0,G1], axis=3), trainable=False)
+    return tf.to_float(Q)
+    
+def gaussian_derivative(x,y,direction):
+    return -2*direction*np.exp(-(x**2 + y**2))
 
 def gConv_(X, filter_size, n_filters, name=''):
     """Create a group convolutional module"""
@@ -91,8 +128,20 @@ def get_rotation_as_vectors(phi,k,n_harmonics=4):
         Rcos.append(tf.ones_like(Rcos[-1]))
         Rsin.append(tf.zeros_like(Rsin[-1]))
     return tf.pack(Rcos), tf.pack(Rsin)
+
+def channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID", name='conv'):
+    """Convolve X with Q on each channel independently. Returns: tensor of
+    shape [b,h',w',c,m].
+    """
+    Qsh = Q.get_shape().as_list()
+    Xsh = X.get_shape().as_list()
+    Q = tf.tile(Q, [1,1,Xsh[3],1], name='Q_tile')
+    Y = tf.nn.depthwise_conv2d(X, Q, strides=strides, padding=padding, name=name+'chan_conv')
+    #Ysh = tf.shape(Y)
+    #return tf.reshape(Y, [Ysh[0],Ysh[1],Ysh[2],Xsh[3],Qsh[3]])
+    return Y    
     
-def channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID"):
+def channelwise_conv2d_(X, Q, strides=(1,1,1,1), padding="VALID"):
     """Convolve X with Q on each channel independently.
     
     X: input tensor of shape [b,h,w,c]
