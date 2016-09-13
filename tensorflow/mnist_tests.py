@@ -152,12 +152,10 @@ def gConv_steer(x, drop_prob, n_filters, n_classes):
 	x = tf.reshape(x, shape=[-1, 28, 28, 1])
 	
 	# Convolution Layer
-	#x = conv2d(x, weights['w1'], biases['b1'], name='gc1')
 	sc1 = steer_conv(x, weights['w1'], biases['b1'])
 	mp1 = tf.nn.relu(maxpool2d(sc1, k=2))
 	
 	# Convolution Layer
-	#mp1 = conv2d(mp1, weights['w2'], biases['b2'], name='gc2')
 	sc2 = steer_conv(mp1, weights['w2'], biases['b2'])
 	mp2 = tf.nn.relu(maxpool2d(sc2, k=2))
 
@@ -166,6 +164,43 @@ def gConv_steer(x, drop_prob, n_filters, n_classes):
 	fc3 = tf.nn.bias_add(tf.matmul(fc3, weights['w3']), biases['b3'])
 	fc3 = tf.nn.relu(fc3)
 	# Apply Dropout
+	fc3 = tf.nn.dropout(fc3, drop_prob)
+	
+	# Output, class prediction
+	out = tf.nn.bias_add(tf.matmul(fc3, weights['out']), biases['out'])
+	return out
+
+def gConv_equi_steer(x, drop_prob, n_filters, n_classes):
+	# Store layers weight & bias
+	weights = {
+		'w1' : get_weights([1,1,2,n_filters], name='W1'),
+		'w2' : get_weights([1,1,2*n_filters,n_filters], name='W2'),
+		'w3' : get_weights([n_filters*6*6,500], name='W3'),
+		'out': get_weights([500, n_classes], name='W4')
+	}
+	
+	biases = {
+		'b1': tf.Variable(tf.constant(1e-2, shape=[n_filters])),
+		'b2': tf.Variable(tf.constant(1e-2, shape=[n_filters])),
+		'b3': tf.Variable(tf.constant(1e-2, shape=[500])),
+		'out': tf.Variable(tf.constant(1e-2, shape=[n_classes]))
+	}
+	
+	# Reshape input picture
+	x = tf.reshape(x, shape=[-1, 28, 28, 1])
+	
+	# Convolution Layer
+	__, sc1 = equi_steer_conv(x, weights['w1'], biases['b1'])
+	mp1 = tf.nn.relu(maxpool2d(sc1, k=2))
+
+	# Convolution Layer
+	sc2, __ = equi_steer_conv(mp1, weights['w2'], biases['b2'])
+	mp2 = tf.nn.relu(maxpool2d(sc2, k=2))
+
+	# Fully connected layer
+	fc3 = tf.reshape(mp2, [-1, weights['w3'].get_shape().as_list()[0]])
+	fc3 = tf.nn.bias_add(tf.matmul(fc3, weights['w3']), biases['b3'])
+	fc3 = tf.nn.relu(fc3)
 	fc3 = tf.nn.dropout(fc3, drop_prob)
 	
 	# Output, class prediction
@@ -210,7 +245,7 @@ def run():
 	n_epochs = 500
 	display_step = dataset_size / batch_size
 	save_step = 100
-	model = 'steer'
+	model = 'equi_steer'
 	test_rot = False
 	
 	# Network Parameters
@@ -234,14 +269,20 @@ def run():
 		pred = gConv_taco(x, keep_prob, n_filters, n_classes)
 	elif model == 'steer':
 		pred = gConv_steer(x, keep_prob, n_filters, n_classes)
+	elif model == 'equi_steer':
+		pred = gConv_equi_steer(x, keep_prob, n_filters, n_classes)
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
-	
+
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
 	#optimizer = tf.train.MomentumOptimizer(learning_rate=lr, momentum=0.9).minimize(cost)
 	optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+	#opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
+	#gvs = opt.compute_gradients(cost)
+	#optimizer = opt.apply_gradients(gvs)
+	#g = tf.gradients(pred, x)
 	
 	# Evaluate model
 	correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
@@ -279,6 +320,7 @@ def run():
 						X = random_rotation(X)
 					feed_dict={x : X, y : Y, keep_prob: 1.}
 					vacc += sess.run(accuracy, feed_dict=feed_dict)
+					#print sess.run(g, feed_dict=feed_dict)[0].shape
 					
 				print "[" + str(step*batch_size/dataset_size) + \
 					"], Minibatch Loss: " + \
@@ -311,23 +353,128 @@ def forward():
 	
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [None,28,28,1])
-	y = steer_conv(x, 0)
+	v0 = tf.placeholder(tf.float32, [1,1,2*1,1])
+	v1 = tf.placeholder(tf.float32, [1,1,2*1,1])
+	y0, __ = equi_steer_conv(x, v0)
+	y1, __ = equi_steer_conv(y0, v1)
 
 	# Initializing the variables
 	init = tf.initialize_all_variables()
 	
-	X = mnist.train.next_batch(100)[0][np.random.randint(100),:]
+	X = mnist.train.next_batch(100)[0][1,:]
 	X = np.reshape(X, [1,28,28,1])
+	X_ = np.fliplr(X).T
+	X = np.stack((X, X_))
+	X = X.reshape([2,28,28,1])
+	V0 = np.random.randn(1,1,2*1,1).astype(np.float32)
+	V1 = np.random.randn(1,1,2*1,1).astype(np.float32)
+	
 	# Launch the graph
 	with tf.Session() as sess:
 		sess.run(init)
-		Y = sess.run(y, feed_dict={x : X})
+		Y = sess.run(y1, feed_dict={x : X, v0 : V0, v1 : V1})
 	
-	fig = plt.figure(1)
-	plt.imshow(np.squeeze(Y), cmap='gray', interpolation='nearest')
+	Y0 = np.squeeze(Y[0])
+	Y1 = np.fliplr(np.squeeze(Y[1])).T
+	print("(Y0-Y1)**2: %f" % (np.sum((Y0-Y1)**2),))
+	
+	fig1 = plt.figure(1)
+	plt.imshow(Y0, cmap='gray', interpolation='nearest')
+	fig2 = plt.figure(2)
+	plt.imshow(Y1, cmap='gray', interpolation='nearest')
 	plt.show()
 
+def small_patch_test():
+	"""Test the steer_conv on small rotated patches"""
+	N = 50
+	X = np.random.randn(9)	#arange(9)
+	Q = get_Q()
+	X = gen_data(X, N, Q)
+	X = np.reshape(X, [N,3,3,1])
+	
+	V = np.ones([1,1,2,1])
+	V[:,:,1,:] *= 20
+	V = V/np.sqrt(np.sum(V**2))
+	
+	x = tf.placeholder('float', [None,3,3,1], name='x')
+	v = tf.placeholder('float', [1,1,2,1], name='v')
+	r, a = equi_steer_conv(x, v)
+	print V
+	with tf.Session() as sess:
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
+		R, A = sess.run([r,a], feed_dict={x : X, v : V})
+	
+	fig = plt.figure(1)
+	theta = np.linspace(0, 2*np.pi, N)
+	plt.plot(theta, np.squeeze(R), 'b')
+	plt.plot(theta, np.squeeze(A), 'r')
+	plt.show()
+	
+
+def gen_data(X, N, Q):
+	# Get rotation
+	theta = np.linspace(0, 2*np.pi, N)
+	Y = []
+	for t in theta:
+		Y.append(reproject(Q,X,t))
+	Y = np.vstack(Y)
+	return Y
+
+def get_Q(k=3,n=2):
+	"""Return a tensor of steerable filter bases"""
+	lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+	x, y = np.meshgrid(lin, lin)
+	gdx = gaussian_derivative(x, y, x)
+	gdy = gaussian_derivative(x, y, y)
+	G0 = np.reshape(gdx/np.sqrt(np.sum(gdx**2)), [k*k])
+	G1 = np.reshape(gdy/np.sqrt(np.sum(gdx**2)), [k*k])
+	return np.vstack([G0,G1])
+
+def reproject(Q, X, angle):
+	"""Reproject X through Q rotated by some amount"""
+	# Represent in Q-space
+	Y = np.dot(Q,X)
+	# Rotate
+	R = np.asarray([[np.cos(angle), np.sin(angle)],
+					[-np.sin(angle), np.cos(angle)]])
+	return np.dot(Q.T, np.dot(R,Y))
+	
+	
 
 if __name__ == '__main__':
-	run()
-	#forward()
+	#run()
+	forward()
+	#small_patch_test()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

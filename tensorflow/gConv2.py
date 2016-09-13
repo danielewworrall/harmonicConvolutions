@@ -41,15 +41,62 @@ def rotate_90_clockwise(V):
     V_ = tf.image.rot90(V, k=1)
     return tf.reshape(V_, [Vsh[0],Vsh[1],Vsh[2],Vsh[3]])
 
-def steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='steerConv'):
-    Q = get_basis(k=3,n=2)
+def steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
+               name='steerConv'):
+    Q = get_basis(k=k,n=n)
     Z = channelwise_conv2d(X, Q, strides=strides, padding=padding, name=name)
     # 1d convolution to combine filters
     Y = tf.nn.conv2d(Z, V, strides=(1,1,1,1), padding='VALID', name=name+'1d')
-    #Y, T = steer_pool(Z)
-    #if b is not None:
-    #    Y = tf.nn.bias_add(Y, b)
+    if b is not None:
+        Y = tf.nn.bias_add(Y, b)
     return Y
+
+def equi_steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
+                    name='equisteerConv'):
+    """Steerable convolution returning max and argmax"""
+    Xsh = tf.shape(X)
+    Q = get_basis(k=k,n=n)
+    
+    Z = channelwise_conv2d(X, Q, strides=strides, padding=padding, name=name)
+    V_ = dot_blade_filter(V) 
+    Y = tf.nn.conv2d(Z, V_, strides=(1,1,1,1), padding='VALID', name=name+'1d')
+    Y = to_dot_blade(Y)
+    
+    R = get_modulus(Y)
+    A = get_arg(Y)
+    if b is not None:
+        R = tf.nn.bias_add(R, b)
+    return R, A
+
+def get_arg(Y):
+    """Get the argument of the steerable convolution"""
+    return atan2(Y[:,:,:,1,:],Y[:,:,:,0,:])
+
+def get_modulus(Y):
+    """Get the per-pixel modulus of a steerable convolution"""
+    return tf.sqrt(tf.reduce_sum(tf.pow(Y,2.), reduction_indices=3))
+
+def to_dot_blade(Y):
+    """Convert tensor to dot-blade form for modulus/argument extraction"""
+    Ysh = Y.get_shape().as_list()
+    return tf.reshape(Y, tf.pack([-1,Ysh[1],Ysh[2],2,Ysh[3]/2]))
+
+def dot_blade_filter(V):
+    """Convert the [1,1,2i,o] filter to a dot-blade format size [1,1,2i,2o]"""
+    V_ = tf.squeeze(V, squeeze_dims=[0,1])
+    Vsh = V_.get_shape()
+    V_ = tf.reshape(tf.transpose(V_), tf.pack([(Vsh[0]*Vsh[1])/2,2]))
+    S = to_constant_variable(np.asarray([[0.,1.],[-1.,0.]]))
+    V_blade = tf.matmul(S,tf.transpose(V_))
+    V_blade = tf.reshape(V_blade, tf.pack([1,1,Vsh[0],Vsh[1]]))
+    #return interleave(V, V_blade)
+    return tf.concat(3, [V, V_blade])
+
+def interleave(A,B):
+    """Interleave two 4D tensors along final axis"""
+    Ash = A.get_shape().as_list()
+    C = tf.pack([A,B], axis=-1)
+    return tf.reshape(C, tf.pack([Ash[0],Ash[1],Ash[2],Ash[3]*2]))
 
 def steer_pool(X):
     """Return the max and argmax over steering rotation"""
@@ -61,9 +108,14 @@ def get_basis(k=3,n=2):
     """Return a tensor of steerable filter bases"""
     lin = np.linspace((1.-k)/2., (k-1.)/2., k)
     x, y = np.meshgrid(lin, lin)
-    G0 = np.reshape(gaussian_derivative(x, y, x), [k,k,1,1])
-    G1 = np.reshape(gaussian_derivative(x, y, y), [k,k,1,1])
-    Q = tf.Variable(np.concatenate([G0,G1], axis=3), trainable=False)
+    gdx = gaussian_derivative(x, y, x)
+    gdy = gaussian_derivative(x, y, y)
+    G0 = np.reshape(gdx/np.sqrt(np.sum(gdx**2)), [k,k,1,1])
+    G1 = np.reshape(gdy/np.sqrt(np.sum(gdy**2)), [k,k,1,1])
+    return to_constant_variable(np.concatenate([G0,G1], axis=3))
+
+def to_constant_variable(Q):
+    Q = tf.Variable(Q, trainable=False)
     return tf.to_float(Q)
     
 def gaussian_derivative(x,y,direction):
@@ -131,14 +183,14 @@ def get_rotation_as_vectors(phi,k,n_harmonics=4):
 
 def channelwise_conv2d(X, Q, strides=(1,1,1,1), padding="VALID", name='conv'):
     """Convolve X with Q on each channel independently. Returns: tensor of
-    shape [b,h',w',c,m].
+    shape [b,h',w',m*c].
     """
     Qsh = Q.get_shape().as_list()
     Xsh = X.get_shape().as_list()
-    Q = tf.tile(Q, [1,1,Xsh[3],1], name='Q_tile')
-    Y = tf.nn.depthwise_conv2d(X, Q, strides=strides, padding=padding, name=name+'chan_conv')
-    #Ysh = tf.shape(Y)
-    #return tf.reshape(Y, [Ysh[0],Ysh[1],Ysh[2],Xsh[3],Qsh[3]])
+    tile_shape = tf.pack([1,1,Xsh[3],1])
+    Q = tf.tile(Q, tile_shape, name='Q_tile')
+    Y = tf.nn.depthwise_conv2d(X, Q, strides=strides, padding=padding,
+                               name=name+'chan_conv')
     return Y    
     
 def channelwise_conv2d_(X, Q, strides=(1,1,1,1), padding="VALID"):
