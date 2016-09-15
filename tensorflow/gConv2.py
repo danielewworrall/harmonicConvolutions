@@ -68,6 +68,23 @@ def equi_steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
         R = tf.nn.bias_add(R, b)
     return R, A
 
+def complex_conv(X, W, b=None, strides=(1,1,1,1), padding='VALID', name=name):
+    """
+    Convolution using complex filters using a cartesian representation
+    by taking a returning polar representations
+    """
+    Xr, Xt = X
+    Wr, Wt = W
+    Xx, Yx = polar_to_cart(Xr, Xt)
+    Wx, Wx = polar_to_cart(Wr, Wt)
+    WxXx = tf.nn.conv2d(Xx, Wx, strides=strides, padding=padding, name='WxXx')
+    WyXy = tf.nn.conv2d(Xy, Wy, strides=strides, padding=padding, name='WyXy')
+    WyXx = tf.nn.conv2d(Xx, Wy, strides=strides, padding=padding, name='WyXx')
+    WxXy = tf.nn.conv2d(Xy, Wx, strides=strides, padding=padding, name='WxXy')
+    Rx = WxXx + WyXy
+    Ry = WyXx - WxXy
+    return cart_to_polar(Rx, Ry)
+
 def get_arg(Y):
     """Get the argument of the steerable convolution"""
     return atan2(Y[:,:,:,1,:],Y[:,:,:,0,:])
@@ -237,20 +254,17 @@ def fp_to_image(X, Xsh):
     """Convert from angular filter-patch pairings to standard image format"""
     return tf.reshape(X, tf.pack([Xsh[2],Xsh[3],Xsh[4],-1]))
 
-def cart_to_polar(X):
+def cart_to_polar(X, Y):
     """Input shape [m,:,:,:,:], output (r, theta). Assume d=9"""
-    t = []
-    r = []
-    for i in xrange(4):
-        t_ = atan2(X[2*i+1,:,:,:,:], X[2*i,:,:,:,:])
-        r_ = tf.sqrt(tf.pow(X[2*i,:,:,:,:],2) + tf.pow(X[2*i+1,:,:,:,:],2))
-        t.append(t_)
-        r.append(r_)
-    t.append(tf.zeros_like(t[3]))
-    r.append(X[8,:,:,:,:])
-    t = tf.pack(t)
-    r = tf.pack(r)
-    return (r,t)
+    R = tf.sqrt(tf.pow(X,2.) + tf.pow(Y,2.))
+    T = atan2(Y, X)
+    return (R, T)
+
+def polar_to_cart(R,T):
+    """Polar to cartesian coordinates"""
+    X = R*tf.cos(T)
+    Y = R*tf.sin(T)
+    return (X, Y)
 
 def atan2(y, x, reg=1e-6):
     """Compute the classic atan2 function between y and x"""
