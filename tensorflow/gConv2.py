@@ -73,17 +73,13 @@ def complex_conv(X, W, b=None, strides=(1,1,1,1), padding='VALID', name=name):
     Convolution using complex filters using a cartesian representation
     by taking a returning polar representations
     """
-    Xr, Xt = X
-    Wr, Wt = W
-    Xx, Yx = polar_to_cart(Xr, Xt)
-    Wx, Wx = polar_to_cart(Wr, Wt)
-    WxXx = tf.nn.conv2d(Xx, Wx, strides=strides, padding=padding, name='WxXx')
-    WyXy = tf.nn.conv2d(Xy, Wy, strides=strides, padding=padding, name='WyXy')
-    WyXx = tf.nn.conv2d(Xx, Wy, strides=strides, padding=padding, name='WyXx')
-    WxXy = tf.nn.conv2d(Xy, Wx, strides=strides, padding=padding, name='WxXy')
-    Rx = WxXx + WyXy
-    Ry = WyXx - WxXy
-    return cart_to_polar(Rx, Ry)
+    A, B = X
+    U, V = W
+    AU = tf.nn.conv2d(A, U, strides=strides, padding=padding, name='AU')
+    AV = tf.nn.conv2d(A, V, strides=strides, padding=padding, name='AV')
+    BU = tf.nn.conv2d(B, U, strides=strides, padding=padding, name='BU')
+    BV = tf.nn.conv2d(B, V, strides=strides, padding=padding, name='BV')
+    return (AU + BV, VA - VB)
 
 def get_arg(Y):
     """Get the argument of the steerable convolution"""
