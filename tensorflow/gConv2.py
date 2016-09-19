@@ -61,12 +61,13 @@ def equi_steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
     V_ = dot_blade_filter(V) 
     Y = tf.nn.conv2d(Z, V_, strides=(1,1,1,1), padding='VALID', name=name+'1d')
     Y = to_dot_blade(Y)
-    
-    R = get_modulus(Y)
-    A = get_arg(Y)
-    if b is not None:
-        R = tf.nn.bias_add(R, b)
-    return R, A
+    print Y.get_shape()
+    #R = get_modulus(Y)
+    #A = get_arg(Y)
+    #if b is not None:
+    #    R = tf.nn.bias_add(R, b)
+    #return R, A
+    return Y
 
 def equi_steer_conv_(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
                     name='equisteerConv'):

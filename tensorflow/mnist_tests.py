@@ -458,19 +458,27 @@ def real_steer_comparison():
 	with tf.Session() as sess:
 		sess.run(init)
 		Y, Z = sess.run([y, z], feed_dict={x : X, v0 : V0})
-	
-	Y, Ay = Y
+
+	#X_0, Y_0 = Y
+	#print X_0.shape, Y_0.shape
+	#Y, Ay = Y
+	print Y.shape
 	Z, Az = Z
 	
+	#print Y.shape, Ay.shape
 	Yy = np.squeeze(Y[0])
 	Ay = np.squeeze(Ay[0])
 	Yz = np.squeeze(Z[0])
 	Az = np.squeeze(Az[0])
 	X_0, Y_0 = np.cos(Ay), np.sin(Ay)
+	#X_0, Y_0 = np.squeeze(X_0[0,...]), np.squeeze(Y_0[0,...])
+	#R_0 = np.sqrt(X_0**2. + Y_0**2.)
+	#print R_0
+	
 	X_1, Y_1 = np.cos(Az), np.sin(Az)
 	
-	print('Magnitude error: %f' % (np.sum((Y-Z)**2),))
-	print('Angular error: %f' % (np.sum((Ay-Az)**2),))
+	#print('Magnitude error: %f' % (np.sum((Y-Z)**2),))
+	#print('Angular error: %f' % (np.sum((Ay-Az)**2),))
 	
 	plt.figure(1)
 	plt.imshow(Yy, cmap='jet', interpolation='nearest')
@@ -588,8 +596,8 @@ if __name__ == '__main__':
 	#run()
 	#forward()
 	#angular()
-	#real_steer_comparison()
-	complex_steer_test()
+	real_steer_comparison()
+	#complex_steer_test()
 	#small_patch_test()
 
 
