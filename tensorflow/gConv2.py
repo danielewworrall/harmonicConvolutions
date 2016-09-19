@@ -68,10 +68,45 @@ def equi_steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
         R = tf.nn.bias_add(R, b)
     return R, A
 
-def complex_conv(X, W, b=None, strides=(1,1,1,1), padding='VALID', name=name):
+def equi_steer_conv_(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
+                    name='equisteerConv'):
+    """Steerable convolution returning max and argmax"""
+    Q = get_basis(k=k,n=n)
+    
+    Qsh = Q.get_shape().as_list()
+    Xsh = X.get_shape().as_list()
+    tile_shape = tf.pack([1,1,Xsh[3],1])
+    Q = tf.tile(Q, tile_shape, name='Q_tile')
+    V_ = dot_blade_filter(V)
+    
+    Y = tf.nn.separable_conv2d(X, Q, V_, strides=strides, padding='VALID',
+                               name='sep_conv')
+    Y = to_dot_blade(Y)
+    
+    R = get_modulus(Y)
+    A = get_arg(Y)
+    if b is not None:
+        R = tf.nn.bias_add(R, b)
+    return R, A
+
+def complex_steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3,
+                       n=2, name='complexsteerconv'):
+    """Complex steerable filter returning the minimum phase and modulus"""
+    Q = get_complex_basis(k=k, n=n, wrap=1.)
+    Z_r, Z_i = X
+    Z = tf.concat(3, [Z_r, Z_i])
+    
+    # Real convolution
+    Y_real = tf.nn.separable_conv2d(X, Q, V_, strides=strides, padding='VALID',
+                                    name='sep_conv_real')
+    
+    return Z
+
+def complex_conv(X, W, b=None, strides=(1,1,1,1), padding='VALID',
+                 name='complexconv'):
     """
-    Convolution using complex filters using a cartesian representation
-    by taking a returning polar representations
+    Convolution using complex filters using a cartesian representation. Feed in
+    an input X = A+iB and filters W=U+iV and returns AU+BV + i(AV-BV)
     """
     A, B = X
     U, V = W
@@ -80,6 +115,21 @@ def complex_conv(X, W, b=None, strides=(1,1,1,1), padding='VALID', name=name):
     BU = tf.nn.conv2d(B, U, strides=strides, padding=padding, name='BU')
     BV = tf.nn.conv2d(B, V, strides=strides, padding=padding, name='BV')
     return (AU + BV, VA - VB)
+
+def complex_channelwise_conv(X, W, b=None, strides=(1,1,1,1), padding='VALID',
+                             name='complexchannelwiseconv'):
+    """
+    Channelwise convolution using complex filters using a cartesian
+    representation. Input tensors X = A+iB and filters W=U+iV. Returns: tensors
+    AU+BV + i(AV-BV) of shape [b,h',w',m*c].
+    """
+    A, B = X
+    U, V = W
+    AU = channelwise_conv2d(A, U, strides=strides, padding=padding, name='AU')
+    AV = channelwise_conv2d(A, V, strides=strides, padding=padding, name='AV')
+    BU = channelwise_conv2d(B, U, strides=strides, padding=padding, name='BU')
+    BV = channelwise_conv2d(B, V, strides=strides, padding=padding, name='BV')
+    return (AU + BV, AV - BV)
 
 def get_arg(Y):
     """Get the argument of the steerable convolution"""
@@ -102,7 +152,6 @@ def dot_blade_filter(V):
     S = to_constant_variable(np.asarray([[0.,1.],[-1.,0.]]))
     V_blade = tf.matmul(S,tf.transpose(V_))
     V_blade = tf.reshape(V_blade, tf.pack([1,1,Vsh[0],Vsh[1]]))
-    #return interleave(V, V_blade)
     return tf.concat(3, [V, V_blade])
 
 def interleave(A,B):
@@ -117,7 +166,7 @@ def steer_pool(X):
     T = atan2(X[:,:,:,:,1],X[:,:,:,:,0])
     return R, T
 
-def get_basis(k=3,n=2):
+def get_basis(k=3, n=2):
     """Return a tensor of steerable filter bases"""
     lin = np.linspace((1.-k)/2., (k-1.)/2., k)
     x, y = np.meshgrid(lin, lin)
@@ -127,10 +176,28 @@ def get_basis(k=3,n=2):
     G1 = np.reshape(gdy/np.sqrt(np.sum(gdy**2)), [k,k,1,1])
     return to_constant_variable(np.concatenate([G0,G1], axis=3))
 
+def get_complex_basis(k=3, n=2, wrap=1.):
+    """Return a tensor of complex steerable filter bases (X, Y)"""
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)/(k/5.)
+    X, Y = np.meshgrid(lin, lin)
+    Y = np.flipud(Y)
+    X = tf.to_float(X)
+    Y = tf.to_float(Y)
+    R = tf.sqrt(X**2 + Y**2)
+    modulus = R*tf.exp(-R**2)
+    phase = wrap*atan2(Y, X) 
+    Rcos = tf.reshape(modulus*tf.cos(phase), [k,k,1,1])
+    Rsin = tf.reshape(modulus*tf.sin(phase), [k,k,1,1])
+    X0, Y0 = Rcos, Rsin
+    X1, Y1 = -Rsin, Rcos
+    X = tf.concat(3, [X0,X1])
+    Y = tf.concat(3, [Y0,Y1])
+    return (X,Y)
+
 def to_constant_variable(Q):
     Q = tf.Variable(Q, trainable=False)
     return tf.to_float(Q)
-    
+
 def gaussian_derivative(x,y,direction):
     return -2*direction*np.exp(-(x**2 + y**2))
 

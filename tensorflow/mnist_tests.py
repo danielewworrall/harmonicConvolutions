@@ -190,11 +190,11 @@ def gConv_equi_steer(x, drop_prob, n_filters, n_classes):
 	x = tf.reshape(x, shape=[-1, 28, 28, 1])
 	
 	# Convolution Layer
-	__, sc1 = equi_steer_conv(x, weights['w1'], biases['b1'])
+	__, sc1 = equi_steer_conv_(x, weights['w1'], biases['b1'])
 	mp1 = tf.nn.relu(maxpool2d(sc1, k=2))
 
 	# Convolution Layer
-	sc2, __ = equi_steer_conv(mp1, weights['w2'], biases['b2'])
+	sc2, __ = equi_steer_conv_(mp1, weights['w2'], biases['b2'])
 	mp2 = tf.nn.relu(maxpool2d(sc2, k=2))
 
 	# Fully connected layer
@@ -345,6 +345,7 @@ def run():
 
 
 def forward():
+	"""Experiment to demonstrate the equivariance of the convolution"""
 	mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 	
 	# Network Parameters
@@ -355,8 +356,8 @@ def forward():
 	x = tf.placeholder(tf.float32, [None,28,28,1])
 	v0 = tf.placeholder(tf.float32, [1,1,2*1,1])
 	v1 = tf.placeholder(tf.float32, [1,1,2*1,1])
-	y0, __ = equi_steer_conv(x, v0)
-	y1, __ = equi_steer_conv(y0, v1)
+	y0, __ = equi_steer_conv_(x, v0)
+	y1, __ = equi_steer_conv_(y0, v1)
 
 	# Initializing the variables
 	init = tf.initialize_all_variables()
@@ -373,7 +374,7 @@ def forward():
 	with tf.Session() as sess:
 		sess.run(init)
 		Y = sess.run(y1, feed_dict={x : X, v0 : V0, v1 : V1})
-	
+	print Y.shape
 	Y0 = np.squeeze(Y[0])
 	Y1 = np.fliplr(np.squeeze(Y[1])).T
 	print("(Y0-Y1)**2: %f" % (np.sum((Y0-Y1)**2),))
@@ -382,6 +383,147 @@ def forward():
 	plt.imshow(Y0, cmap='gray', interpolation='nearest')
 	fig2 = plt.figure(2)
 	plt.imshow(Y1, cmap='gray', interpolation='nearest')
+	plt.show()
+
+def angular():
+	"""Experiment to demonstrate the angular selectivity of the convolution"""
+	mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
+	
+	# Network Parameters
+	n_input = 784 # MNIST data input (img shape: 28*28)
+	n_filters = 10
+	
+	# tf Graph input
+	x = tf.placeholder(tf.float32, [None,28,28,1])
+	v0 = tf.placeholder(tf.float32, [1,1,2*1,1])
+	y = equi_steer_conv_(x, v0)
+
+	# Initializing the variables
+	init = tf.initialize_all_variables()
+	
+	X = mnist.train.next_batch(100)[0][1,:]
+	X = np.reshape(X, [1,28,28,1])
+	X_ = np.fliplr(X).T
+	X = np.stack((X, X_))
+	X = X.reshape([2,28,28,1])
+	V0 = np.random.randn(1,1,2*1,1).astype(np.float32)
+	#V0 = np.ones((1,1,2,1)).astype(np.float32)
+	
+	# Launch the graph
+	with tf.Session() as sess:
+		sess.run(init)
+		Y, A = sess.run(y, feed_dict={x : X, v0 : V0})
+	
+	Y0 = np.squeeze(Y[0])
+	A0 = np.squeeze(A[0])
+	Y1 = np.squeeze(Y[1])
+	A1 = np.squeeze(A[1])
+	X_0, Y_0 = np.cos(A0), np.sin(A0)
+	X_1, Y_1 = np.cos(A1), np.sin(A1)
+	
+	plt.figure(1)
+	plt.imshow(Y0, cmap='jet', interpolation='nearest')
+	plt.quiver(X_0, Y_0)
+	plt.figure(2)
+	plt.imshow(Y1, cmap='jet', interpolation='nearest')
+	plt.quiver(X_1, Y_1)
+	plt.show()
+
+def real_steer_comparison():
+	"""Experiment to demonstrate the angular selectivity of the convolution"""
+	mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
+	
+	# Network Parameters
+	n_input = 784 # MNIST data input (img shape: 28*28)
+	n_filters = 10
+	
+	# tf Graph input
+	x = tf.placeholder(tf.float32, [None,28,28,1])
+	v0 = tf.placeholder(tf.float32, [1,1,2*1,1])
+	y = equi_steer_conv_(x, v0)
+	z = equi_steer_conv(x, v0)
+
+	# Initializing the variables
+	init = tf.initialize_all_variables()
+	
+	X = mnist.train.next_batch(100)[0][1,:]
+	X = np.reshape(X, [1,28,28,1])
+	X_ = np.fliplr(X).T
+	X = np.stack((X, X_))
+	X = X.reshape([2,28,28,1])
+	V0 = np.random.randn(1,1,2*1,1).astype(np.float32)
+	#V0 = np.ones((1,1,2,1)).astype(np.float32)
+	
+	# Launch the graph
+	with tf.Session() as sess:
+		sess.run(init)
+		Y, Z = sess.run([y, z], feed_dict={x : X, v0 : V0})
+	
+	Y, Ay = Y
+	Z, Az = Z
+	
+	Yy = np.squeeze(Y[0])
+	Ay = np.squeeze(Ay[0])
+	Yz = np.squeeze(Z[0])
+	Az = np.squeeze(Az[0])
+	X_0, Y_0 = np.cos(Ay), np.sin(Ay)
+	X_1, Y_1 = np.cos(Az), np.sin(Az)
+	
+	print('Magnitude error: %f' % (np.sum((Y-Z)**2),))
+	print('Angular error: %f' % (np.sum((Ay-Az)**2),))
+	
+	plt.figure(1)
+	plt.imshow(Yy, cmap='jet', interpolation='nearest')
+	plt.quiver(X_0, Y_0)
+	plt.figure(2)
+	plt.imshow(Yz, cmap='jet', interpolation='nearest')
+	plt.quiver(X_1, Y_1)
+	plt.show()
+
+def complex_steer_test():
+	"""Test the complex convolutional filter"""
+	mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
+	
+	# Network Parameters
+	n_input = 784 
+	n_filters = 10
+	
+	# tf Graph input
+	x = tf.placeholder(tf.float32, [None,28,28,1])
+	v0 = tf.placeholder(tf.float32, [1,1,2*1,1])
+	v1_real = tf.placeholder(tf.float32, [1,1,2*1,1])
+	v1_imag = tf.placeholder(tf.float32, [1,1,2*1,1])
+	y = equi_steer_conv_(x, v0)
+	z = complex_steer_conv(y, (v1_real, v1_imag))
+
+	# Initializing the variables
+	init = tf.initialize_all_variables()
+	
+	X = mnist.train.next_batch(100)[0][1,:]
+	X = np.reshape(X, [1,28,28,1])
+	X_ = np.fliplr(X).T
+	X = np.stack((X, X_))
+	X = X.reshape([2,28,28,1])
+	V0 = np.random.randn(1,1,2*1,1).astype(np.float32)
+	V1_real = np.random.randn(1,1,2*1,1).astype(np.float32)
+	V1_imag = np.random.randn(1,1,2*1,1).astype(np.float32)
+	print V0, V1_real, V1_imag
+	
+	# Launch the graph
+	with tf.Session() as sess:
+		sess.run(init)
+		Z = sess.run(z, feed_dict={x : X, v0 : V0,
+								   v1_real : V1_real, v1_imag : V1_imag})
+	
+	Z, Az = Z
+	
+	Yz = np.squeeze(Z[0])
+	Az = np.squeeze(Az[0])
+	X_1, Y_1 = np.cos(Az), np.sin(Az)
+	
+	plt.figure(1)
+	plt.imshow(Yz, cmap='jet', interpolation='nearest')
+	plt.quiver(X_1, Y_1)
 	plt.show()
 
 def small_patch_test():
@@ -398,7 +540,7 @@ def small_patch_test():
 	
 	x = tf.placeholder('float', [None,3,3,1], name='x')
 	v = tf.placeholder('float', [1,1,2,1], name='v')
-	r, a = equi_steer_conv(x, v)
+	r, a = equi_steer_conv_(x, v)
 	print V
 	with tf.Session() as sess:
 		init_op = tf.initialize_all_variables()
@@ -444,7 +586,10 @@ def reproject(Q, X, angle):
 
 if __name__ == '__main__':
 	#run()
-	forward()
+	#forward()
+	#angular()
+	#real_steer_comparison()
+	complex_steer_test()
 	#small_patch_test()
 
 
