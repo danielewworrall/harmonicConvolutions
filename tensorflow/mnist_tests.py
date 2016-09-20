@@ -459,32 +459,16 @@ def real_steer_comparison():
 		sess.run(init)
 		Y, Z = sess.run([y, z], feed_dict={x : X, v0 : V0})
 
-	#X_0, Y_0 = Y
-	#print X_0.shape, Y_0.shape
-	#Y, Ay = Y
-	print Y.shape
-	Z, Az = Z
-	
-	#print Y.shape, Ay.shape
-	Yy = np.squeeze(Y[0])
-	Ay = np.squeeze(Ay[0])
-	Yz = np.squeeze(Z[0])
-	Az = np.squeeze(Az[0])
-	X_0, Y_0 = np.cos(Ay), np.sin(Ay)
-	#X_0, Y_0 = np.squeeze(X_0[0,...]), np.squeeze(Y_0[0,...])
-	#R_0 = np.sqrt(X_0**2. + Y_0**2.)
-	#print R_0
-	
-	X_1, Y_1 = np.cos(Az), np.sin(Az)
-	
-	#print('Magnitude error: %f' % (np.sum((Y-Z)**2),))
-	#print('Angular error: %f' % (np.sum((Ay-Az)**2),))
+	R_0 = np.sqrt(np.sum(Y[0,...]**2, axis=2))
+	X_0, Y_0 = np.squeeze(Y[0,:,:,0])/R_0, np.squeeze(Y[0,:,:,1])/R_0
+	R_1 = np.sqrt(np.sum(Z[0,...]**2, axis=2))
+	X_1, Y_1 = np.squeeze(Z[0,:,:,0])/R_1, np.squeeze(Z[0,:,:,1])/R_1
 	
 	plt.figure(1)
-	plt.imshow(Yy, cmap='jet', interpolation='nearest')
+	plt.imshow(R_0, cmap='jet', interpolation='nearest')
 	plt.quiver(X_0, Y_0)
 	plt.figure(2)
-	plt.imshow(Yz, cmap='jet', interpolation='nearest')
+	plt.imshow(R_1, cmap='jet', interpolation='nearest')
 	plt.quiver(X_1, Y_1)
 	plt.show()
 
@@ -498,11 +482,10 @@ def complex_steer_test():
 	
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [None,28,28,1])
-	v0 = tf.placeholder(tf.float32, [1,1,2*1,1])
-	v1_real = tf.placeholder(tf.float32, [1,1,2*1,1])
-	v1_imag = tf.placeholder(tf.float32, [1,1,2*1,1])
-	y = equi_steer_conv_(x, v0)
-	z = complex_steer_conv(y, (v1_real, v1_imag))
+	v0 = tf.placeholder(tf.float32, [1,1,2*1,3])
+	v1 = tf.placeholder(tf.float32, [1,1,2*3,1])
+	y = equi_steer_conv(x, v0)
+	z = complex_steer_conv(y, v1)
 
 	# Initializing the variables
 	init = tf.initialize_all_variables()
@@ -512,27 +495,30 @@ def complex_steer_test():
 	X_ = np.fliplr(X).T
 	X = np.stack((X, X_))
 	X = X.reshape([2,28,28,1])
-	V0 = np.random.randn(1,1,2*1,1).astype(np.float32)
-	V1_real = np.random.randn(1,1,2*1,1).astype(np.float32)
-	V1_imag = np.random.randn(1,1,2*1,1).astype(np.float32)
-	print V0, V1_real, V1_imag
+	V0 = np.random.randn(1,1,2*1,3).astype(np.float32)
+	V1 = np.random.randn(1,1,2*3,1).astype(np.float32)
 	
 	# Launch the graph
 	with tf.Session() as sess:
 		sess.run(init)
-		Z = sess.run(z, feed_dict={x : X, v0 : V0,
-								   v1_real : V1_real, v1_imag : V1_imag})
+		Z = sess.run(z, feed_dict={x : X, v0 : V0, v1 : V1})
+		
+	Zx, Zy = Z
 	
-	Z, Az = Z
-	
-	Yz = np.squeeze(Z[0])
-	Az = np.squeeze(Az[0])
-	X_1, Y_1 = np.cos(Az), np.sin(Az)
+	R = np.sqrt(Zx**2 + Zy**2)
+	Zx = np.squeeze(Zx/R)
+	Zy = np.squeeze(Zy/R)
+	R = np.squeeze(R)
 	
 	plt.figure(1)
-	plt.imshow(Yz, cmap='jet', interpolation='nearest')
-	plt.quiver(X_1, Y_1)
+	plt.imshow(R[0], cmap='jet', interpolation='nearest')
+	plt.quiver(Zx[0], Zy[0])
+	plt.figure(2)
+	plt.imshow(R[1], cmap='jet', interpolation='nearest')
+	plt.quiver(Zx[1], Zy[1])
 	plt.show()
+	plt.show()
+	
 
 def small_patch_test():
 	"""Test the steer_conv on small rotated patches"""
@@ -596,8 +582,8 @@ if __name__ == '__main__':
 	#run()
 	#forward()
 	#angular()
-	real_steer_comparison()
-	#complex_steer_test()
+	#real_steer_comparison()
+	complex_steer_test()
 	#small_patch_test()
 
 

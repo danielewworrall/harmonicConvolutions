@@ -51,25 +51,19 @@ def steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
         Y = tf.nn.bias_add(Y, b)
     return Y
 
-def equi_steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
+def equi_steer_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
                     name='equisteerConv'):
     """Steerable convolution returning max and argmax"""
     Xsh = tf.shape(X)
     Q = get_basis(k=k,n=n)
     
     Z = channelwise_conv2d(X, Q, strides=strides, padding=padding, name=name)
-    V_ = dot_blade_filter(V) 
-    Y = tf.nn.conv2d(Z, V_, strides=(1,1,1,1), padding='VALID', name=name+'1d')
-    Y = to_dot_blade(Y)
-    print Y.get_shape()
-    #R = get_modulus(Y)
-    #A = get_arg(Y)
-    #if b is not None:
-    #    R = tf.nn.bias_add(R, b)
-    #return R, A
-    return Y
+    V_dot, V_blade = dot_blade_filter(V) 
+    Y_dot = tf.nn.conv2d(Z, V_dot, strides=(1,1,1,1), padding='VALID', name=name+'1d')
+    Y_blade = tf.nn.conv2d(Z, V_blade, strides=(1,1,1,1), padding='VALID', name=name+'1d')
+    return Y_dot, Y_blade
 
-def equi_steer_conv_(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
+def equi_steer_conv_(X, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
                     name='equisteerConv'):
     """Steerable convolution returning max and argmax"""
     Q = get_basis(k=k,n=n)
@@ -78,33 +72,78 @@ def equi_steer_conv_(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
     Xsh = X.get_shape().as_list()
     tile_shape = tf.pack([1,1,Xsh[3],1])
     Q = tf.tile(Q, tile_shape, name='Q_tile')
-    V_ = dot_blade_filter(V)
+    V, V_ = dot_blade_filter(V)
     
     Y = tf.nn.separable_conv2d(X, Q, V_, strides=strides, padding='VALID',
                                name='sep_conv')
-    Y = to_dot_blade(Y)
-    
-    R = get_modulus(Y)
-    A = get_arg(Y)
-    if b is not None:
-        R = tf.nn.bias_add(R, b)
-    return R, A
+    return Y
 
-def complex_steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3,
-                       n=2, name='complexsteerconv'):
+def complex_steer_conv_(Z, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
+                       name='complexsteerconv'):
     """Complex steerable filter returning the minimum phase and modulus"""
-    Q = get_complex_basis(k=k, n=n, wrap=1.)
-    Z_r, Z_i = X
-    Z = tf.concat(3, [Z_r, Z_i])
-    
-    # Real convolution
-    Y_real = tf.nn.separable_conv2d(X, Q, V_, strides=strides, padding='VALID',
-                                    name='sep_conv_real')
-    
-    return Z
+    Zsh = Z.get_shape().as_list()
+    Qx, Qy = get_complex_basis(k=k, n=n, wrap=1.)                               # [k,k,1,2]*2
+    Q = complex_depthwise(Qx, Qy, Zsh[3]/2)                                     # [k,k,2c,4] 2:r[*c]i[*c] 3:cscs
+    # Depthwise convolution
+    Y_depth = tf.nn.depthwise_conv2d(Z, Q, strides=strides, padding=padding,
+                                     name='depthwise_conv')                     # [m,h,w,2c*4] 3:cscs[r[*c],i[*c]]
+    Ysh = Y_depth.get_shape()
+    Y_depth = tf.reshape(Y_depth, tf.pack([-1,Ysh[1],Ysh[2],Ysh[3]/4,2,2]))     # [m,h,w,2*c,2,2] 3:2c 4:xx,yy 5:cs
+    Y_depth = tf.reduce_sum(Y_depth, reduction_indices=4)
+    Y_depth = tf.reshape(Y_depth, tf.pack([-1,Ysh[1],Ysh[2],Ysh[3]/2]))
+    # Pointwise convolution
+    Y_point = tf.nn.conv2d(Y_depth, V, strides=strides, padding=padding)
+    print Y_point.get_shape()
+    return Y_point
 
-def complex_conv(X, W, b=None, strides=(1,1,1,1), padding='VALID',
-                 name='complexconv'):
+def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
+                       name='complexsteerconv'):
+    """Simpler complex steerable filter returning the min phase and modulus"""
+    Zsh = Z[0].get_shape().as_list()
+    tile_shape = tf.pack([1,1,Zsh[3],1])
+    Q = get_complex_basis(k=k, n=n, wrap=1.)
+    Q = (tf.tile(Q[0], tile_shape), tf.tile(Q[1], tile_shape))
+    # Filter channels
+    Y = complex_depthwise_conv(Z, Q, strides=strides, padding=padding, name='cd')
+    # Filter dot blade
+    R = complex_dot_blade(Y, V)
+    
+    return R
+
+def complex_dot_blade(Z, V, name='complexdotblade'):
+    Zx, Zy = Z
+    V_dot, V_blade = dot_blade_filter(V)
+    Dx = tf.nn.conv2d(Zx, V_dot, strides=(1,1,1,1), padding='VALID', name='Dx')
+    Dy = tf.nn.conv2d(Zy, V_dot, strides=(1,1,1,1), padding='VALID', name='Dy')
+    Bx = tf.nn.conv2d(Zx, V_blade, strides=(1,1,1,1), padding='VALID', name='Bx')
+    By = tf.nn.conv2d(Zy, V_blade, strides=(1,1,1,1), padding='VALID', name='By')
+    return (Dx, Bx)
+
+
+def complex_depthwise(Qx, Qy, c):
+    """Tile Q to convolve with a complex signal. c : # input channels"""
+    Qx = tf.tile(Qx, [1,1,c,1], name='Qx_tile')
+    Qy = tf.tile(Qy, [1,1,c,1], name='Qy_tile')
+    Q_r = tf.concat(2, [Qx, Qy], name='Qr_concat')
+    Q_i = tf.concat(2, [Qy, -Qx], name='Qi_concat')
+    return tf.concat(3, [Q_r, Q_i])
+
+def complex_depthwise_conv(X, W, strides=(1,1,1,1), padding='VALID',
+                             name='complexchannelwiseconv'):
+    """
+    Channelwise convolution using complex filters using a cartesian
+    representation. Input tensors X = A+iB and filters W=U+iV. Returns: tensors
+    AU+BV + i(AV-BV) of shape [b,h',w',m*c].
+    """
+    A, B = X
+    U, V = W
+    AU = tf.nn.depthwise_conv2d(A, U, strides=strides, padding=padding, name='AU')
+    AV = tf.nn.depthwise_conv2d(A, V, strides=strides, padding=padding, name='AV')
+    BU = tf.nn.depthwise_conv2d(B, U, strides=strides, padding=padding, name='BU')
+    BV = tf.nn.depthwise_conv2d(B, V, strides=strides, padding=padding, name='BV')
+    return (AU + BV, AV - BV)
+
+def complex_conv(X, W, strides=(1,1,1,1), padding='VALID', name='complexconv'):
     """
     Convolution using complex filters using a cartesian representation. Feed in
     an input X = A+iB and filters W=U+iV and returns AU+BV + i(AV-BV)
@@ -115,9 +154,9 @@ def complex_conv(X, W, b=None, strides=(1,1,1,1), padding='VALID',
     AV = tf.nn.conv2d(A, V, strides=strides, padding=padding, name='AV')
     BU = tf.nn.conv2d(B, U, strides=strides, padding=padding, name='BU')
     BV = tf.nn.conv2d(B, V, strides=strides, padding=padding, name='BV')
-    return (AU + BV, VA - VB)
+    return (AU + BV, AV - BV)
 
-def complex_channelwise_conv(X, W, b=None, strides=(1,1,1,1), padding='VALID',
+def complex_channelwise_conv(X, W, strides=(1,1,1,1), padding='VALID',
                              name='complexchannelwiseconv'):
     """
     Channelwise convolution using complex filters using a cartesian
@@ -153,7 +192,7 @@ def dot_blade_filter(V):
     S = to_constant_variable(np.asarray([[0.,1.],[-1.,0.]]))
     V_blade = tf.matmul(S,tf.transpose(V_))
     V_blade = tf.reshape(V_blade, tf.pack([1,1,Vsh[0],Vsh[1]]))
-    return tf.concat(3, [V, V_blade])
+    return V, V_blade
 
 def interleave(A,B):
     """Interleave two 4D tensors along final axis"""

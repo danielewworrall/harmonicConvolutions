@@ -397,7 +397,7 @@ def grad_descent_test():
 
 def complex_basis_test():
 	k = 20
-	X, Y = get_complex_basis(k=k, n=2, wrap=1.)
+	X, Y = get_complex_basis(k=k, n=2, wrap=-1.)
 	R = tf.squeeze(tf.sqrt(X**2 + Y**2))
 	X = tf.squeeze(X)/R
 	Y = tf.squeeze(Y)/R
