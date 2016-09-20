@@ -395,6 +395,30 @@ def grad_descent_test():
 				print str(step) + '   ' + str(acc)
 			step += 1
 
+def complex_basis_test():
+	k = 20
+	X, Y = get_complex_basis(k=k, n=2, wrap=1.)
+	R = tf.squeeze(tf.sqrt(X**2 + Y**2))
+	X = tf.squeeze(X)/R
+	Y = tf.squeeze(Y)/R
+	
+	plt.figure(1)
+	plt.ion()
+	plt.show()
+	N = 18
+	for i in xrange(N):
+		plt.cla()
+		x = tf.cos(i*np.pi/9.)*X[:,:,0] + tf.sin(i*np.pi/9.)*X[:,:,1]
+		y = tf.cos(i*np.pi/9.)*Y[:,:,0] + tf.sin(i*np.pi/9.)*Y[:,:,1]
+		
+		with tf.Session() as sess:
+			R_, X_, Y_ = sess.run([R, x, y])
+		
+		plt.imshow(R_[:,:,0])
+		plt.quiver(X_, Y_)
+		plt.draw()
+		raw_input(i*np.pi/9)
+
 if __name__ == '__main__':
 	#get_rotation_as_vectors_test()
 	#mutual_tile_test()
@@ -404,4 +428,36 @@ if __name__ == '__main__':
 	#grad_atan2_test()
 	#gConv_grad_test()
 	#grad_descent_test()
-	zConv_test()
+	#zConv_test()
+	complex_basis_test()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
