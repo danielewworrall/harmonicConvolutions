@@ -482,8 +482,8 @@ def complex_steer_test():
 	
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [None,28,28,1])
-	v0 = tf.placeholder(tf.float32, [1,1,2*1,3])
-	v1 = tf.placeholder(tf.float32, [1,1,2*3,1])
+	v0 = tf.placeholder(tf.float32, [1,1,2*1,1])
+	v1 = tf.placeholder(tf.float32, [1,1,2*1,1])
 	y = equi_steer_conv(x, v0)
 	z = complex_steer_conv(y, v1)
 
@@ -495,8 +495,8 @@ def complex_steer_test():
 	X_ = np.fliplr(X).T
 	X = np.stack((X, X_))
 	X = X.reshape([2,28,28,1])
-	V0 = np.random.randn(1,1,2*1,3).astype(np.float32)
-	V1 = np.random.randn(1,1,2*3,1).astype(np.float32)
+	V0 = np.random.randn(1,1,2*1,1).astype(np.float32)
+	V1 = np.random.randn(1,1,2*1,1).astype(np.float32)
 	
 	# Launch the graph
 	with tf.Session() as sess:
@@ -510,6 +510,10 @@ def complex_steer_test():
 	Zy = np.squeeze(Zy/R)
 	R = np.squeeze(R)
 	
+	R0 = R[0]
+	R1 = np.flipud(R[1].T)
+	print np.sum((R0 - R1)**2)
+	
 	plt.figure(1)
 	plt.imshow(R[0], cmap='jet', interpolation='nearest')
 	plt.quiver(Zx[0], Zy[0])
@@ -519,6 +523,35 @@ def complex_steer_test():
 	plt.show()
 	plt.show()
 	
+def complex_small_patch_test():
+	"""Test the steer_conv on small rotated patches"""
+	N = 50
+	X = np.asarray([1.,1.,1.,0.,0.,0.,-1.,-1.,-1.])
+	Q = get_Q()
+	X = gen_data(X, N, Q)
+	X = np.reshape(X, [N,3,3,1])
+	
+	x = tf.placeholder('float', [None,3,3,1], name='x')
+	v0 = tf.placeholder('float', [1,1,2,1], name='v0')
+	v1 = tf.placeholder('float', [1,1,2,1], name='v1')
+	esc1 = equi_steer_conv(x, v0)
+	z = complex_steer_conv(esc1, v1, k=1)
+	
+	V0 = np.random.randn(1,1,2,1)
+	V1 = np.random.randn(1,1,2,1)
+
+	with tf.Session() as sess:
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
+		X, Y = sess.run(z, feed_dict={x : X, v0 : V0, v1 : V1})
+	
+	R = np.sqrt(X**2 + Y**2)
+	A = np.arctan2(Y, X)
+	fig = plt.figure(1)
+	theta = np.linspace(0, 2*np.pi, N)
+	plt.plot(theta, np.squeeze(R), 'b')
+	plt.plot(theta, np.squeeze(A), 'r')
+	plt.show()
 
 def small_patch_test():
 	"""Test the steer_conv on small rotated patches"""
@@ -534,13 +567,15 @@ def small_patch_test():
 	
 	x = tf.placeholder('float', [None,3,3,1], name='x')
 	v = tf.placeholder('float', [1,1,2,1], name='v')
-	r, a = equi_steer_conv_(x, v)
+	r, a = equi_steer_conv(x, v)
 	print V
 	with tf.Session() as sess:
 		init_op = tf.initialize_all_variables()
 		sess.run(init_op)
-		R, A = sess.run([r,a], feed_dict={x : X, v : V})
+		X, Y = sess.run([r,a], feed_dict={x : X, v : V})
 	
+	R = np.sqrt(X**2 + Y**2)
+	A = np.arctan2(Y, X)
 	fig = plt.figure(1)
 	theta = np.linspace(0, 2*np.pi, N)
 	plt.plot(theta, np.squeeze(R), 'b')
@@ -585,6 +620,7 @@ if __name__ == '__main__':
 	#real_steer_comparison()
 	complex_steer_test()
 	#small_patch_test()
+	#complex_small_patch_test()
 
 
 

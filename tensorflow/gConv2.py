@@ -78,47 +78,27 @@ def equi_steer_conv_(X, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
                                name='sep_conv')
     return Y
 
-def complex_steer_conv_(Z, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
-                       name='complexsteerconv'):
-    """Complex steerable filter returning the minimum phase and modulus"""
-    Zsh = Z.get_shape().as_list()
-    Qx, Qy = get_complex_basis(k=k, n=n, wrap=1.)                               # [k,k,1,2]*2
-    Q = complex_depthwise(Qx, Qy, Zsh[3]/2)                                     # [k,k,2c,4] 2:r[*c]i[*c] 3:cscs
-    # Depthwise convolution
-    Y_depth = tf.nn.depthwise_conv2d(Z, Q, strides=strides, padding=padding,
-                                     name='depthwise_conv')                     # [m,h,w,2c*4] 3:cscs[r[*c],i[*c]]
-    Ysh = Y_depth.get_shape()
-    Y_depth = tf.reshape(Y_depth, tf.pack([-1,Ysh[1],Ysh[2],Ysh[3]/4,2,2]))     # [m,h,w,2*c,2,2] 3:2c 4:xx,yy 5:cs
-    Y_depth = tf.reduce_sum(Y_depth, reduction_indices=4)
-    Y_depth = tf.reshape(Y_depth, tf.pack([-1,Ysh[1],Ysh[2],Ysh[3]/2]))
-    # Pointwise convolution
-    Y_point = tf.nn.conv2d(Y_depth, V, strides=strides, padding=padding)
-    print Y_point.get_shape()
-    return Y_point
-
 def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
                        name='complexsteerconv'):
-    """Simpler complex steerable filter returning the min phase and modulus"""
+    """Simpler complex steerable filter returning max real phase and modulus"""
     Zsh = Z[0].get_shape().as_list()
     tile_shape = tf.pack([1,1,Zsh[3],1])
-    Q = get_complex_basis(k=k, n=n, wrap=1.)
+    Q = get_complex_basis(k=k, n=n, wrap=0.)
     Q = (tf.tile(Q[0], tile_shape), tf.tile(Q[1], tile_shape))
     # Filter channels
     Y = complex_depthwise_conv(Z, Q, strides=strides, padding=padding, name='cd')
     # Filter dot blade
-    R = complex_dot_blade(Y, V)
-    
-    return R
+    return complex_dot_blade(Y, V)
 
 def complex_dot_blade(Z, V, name='complexdotblade'):
-    Zx, Zy = Z
+    #Zx, Zy = Z
+    Zx = Z
     V_dot, V_blade = dot_blade_filter(V)
     Dx = tf.nn.conv2d(Zx, V_dot, strides=(1,1,1,1), padding='VALID', name='Dx')
-    Dy = tf.nn.conv2d(Zy, V_dot, strides=(1,1,1,1), padding='VALID', name='Dy')
-    Bx = tf.nn.conv2d(Zx, V_blade, strides=(1,1,1,1), padding='VALID', name='Bx')
-    By = tf.nn.conv2d(Zy, V_blade, strides=(1,1,1,1), padding='VALID', name='By')
+    #Dy = tf.nn.conv2d(Zy, V_dot, strides=(1,1,1,1), padding='VALID', name='Dy')
+    Bx = tf.nn.conv2d(Zx, -V_blade, strides=(1,1,1,1), padding='VALID', name='Bx')
+    #By = tf.nn.conv2d(Zy, V_blade, strides=(1,1,1,1), padding='VALID', name='By')
     return (Dx, Bx)
-
 
 def complex_depthwise(Qx, Qy, c):
     """Tile Q to convolve with a complex signal. c : # input channels"""
@@ -128,48 +108,21 @@ def complex_depthwise(Qx, Qy, c):
     Q_i = tf.concat(2, [Qy, -Qx], name='Qi_concat')
     return tf.concat(3, [Q_r, Q_i])
 
-def complex_depthwise_conv(X, W, strides=(1,1,1,1), padding='VALID',
+def complex_depthwise_conv(Z, W, strides=(1,1,1,1), padding='VALID',
                              name='complexchannelwiseconv'):
     """
     Channelwise convolution using complex filters using a cartesian
     representation. Input tensors X = A+iB and filters W=U+iV. Returns: tensors
     AU+BV + i(AV-BV) of shape [b,h',w',m*c].
     """
-    A, B = X
+    X, Y = Z
     U, V = W
-    AU = tf.nn.depthwise_conv2d(A, U, strides=strides, padding=padding, name='AU')
-    AV = tf.nn.depthwise_conv2d(A, V, strides=strides, padding=padding, name='AV')
-    BU = tf.nn.depthwise_conv2d(B, U, strides=strides, padding=padding, name='BU')
-    BV = tf.nn.depthwise_conv2d(B, V, strides=strides, padding=padding, name='BV')
-    return (AU + BV, AV - BV)
-
-def complex_conv(X, W, strides=(1,1,1,1), padding='VALID', name='complexconv'):
-    """
-    Convolution using complex filters using a cartesian representation. Feed in
-    an input X = A+iB and filters W=U+iV and returns AU+BV + i(AV-BV)
-    """
-    A, B = X
-    U, V = W
-    AU = tf.nn.conv2d(A, U, strides=strides, padding=padding, name='AU')
-    AV = tf.nn.conv2d(A, V, strides=strides, padding=padding, name='AV')
-    BU = tf.nn.conv2d(B, U, strides=strides, padding=padding, name='BU')
-    BV = tf.nn.conv2d(B, V, strides=strides, padding=padding, name='BV')
-    return (AU + BV, AV - BV)
-
-def complex_channelwise_conv(X, W, strides=(1,1,1,1), padding='VALID',
-                             name='complexchannelwiseconv'):
-    """
-    Channelwise convolution using complex filters using a cartesian
-    representation. Input tensors X = A+iB and filters W=U+iV. Returns: tensors
-    AU+BV + i(AV-BV) of shape [b,h',w',m*c].
-    """
-    A, B = X
-    U, V = W
-    AU = channelwise_conv2d(A, U, strides=strides, padding=padding, name='AU')
-    AV = channelwise_conv2d(A, V, strides=strides, padding=padding, name='AV')
-    BU = channelwise_conv2d(B, U, strides=strides, padding=padding, name='BU')
-    BV = channelwise_conv2d(B, V, strides=strides, padding=padding, name='BV')
-    return (AU + BV, AV - BV)
+    XU = tf.nn.depthwise_conv2d(X, U, strides=strides, padding=padding, name='XU')
+    #XV = tf.nn.depthwise_conv2d(X, V, strides=strides, padding=padding, name='XV')
+    #YU = tf.nn.depthwise_conv2d(Y, U, strides=strides, padding=padding, name='YU')
+    YV = tf.nn.depthwise_conv2d(Y, V, strides=strides, padding=padding, name='YV')
+    #return (XU + YV, XV - YU)
+    return XU + YV
 
 def get_arg(Y):
     """Get the argument of the steerable convolution"""
@@ -218,13 +171,13 @@ def get_basis(k=3, n=2):
 
 def get_complex_basis(k=3, n=2, wrap=1.):
     """Return a tensor of complex steerable filter bases (X, Y)"""
-    lin = np.linspace((1.-k)/2., (k-1.)/2., k)/(k/5.)
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
     X, Y = np.meshgrid(lin, lin)
     Y = np.flipud(Y)
     X = tf.to_float(X)
     Y = tf.to_float(Y)
     R = tf.sqrt(X**2 + Y**2)
-    modulus = R*tf.exp(-R**2)
+    modulus = tf.exp(-R**2)
     phase = wrap*atan2(Y, X) 
     Rcos = tf.reshape(modulus*tf.cos(phase), [k,k,1,1])
     Rsin = tf.reshape(modulus*tf.sin(phase), [k,k,1,1])
