@@ -74,6 +74,7 @@ def equi_steer_conv_(X, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
     Q = tf.tile(Q, tile_shape, name='Q_tile')
     V, V_ = dot_blade_filter(V)
     
+    V_ = tf.concat(3, [V,V_])
     Y = tf.nn.separable_conv2d(X, Q, V_, strides=strides, padding='VALID',
                                name='sep_conv')
     return Y

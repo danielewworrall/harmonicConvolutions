@@ -440,7 +440,7 @@ def real_steer_comparison():
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [None,28,28,1])
 	v0 = tf.placeholder(tf.float32, [1,1,2*1,1])
-	y = equi_steer_conv_(x, v0)
+	#y = equi_steer_conv_(x, v0)
 	z = equi_steer_conv(x, v0)
 
 	# Initializing the variables
@@ -457,19 +457,21 @@ def real_steer_comparison():
 	# Launch the graph
 	with tf.Session() as sess:
 		sess.run(init)
-		Y, Z = sess.run([y, z], feed_dict={x : X, v0 : V0})
-
-	R_0 = np.sqrt(np.sum(Y[0,...]**2, axis=2))
-	X_0, Y_0 = np.squeeze(Y[0,:,:,0])/R_0, np.squeeze(Y[0,:,:,1])/R_0
-	R_1 = np.sqrt(np.sum(Z[0,...]**2, axis=2))
-	X_1, Y_1 = np.squeeze(Z[0,:,:,0])/R_1, np.squeeze(Z[0,:,:,1])/R_1
+		X, Y = sess.run(z, feed_dict={x : X, v0 : V0})
+	
+	#R_0 = np.sqrt(np.sum(Y[0,...]**2, axis=2))
+	#X_0, Y_0 = np.squeeze(Y[0,:,:,0])/R_0, np.squeeze(Y[0,:,:,1])/R_0
+	X = np.squeeze(X)
+	Y = np.squeeze(Y)
+	R = np.sqrt(X**2 + Y**2)
+	X, Y = X/R, Y/R
 	
 	plt.figure(1)
-	plt.imshow(R_0, cmap='jet', interpolation='nearest')
-	plt.quiver(X_0, Y_0)
+	plt.imshow(R[0], cmap='jet', interpolation='nearest')
+	plt.quiver(X[0], Y[0])
 	plt.figure(2)
-	plt.imshow(R_1, cmap='jet', interpolation='nearest')
-	plt.quiver(X_1, Y_1)
+	plt.imshow(R[1], cmap='jet', interpolation='nearest')
+	plt.quiver(X[1], Y[1])
 	plt.show()
 
 def complex_steer_test():
@@ -611,16 +613,18 @@ def reproject(Q, X, angle):
 					[-np.sin(angle), np.cos(angle)]])
 	return np.dot(Q.T, np.dot(R,Y))
 	
-	
+def dot_blade_test():
+	pass
 
 if __name__ == '__main__':
 	#run()
 	#forward()
 	#angular()
-	#real_steer_comparison()
-	complex_steer_test()
+	real_steer_comparison()
+	#complex_steer_test()
 	#small_patch_test()
 	#complex_small_patch_test()
+	dot_blade_test()
 
 
 
