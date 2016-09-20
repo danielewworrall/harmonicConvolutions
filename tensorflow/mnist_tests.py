@@ -614,46 +614,27 @@ def reproject(Q, X, angle):
 	return np.dot(Q.T, np.dot(R,Y))
 	
 def dot_blade_test():
-	pass
+	v = tf.placeholder('float', [1,1,6,3], 'v')
+	v_ = dot_blade_filter(v)
+
+	V = np.random.randn(1,1,6,3)
+	
+	init = tf.initialize_all_variables()	
+	with tf.Session() as sess:
+		sess.run(init)
+		V_ = sess.run(v_, feed_dict={v : V})
+
+	V, V_ = V_
+	print V
+	print V_
 
 if __name__ == '__main__':
 	#run()
 	#forward()
 	#angular()
-	real_steer_comparison()
-	#complex_steer_test()
+	#real_steer_comparison()
+	complex_steer_test()
 	#small_patch_test()
 	#complex_small_patch_test()
-	dot_blade_test()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+	#dot_blade_test()
 

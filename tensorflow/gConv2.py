@@ -144,9 +144,10 @@ def dot_blade_filter(V):
     Vsh = V_.get_shape()
     V_ = tf.reshape(tf.transpose(V_), tf.pack([(Vsh[0]*Vsh[1])/2,2]))
     S = to_constant_variable(np.asarray([[0.,1.],[-1.,0.]]))
-    V_blade = tf.matmul(S,tf.transpose(V_))
-    V_blade = tf.reshape(V_blade, tf.pack([1,1,Vsh[0],Vsh[1]]))
-    return V, V_blade
+    V_blade = tf.matmul(V_,S)
+    V_blade = tf.reshape(V_blade, tf.pack([1,1,Vsh[1],Vsh[0]]))
+    V_blade = tf.transpose(V_blade, perm=[0,1,3,2])
+    return 1.*V, V_blade
 
 def interleave(A,B):
     """Interleave two 4D tensors along final axis"""
