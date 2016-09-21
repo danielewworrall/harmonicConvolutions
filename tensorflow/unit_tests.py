@@ -396,11 +396,18 @@ def grad_descent_test():
 			step += 1
 
 def complex_basis_test():
-	k = 9
+	k = 3
 	X, Y = get_complex_basis(k=k, n=2, wrap=0.)
 	R = tf.squeeze(tf.sqrt(X**2 + Y**2))
 	X = tf.squeeze(X)/R
 	Y = tf.squeeze(Y)/R
+	
+	with tf.Session() as sess:
+		X_, Y_ = sess.run([X, Y])
+	print X_[:,:,0]
+	print X_[:,:,1]
+	print Y_[:,:,0]
+	print Y_[:,:,1]
 	
 	plt.figure(1)
 	plt.ion()

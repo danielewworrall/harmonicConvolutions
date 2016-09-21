@@ -484,8 +484,8 @@ def complex_steer_test():
 	
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [None,28,28,1])
-	v0 = tf.placeholder(tf.float32, [1,1,2*1,1])
-	v1 = tf.placeholder(tf.float32, [1,1,2*1,1])
+	v0 = tf.placeholder(tf.float32, [1,1,2*1,3])
+	v1 = tf.placeholder(tf.float32, [1,1,2*3,1])
 	y = equi_steer_conv(x, v0)
 	z = complex_steer_conv(y, v1)
 
@@ -497,8 +497,8 @@ def complex_steer_test():
 	X_ = np.fliplr(X).T
 	X = np.stack((X, X_))
 	X = X.reshape([2,28,28,1])
-	V0 = np.random.randn(1,1,2*1,1).astype(np.float32)
-	V1 = np.random.randn(1,1,2*1,1).astype(np.float32)
+	V0 = np.random.randn(1,1,2*1,3).astype(np.float32)
+	V1 = np.random.randn(1,1,2*3,1).astype(np.float32)
 	
 	# Launch the graph
 	with tf.Session() as sess:
@@ -514,7 +514,8 @@ def complex_steer_test():
 	
 	R0 = R[0]
 	R1 = np.flipud(R[1].T)
-	print np.sum((R0 - R1)**2)
+	
+	print("Mod. difference: %f" % (np.sum((R0 - R1)**2),))
 	
 	plt.figure(1)
 	plt.imshow(R[0], cmap='jet', interpolation='nearest')

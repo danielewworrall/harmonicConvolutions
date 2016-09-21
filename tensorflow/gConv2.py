@@ -92,22 +92,10 @@ def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
     return complex_dot_blade(Y, V)
 
 def complex_dot_blade(Z, V, name='complexdotblade'):
-    #Zx, Zy = Z
-    Zx = Z
     V_dot, V_blade = dot_blade_filter(V)
-    Dx = tf.nn.conv2d(Zx, V_dot, strides=(1,1,1,1), padding='VALID', name='Dx')
-    #Dy = tf.nn.conv2d(Zy, V_dot, strides=(1,1,1,1), padding='VALID', name='Dy')
-    Bx = tf.nn.conv2d(Zx, -V_blade, strides=(1,1,1,1), padding='VALID', name='Bx')
-    #By = tf.nn.conv2d(Zy, V_blade, strides=(1,1,1,1), padding='VALID', name='By')
+    Dx = tf.nn.conv2d(Z, V_dot, strides=(1,1,1,1), padding='VALID', name='Dx')
+    Bx = tf.nn.conv2d(Z, V_blade, strides=(1,1,1,1), padding='VALID', name='Bx')
     return (Dx, Bx)
-
-def complex_depthwise(Qx, Qy, c):
-    """Tile Q to convolve with a complex signal. c : # input channels"""
-    Qx = tf.tile(Qx, [1,1,c,1], name='Qx_tile')
-    Qy = tf.tile(Qy, [1,1,c,1], name='Qy_tile')
-    Q_r = tf.concat(2, [Qx, Qy], name='Qr_concat')
-    Q_i = tf.concat(2, [Qy, -Qx], name='Qi_concat')
-    return tf.concat(3, [Q_r, Q_i])
 
 def complex_depthwise_conv(Z, W, strides=(1,1,1,1), padding='VALID',
                              name='complexchannelwiseconv'):
@@ -119,11 +107,8 @@ def complex_depthwise_conv(Z, W, strides=(1,1,1,1), padding='VALID',
     X, Y = Z
     U, V = W
     XU = tf.nn.depthwise_conv2d(X, U, strides=strides, padding=padding, name='XU')
-    #XV = tf.nn.depthwise_conv2d(X, V, strides=strides, padding=padding, name='XV')
-    #YU = tf.nn.depthwise_conv2d(Y, U, strides=strides, padding=padding, name='YU')
     YV = tf.nn.depthwise_conv2d(Y, V, strides=strides, padding=padding, name='YV')
-    #return (XU + YV, XV - YU)
-    return XU + YV
+    return XU - YV
 
 def get_arg(Y):
     """Get the argument of the steerable convolution"""
@@ -147,7 +132,7 @@ def dot_blade_filter(V):
     V_blade = tf.matmul(V_,S)
     V_blade = tf.reshape(V_blade, tf.pack([1,1,Vsh[1],Vsh[0]]))
     V_blade = tf.transpose(V_blade, perm=[0,1,3,2])
-    return 1.*V, V_blade
+    return V, V_blade
 
 def interleave(A,B):
     """Interleave two 4D tensors along final axis"""
