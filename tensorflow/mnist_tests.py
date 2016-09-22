@@ -9,6 +9,7 @@ import time
 import cv2
 import numpy as np
 import scipy.linalg as scilin
+import scipy.ndimage.interpolation as sciint
 import tensorflow as tf
 
 import input_data
@@ -175,7 +176,7 @@ def gConv_equi_steer(x, drop_prob, n_filters, n_classes):
 	weights = {
 		'w1' : get_weights([1,1,2,n_filters], name='W1'),
 		'w2' : get_weights([1,1,2*n_filters,n_filters], name='W2'),
-		'w3' : get_weights([n_filters*6*6,500], name='W3'),
+		'w3' : get_weights([n_filters*5*5,500], name='W3'),
 		'out': get_weights([500, n_classes], name='W4')
 	}
 	
@@ -190,15 +191,19 @@ def gConv_equi_steer(x, drop_prob, n_filters, n_classes):
 	x = tf.reshape(x, shape=[-1, 28, 28, 1])
 	
 	# Convolution Layer
-	__, sc1 = equi_steer_conv_(x, weights['w1'], biases['b1'])
-	mp1 = tf.nn.relu(maxpool2d(sc1, k=2))
+	re1 = equi_steer_conv(x, weights['w1'])
+	mp1 = complex_maxpool2d(re1, k=2)
+	nl1 = complex_relu(mp1, biases['b1'])
 
 	# Convolution Layer
-	sc2, __ = equi_steer_conv_(mp1, weights['w2'], biases['b2'])
-	mp2 = tf.nn.relu(maxpool2d(sc2, k=2))
+	re2 = complex_steer_conv(nl1, weights['w2'])
+	mp2 = complex_maxpool2d(re2, k=2)
+	nl2 = complex_relu(mp2, biases['b2'])
 
 	# Fully connected layer
-	fc3 = tf.reshape(mp2, [-1, weights['w3'].get_shape().as_list()[0]])
+	nlx, nly = nl2
+
+	fc3 = tf.reshape(nlx, [-1, weights['w3'].get_shape().as_list()[0]])
 	fc3 = tf.nn.bias_add(tf.matmul(fc3, weights['w3']), biases['b3'])
 	fc3 = tf.nn.relu(fc3)
 	fc3 = tf.nn.dropout(fc3, drop_prob)
@@ -485,46 +490,51 @@ def complex_steer_test():
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [None,28,28,1])
 	v0 = tf.placeholder(tf.float32, [1,1,2*1,3])
+	b0 = tf.placeholder(tf.float32, [3,])
 	v1 = tf.placeholder(tf.float32, [1,1,2*3,1])
+	
 	y = equi_steer_conv(x, v0)
+	mp = complex_maxpool2d(y, k=2)	# For now process R independently everywhere
+	y = complex_relu(mp, b0)
 	z = complex_steer_conv(y, v1)
 
 	# Initializing the variables
 	init = tf.initialize_all_variables()
 	
 	X = mnist.train.next_batch(100)[0][1,:]
-	X = np.reshape(X, [1,28,28,1])
-	X_ = np.fliplr(X).T
-	X = np.stack((X, X_))
-	X = X.reshape([2,28,28,1])
+	X = np.reshape(X, [28,28])
+	X_ = []
+	N = 50
+	for i in xrange(N):
+		angle = i*(360./N)
+		X_.append(sciint.rotate(X, angle, reshape=False))
+	X = np.reshape(np.stack(X_), [-1,28,28,1])
+	
 	V0 = np.random.randn(1,1,2*1,3).astype(np.float32)
+	B0 = np.random.randn(3).astype(np.float32)
 	V1 = np.random.randn(1,1,2*3,1).astype(np.float32)
 	
 	# Launch the graph
 	with tf.Session() as sess:
 		sess.run(init)
-		Z = sess.run(z, feed_dict={x : X, v0 : V0, v1 : V1})
+		Z = sess.run(z, feed_dict={x : X, v0 : V0, b0 : B0, v1 : V1})
 		
 	Zx, Zy = Z
-	
+	print Zx.shape
 	R = np.sqrt(Zx**2 + Zy**2)
 	Zx = np.squeeze(Zx/R)
 	Zy = np.squeeze(Zy/R)
 	R = np.squeeze(R)
 	
-	R0 = R[0]
-	R1 = np.flipud(R[1].T)
-	
-	print("Mod. difference: %f" % (np.sum((R0 - R1)**2),))
-	
 	plt.figure(1)
-	plt.imshow(R[0], cmap='jet', interpolation='nearest')
-	plt.quiver(Zx[0], Zy[0])
-	plt.figure(2)
-	plt.imshow(R[1], cmap='jet', interpolation='nearest')
-	plt.quiver(Zx[1], Zy[1])
+	plt.ion()
 	plt.show()
-	plt.show()
+	for i in xrange(N):
+		plt.cla()
+		plt.imshow(R[i], cmap='jet', interpolation='nearest')
+		plt.quiver(Zx[i], Zy[i])
+		plt.show()
+		raw_input(i*(360./N))
 	
 def complex_small_patch_test():
 	"""Test the steer_conv on small rotated patches"""
@@ -630,11 +640,11 @@ def dot_blade_test():
 	print V_
 
 if __name__ == '__main__':
-	#run()
+	run()
 	#forward()
 	#angular()
 	#real_steer_comparison()
-	complex_steer_test()
+	#complex_steer_test()
 	#small_patch_test()
 	#complex_small_patch_test()
 	#dot_blade_test()

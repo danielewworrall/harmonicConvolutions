@@ -146,6 +146,35 @@ def steer_pool(X):
     T = atan2(X[:,:,:,:,1],X[:,:,:,:,0])
     return R, T
 
+def complex_maxpool2d(X, k=2):
+    """Max pool over complex valued feature maps by modulus only"""
+    U, V = X
+    R = tf.square(U) + tf.square(V)
+    max_, argmax = tf.nn.max_pool_with_argmax(R, [1,k,k,1], strides=[1,k,k,1],
+                                              padding='VALID', name='cpool')
+    Ush = tf.shape(U)
+    batch_correct = tf.to_int64(tf.reduce_prod(Ush[1:])*tf.range(Ush[0]))
+    argmax = argmax + tf.reshape(batch_correct, [Ush[0],1,1,1])
+    
+    U_flat = tf.reshape(U, [tf.reduce_prod(Ush)])
+    V_flat = tf.reshape(V, [tf.reduce_prod(Ush)])
+    #R_flat = tf.reshape(R, [tf.reduce_prod(Ush)])
+    
+    U_ = tf.gather(U_flat, argmax)
+    V_ = tf.gather(V_flat, argmax)
+    #R_ = tf.gather(R_flat, argmax)
+    
+    return U_, V_
+
+def complex_relu(Z, b):
+    """Apply a ReLU to the modulus of the complex feature map"""
+    X, Y = Z
+    R = tf.sqrt(tf.square(X) + tf.square(Y))
+    c = 0.5*tf.sign(tf.nn.bias_add(R,b), name='relu') + 0.5
+    X = c*X
+    Y = c*Y
+    return X, Y
+
 def get_basis(k=3, n=2):
     """Return a tensor of steerable filter bases"""
     lin = np.linspace((1.-k)/2., (k-1.)/2., k)
