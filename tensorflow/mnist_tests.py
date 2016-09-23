@@ -138,7 +138,7 @@ def gConv_steer(x, drop_prob, n_filters, n_classes):
 	weights = {
 		'w1' : get_weights([1,1,2,n_filters], name='W1'),
 		'w2' : get_weights([1,1,2*n_filters,n_filters], name='W2'),
-		'w3' : get_weights([n_filters*6*6,500], name='W3'),
+		'w3' : get_weights([n_filters*12*12,500], name='W3'),
 		'out': get_weights([500, n_classes], name='W4')
 	}
 	
@@ -154,11 +154,13 @@ def gConv_steer(x, drop_prob, n_filters, n_classes):
 	
 	# Convolution Layer
 	sc1 = steer_conv(x, weights['w1'], biases['b1'])
-	mp1 = tf.nn.relu(maxpool2d(sc1, k=2))
+	#mp1 = tf.nn.relu(maxpool2d(sc1, k=2))
+	mp1 = tf.nn.relu(sc1)
 	
 	# Convolution Layer
-	sc2 = steer_conv(mp1, weights['w2'], biases['b2'])
-	mp2 = tf.nn.relu(maxpool2d(sc2, k=2))
+	sc2 = steer_conv(mp1, weights['w2'], biases['b2'], strides=(1,2,2,1))
+	#mp2 = tf.nn.relu(maxpool2d(sc2, k=2))
+	mp2 = tf.nn.relu(sc2)
 
 	# Fully connected layer
 	fc3 = tf.reshape(mp2, [-1, weights['w3'].get_shape().as_list()[0]])
@@ -171,12 +173,12 @@ def gConv_steer(x, drop_prob, n_filters, n_classes):
 	out = tf.nn.bias_add(tf.matmul(fc3, weights['out']), biases['out'])
 	return out
 
-def gConv_equi_steer(x, drop_prob, n_filters, n_classes):
+def gConv_equi_steer(x, drop_prob, n_filters, n_classes, bs):
 	# Store layers weight & bias
 	weights = {
 		'w1' : get_weights([1,1,2,n_filters], name='W1'),
 		'w2' : get_weights([1,1,2*n_filters,n_filters], name='W2'),
-		'w3' : get_weights([n_filters*5*5,500], name='W3'),
+		'w3' : get_weights([n_filters*12*12,500], name='W3'),
 		'out': get_weights([500, n_classes], name='W4')
 	}
 	
@@ -188,22 +190,23 @@ def gConv_equi_steer(x, drop_prob, n_filters, n_classes):
 	}
 	
 	# Reshape input picture
-	x = tf.reshape(x, shape=[-1, 28, 28, 1])
+	x = tf.reshape(x, shape=[bs, 28, 28, 1])
 	
 	# Convolution Layer
 	re1 = equi_steer_conv(x, weights['w1'])
-	mp1 = complex_maxpool2d(re1, k=2)
-	nl1 = complex_relu(mp1, biases['b1'])
+	#mp1 = complex_maxpool2d(re1, k=2)
+	nl1 = complex_relu(re1, biases['b1'])
 
 	# Convolution Layer
-	re2 = complex_steer_conv(nl1, weights['w2'])
-	mp2 = complex_maxpool2d(re2, k=2)
-	nl2 = complex_relu(mp2, biases['b2'])
+	re2 = complex_steer_conv(nl1, weights['w2'], strides=(1,2,2,1))
+	#mp2 = complex_maxpool2d(re2, k=2)
+	nl2 = complex_relu(re2, biases['b2'])
 
 	# Fully connected layer
 	nlx, nly = nl2
-
-	fc3 = tf.reshape(nlx, [-1, weights['w3'].get_shape().as_list()[0]])
+	R = nlx
+	
+	fc3 = tf.reshape(R, [bs, weights['w3'].get_shape().as_list()[0]])
 	fc3 = tf.nn.bias_add(tf.matmul(fc3, weights['w3']), biases['b3'])
 	fc3 = tf.nn.relu(fc3)
 	fc3 = tf.nn.dropout(fc3, drop_prob)
@@ -211,6 +214,49 @@ def gConv_equi_steer(x, drop_prob, n_filters, n_classes):
 	# Output, class prediction
 	out = tf.nn.bias_add(tf.matmul(fc3, weights['out']), biases['out'])
 	return out
+
+def deep_steer(x, drop_prob, n_filters, n_classes, bs):
+	# Store layers weight & bias
+	weights = {
+		'w1' : get_weights([1,1,2,n_filters], name='W1'),
+		'w2' : get_weights([1,1,2*n_filters,n_filters], name='W2'),
+		'w3' : get_weights([1,1,2*n_filters,n_filters], name='W3'),
+		'w4' : get_weights([1,1,2*n_filters,n_filters], name='W3'),
+		'w5' : get_weights([n_filters*9*9,500], name='W5'),
+		'w6' : get_weights([500, n_classes], name='W6')
+	}
+	
+	biases = {
+		'b1': tf.Variable(tf.constant(1e-2, shape=[n_filters]), name='b1'),
+		'b2': tf.Variable(tf.constant(1e-2, shape=[n_filters]), name='b2'),
+		'b3': tf.Variable(tf.constant(1e-2, shape=[n_filters]), name='b3'),
+		'b4': tf.Variable(tf.constant(1e-2, shape=[n_filters]), name='b4'),
+		'b5': tf.Variable(tf.constant(1e-2, shape=[500]), name='b5'),
+		'b6': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b6')
+	}
+	
+	# Reshape input picture
+	x = tf.reshape(x, shape=[bs, 28, 28, 1])
+	
+	# Convolution Layer
+	rc1 = equi_steer_conv(x, weights['w1'])
+	nl1 = complex_relu(rc1, biases['b1'])
+	cc2 = complex_steer_conv(nl1, weights['w2'])
+	nl2 = complex_relu(cc2, biases['b2'])
+	
+	cc3 = complex_steer_conv(nl2, weights['w3'], strides=(1,2,2,1))
+	nl3 = complex_relu(cc3, biases['b3'])
+	cc4 = complex_steer_conv(nl3, weights['w4'])
+	nl4 = complex_relu(cc4, biases['b4'])
+	nlx, __ = nl4
+
+	fc5 = tf.reshape(nlx, [bs, weights['w5'].get_shape().as_list()[0]])
+	fc5 = tf.nn.bias_add(tf.matmul(fc5, weights['w5']), biases['b5'])
+	fc5 = tf.nn.relu(fc5)
+	fc5 = tf.nn.dropout(fc5, drop_prob)
+	
+	# Output, class prediction
+	return tf.nn.bias_add(tf.matmul(fc5, weights['w6']), biases['b6'])
 
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
     """conv2d wrapper"""
@@ -243,25 +289,25 @@ def run():
 	mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 	
 	# Parameters
-	lr = 1e-3
+	lr = 1e-4
 	batch_size = 500
 	dataset_size = 50000
 	valid_size = 5000
 	n_epochs = 500
 	display_step = dataset_size / batch_size
 	save_step = 100
-	model = 'equi_steer'
+	model = 'deep_steer'
 	test_rot = False
 	
 	# Network Parameters
 	n_input = 784 # MNIST data input (img shape: 28*28)
 	n_classes = 10 # MNIST total classes (0-9 digits)
 	dropout = 0.75 # Dropout, probability to keep units
-	n_filters = 10
+	n_filters = 5
 	
 	# tf Graph input
-	x = tf.placeholder(tf.float32, [None, n_input])
-	y = tf.placeholder(tf.float32, [None, n_classes])
+	x = tf.placeholder(tf.float32, [batch_size, n_input])
+	y = tf.placeholder(tf.float32, [batch_size, n_classes])
 	learning_rate = tf.placeholder(tf.float32)
 	keep_prob = tf.placeholder(tf.float32) 
 	
@@ -275,7 +321,9 @@ def run():
 	elif model == 'steer':
 		pred = gConv_steer(x, keep_prob, n_filters, n_classes)
 	elif model == 'equi_steer':
-		pred = gConv_equi_steer(x, keep_prob, n_filters, n_classes)
+		pred = gConv_equi_steer(x, keep_prob, n_filters, n_classes, batch_size)
+	elif model == 'deep_steer':
+		pred = deep_steer(x, keep_prob, n_filters, n_classes, batch_size)
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
@@ -284,10 +332,6 @@ def run():
 	cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
 	#optimizer = tf.train.MomentumOptimizer(learning_rate=lr, momentum=0.9).minimize(cost)
 	optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
-	#opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
-	#gvs = opt.compute_gradients(cost)
-	#optimizer = opt.apply_gradients(gvs)
-	#g = tf.gradients(pred, x)
 	
 	# Evaluate model
 	correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
@@ -511,7 +555,7 @@ def complex_steer_test():
 	X = np.reshape(np.stack(X_), [-1,28,28,1])
 	
 	V0 = np.random.randn(1,1,2*1,3).astype(np.float32)
-	B0 = np.random.randn(3).astype(np.float32)
+	B0 = np.random.randn(3).astype(np.float32)-0.5
 	V1 = np.random.randn(1,1,2*3,1).astype(np.float32)
 	
 	# Launch the graph
@@ -520,7 +564,6 @@ def complex_steer_test():
 		Z = sess.run(z, feed_dict={x : X, v0 : V0, b0 : B0, v1 : V1})
 		
 	Zx, Zy = Z
-	print Zx.shape
 	R = np.sqrt(Zx**2 + Zy**2)
 	Zx = np.squeeze(Zx/R)
 	Zy = np.squeeze(Zy/R)

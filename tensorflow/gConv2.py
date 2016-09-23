@@ -146,7 +146,7 @@ def steer_pool(X):
     T = atan2(X[:,:,:,:,1],X[:,:,:,:,0])
     return R, T
 
-def complex_maxpool2d(X, k=2):
+def complex_maxpool2d_(X, k=2):
     """Max pool over complex valued feature maps by modulus only"""
     U, V = X
     R = tf.square(U) + tf.square(V)
@@ -156,21 +156,53 @@ def complex_maxpool2d(X, k=2):
     batch_correct = tf.to_int64(tf.reduce_prod(Ush[1:])*tf.range(Ush[0]))
     argmax = argmax + tf.reshape(batch_correct, [Ush[0],1,1,1])
     
-    U_flat = tf.reshape(U, [tf.reduce_prod(Ush)])
-    V_flat = tf.reshape(V, [tf.reduce_prod(Ush)])
-    #R_flat = tf.reshape(R, [tf.reduce_prod(Ush)])
+    U_flat = tf.reshape(U, [-1])
+    V_flat = tf.reshape(V, [-1])
     
     U_ = tf.gather(U_flat, argmax)
     V_ = tf.gather(V_flat, argmax)
-    #R_ = tf.gather(R_flat, argmax)
     
     return U_, V_
 
-def complex_relu(Z, b):
+def complex_maxpool2d(X, k=2):
+    """Max pool over complex valued feature maps by modulus only"""
+    U, V = X
+    R = tf.square(U) + tf.square(V)
+    max_, argmax = tf.nn.max_pool_with_argmax(R, [1,k,k,1], strides=[1,k,k,1],
+                                              padding='VALID', name='cpool')
+    argmax_list = tf.unpack(argmax, name='amunpack')
+    U_list = tf.unpack(U, name='Uunpack')
+    V_list = tf.unpack(V, name='Vunpack')
+    U_ = []
+    V_ = []
+    for am, u, v in zip(argmax_list, U_list, V_list):
+        u = tf.reshape(u, [-1])
+        v = tf.reshape(v, [-1])
+        U_.append(tf.gather(u, am))
+        V_.append(tf.gather(v, am))
+    U_ = tf.pack(U_)
+    V_ = tf.pack(V_)
+    
+    return U_, V_
+
+def complex_relu(Z, b, eps=1e-4):
+    """Apply a ReLU to the modulus of the complex feature map"""
+    X, Y = Z
+    R2 = tf.square(X) + tf.square(Y)
+    Rb = tf.nn.bias_add(R2,b)
+    c = tf.nn.relu(Rb)/tf.maximum(R2,eps) #*tf.sign(Rb)
+    X = X * c
+    Y = Y * c
+    return X, Y
+
+def complex_relu_(Z, b, eps=1e-6):
     """Apply a ReLU to the modulus of the complex feature map"""
     X, Y = Z
     R = tf.sqrt(tf.square(X) + tf.square(Y))
-    c = 0.5*tf.sign(tf.nn.bias_add(R,b), name='relu') + 0.5
+    R = tf.maximum(R,eps)
+    X = X/R
+    Y = Y/R
+    c = tf.nn.relu(tf.nn.bias_add(R,b), name='relu')
     X = c*X
     Y = c*Y
     return X, Y
@@ -193,7 +225,7 @@ def get_complex_basis(k=3, n=2, wrap=1.):
     X = tf.to_float(X)
     Y = tf.to_float(Y)
     R = tf.sqrt(X**2 + Y**2)
-    modulus = tf.exp(-R**2)
+    modulus = R*tf.exp(-R**2)
     phase = wrap*atan2(Y, X) 
     Rcos = tf.reshape(modulus*tf.cos(phase), [k,k,1,1])
     Rsin = tf.reshape(modulus*tf.sin(phase), [k,k,1,1])
