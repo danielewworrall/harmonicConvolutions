@@ -240,15 +240,15 @@ def deep_steer(x, drop_prob, n_filters, n_classes, bs):
 	
 	# Convolution Layer
 	rc1 = equi_steer_conv(x, weights['w1'])
-	nl1 = complex_relu(rc1, biases['b1'])
-	cc2 = complex_steer_conv(nl1, weights['w2'])
-	nl2 = complex_relu(cc2, biases['b2'])
+	#nl1 = complex_relu(rc1, biases['b1'])
+	cc2 = complex_steer_conv(rc1, weights['w2'])
+	#nl2 = complex_relu(cc2, biases['b2'])
 	
-	cc3 = complex_steer_conv(nl2, weights['w3'], strides=(1,2,2,1))
-	nl3 = complex_relu(cc3, biases['b3'])
-	cc4 = complex_steer_conv(nl3, weights['w4'])
-	nl4 = complex_relu(cc4, biases['b4'])
-	nlx, __ = nl4
+	cc3 = complex_steer_conv(cc2, weights['w3'], strides=(1,2,2,1))
+	#nl3 = complex_relu(cc3, biases['b3'])
+	cc4 = complex_steer_conv(cc3, weights['w4'])
+	#nl4 = complex_relu(cc4, biases['b4'])
+	nlx, __ = cc4
 
 	fc5 = tf.reshape(nlx, [bs, weights['w5'].get_shape().as_list()[0]])
 	fc5 = tf.nn.bias_add(tf.matmul(fc5, weights['w5']), biases['b5'])
