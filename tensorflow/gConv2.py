@@ -217,6 +217,10 @@ def get_basis(k=3, n=2):
     G1 = np.reshape(gdy/np.sqrt(np.sum(gdy**2)), [k,k,1,1])
     return to_constant_variable(np.concatenate([G0,G1], axis=3))
 
+def get_basis(k=3, n=2):
+    """Return a learnable steerable basis"""
+    pass
+
 def get_complex_basis(k=3, n=2, wrap=1.):
     """Return a tensor of complex steerable filter bases (X, Y)"""
     lin = np.linspace((1.-k)/2., (k-1.)/2., k)
