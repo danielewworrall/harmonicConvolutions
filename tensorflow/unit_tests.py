@@ -396,7 +396,7 @@ def grad_descent_test():
 			step += 1
 
 def complex_basis_test():
-	k = 3
+	k = 30
 	X, Y = get_complex_basis(k=k, n=2, wrap=0.)
 	R = tf.squeeze(tf.sqrt(X**2 + Y**2))
 	X = tf.squeeze(X)/R
@@ -412,11 +412,11 @@ def complex_basis_test():
 	plt.figure(1)
 	plt.ion()
 	plt.show()
-	N = 18
+	N = 20
 	for i in xrange(N):
 		plt.cla()
-		x = tf.cos(i*np.pi/9.)*X[:,:,0] + tf.sin(i*np.pi/9.)*X[:,:,1]
-		y = tf.cos(i*np.pi/9.)*Y[:,:,0] + tf.sin(i*np.pi/9.)*Y[:,:,1]
+		x = tf.cos(i*np.pi/10.)*X[:,:,0] + tf.sin(i*np.pi/10.)*X[:,:,1]
+		y = tf.cos(i*np.pi/10.)*Y[:,:,0] + tf.sin(i*np.pi/10.)*Y[:,:,1]
 		
 		with tf.Session() as sess:
 			R_, X_, Y_ = sess.run([R, x, y])
@@ -424,7 +424,7 @@ def complex_basis_test():
 		plt.imshow(R_[:,:,0], cmap='jet', interpolation='nearest')
 		plt.quiver(X_, Y_)
 		plt.draw()
-		raw_input(i*np.pi/9)
+		raw_input(i*np.pi/10)
 
 if __name__ == '__main__':
 	#get_rotation_as_vectors_test()

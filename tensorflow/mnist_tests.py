@@ -289,7 +289,7 @@ def run():
 	mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 	
 	# Parameters
-	lr = 1e-4
+	lr = 1e-3
 	batch_size = 500
 	dataset_size = 50000
 	valid_size = 5000
@@ -501,7 +501,7 @@ def real_steer_comparison():
 	X = np.stack((X, X_))
 	X = X.reshape([2,28,28,1])
 	V0 = np.random.randn(1,1,2*1,1).astype(np.float32)
-	#V0 = np.ones((1,1,2,1)).astype(np.float32)
+	V0 = np.ones((1,1,2,1)).astype(np.float32)
 	
 	# Launch the graph
 	with tf.Session() as sess:
@@ -516,11 +516,52 @@ def real_steer_comparison():
 	X, Y = X/R, Y/R
 	
 	plt.figure(1)
-	plt.imshow(R[0], cmap='jet', interpolation='nearest')
+	plt.imshow(R[0], cmap='gray', interpolation='nearest')
 	plt.quiver(X[0], Y[0])
 	plt.figure(2)
 	plt.imshow(R[1], cmap='jet', interpolation='nearest')
 	plt.quiver(X[1], Y[1])
+	plt.show()
+	
+def Z_steer_comparison():
+	"""Experiment to demonstrate the angular selectivity of the convolution"""
+	mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
+	
+	# Network Parameters
+	n_input = 784 # MNIST data input (img shape: 28*28)
+	n_filters = 10
+	
+	# tf Graph input
+	x = tf.placeholder(tf.float32, [None,28,28,1])
+	v = tf.placeholder(tf.float32, [3,3,1,1])
+	z = tf.nn.conv2d(x, v, strides=(1,1,1,1), padding='VALID')
+
+	# Initializing the variables
+	init = tf.initialize_all_variables()
+	
+	X = mnist.train.next_batch(100)[0][1,:]
+	X = np.reshape(X, [1,28,28,1])
+	X_ = np.fliplr(X).T
+	X = np.stack((X, X_))
+	X = X.reshape([2,28,28,1])
+	V = np.random.randn(3,3,1,1).astype(np.float32)
+	
+	# Launch the graph
+	with tf.Session() as sess:
+		sess.run(init)
+		X = sess.run(z, feed_dict={x : X, v : V})
+	
+	X = np.squeeze(X)
+	X_T = np.flipud(X[1].T)
+	
+	plt.figure(1)
+	plt.imshow(X[0], cmap='gray', interpolation='nearest')
+	plt.figure(2)
+	plt.imshow(X_T, cmap='gray', interpolation='nearest')
+	plt.figure(3)
+	plt.imshow(X[0] - X_T, cmap='gray', interpolation='nearest')
+	plt.figure(4)
+	plt.imshow(np.squeeze(V), cmap='gray', interpolation='nearest')
 	plt.show()
 
 def complex_steer_test():
@@ -532,14 +573,15 @@ def complex_steer_test():
 	n_filters = 10
 	
 	# tf Graph input
-	x = tf.placeholder(tf.float32, [None,28,28,1])
+	N = 50
+	x = tf.placeholder(tf.float32, [N,28,28,1])
 	v0 = tf.placeholder(tf.float32, [1,1,2*1,3])
 	b0 = tf.placeholder(tf.float32, [3,])
 	v1 = tf.placeholder(tf.float32, [1,1,2*3,1])
 	
 	y = equi_steer_conv(x, v0)
-	mp = complex_maxpool2d(y, k=2)	# For now process R independently everywhere
-	y = complex_relu(mp, b0)
+	#mp = complex_maxpool2d(y, k=2)	# For now process R independently everywhere
+	#y = complex_relu(mp, b0)
 	z = complex_steer_conv(y, v1)
 
 	# Initializing the variables
@@ -548,11 +590,11 @@ def complex_steer_test():
 	X = mnist.train.next_batch(100)[0][1,:]
 	X = np.reshape(X, [28,28])
 	X_ = []
-	N = 50
+	
 	for i in xrange(N):
 		angle = i*(360./N)
 		X_.append(sciint.rotate(X, angle, reshape=False))
-	X = np.reshape(np.stack(X_), [-1,28,28,1])
+	X = np.reshape(np.stack(X_), [N,28,28,1])
 	
 	V0 = np.random.randn(1,1,2*1,3).astype(np.float32)
 	B0 = np.random.randn(3).astype(np.float32)-0.5
@@ -691,4 +733,4 @@ if __name__ == '__main__':
 	#small_patch_test()
 	#complex_small_patch_test()
 	#dot_blade_test()
-
+	#Z_steer_comparison()
