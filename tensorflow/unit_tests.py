@@ -426,6 +426,15 @@ def complex_basis_test():
 		plt.draw()
 		raw_input(i*np.pi/10)
 
+def get_basis_taps():
+	k = 3
+	tap = np.random.randn(k)
+	W = np.zeros((k,k))
+	lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+	X, Y = np.meshgrid(lin, lin)
+	R = X**2 + Y**2
+	print R
+	
 if __name__ == '__main__':
 	#get_rotation_as_vectors_test()
 	#mutual_tile_test()
@@ -436,7 +445,8 @@ if __name__ == '__main__':
 	#gConv_grad_test()
 	#grad_descent_test()
 	#zConv_test()
-	complex_basis_test()
+	#complex_basis_test()
+	get_basis_taps()
 
 
 
