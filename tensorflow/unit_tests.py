@@ -426,8 +426,8 @@ def complex_basis_test():
 		plt.draw()
 		raw_input(i*np.pi/10)
 
-def get_basis_taps():
-	k = 3
+def get_basis_taps():############THIS IS ALL WRONG
+	k = 30
 	tap = np.random.randn(int(0.5*(k**2-1)))
 	
 	lin = np.linspace((1.-k)/2., (k-1.)/2., k)
