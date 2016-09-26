@@ -219,7 +219,7 @@ def get_basis_(k=3, n=2):
 
 def get_basis(k=3, n=2):
     """Return a learnable steerable basis"""
-    tap_length = int(0.5*(k**2-1))
+    tap_length = int(((k+1)*(k+3))/8)
     tap = get_weights([tap_length], name='tap')
     masks = get_basis_masks(k)
     
@@ -227,13 +227,14 @@ def get_basis(k=3, n=2):
     for i in xrange(tap_length):
         new_masks.append(masks[i]*tap[i])
     
-    Wx = tf.reshape(tf.add_n(new_masks, name='Wx'), [1,k,k,1])
-    Wy = tf.reshape(tf.image.rot90(Wx, k=1), [1,k,k,1])
+    W = tf.reshape(tf.add_n(new_masks, name='Wx'), [k,k,1])
+    Wx = tf.reshape(W, [k,k,1,1])
+    Wy = tf.reshape(tf.image.rot90(W), [k,k,1,1])
     return tf.concat(3, [Wx, Wy])
 
 def get_basis_masks(k):
     """Return tf cosine masks for custom tap learning (works with odd sizes)"""
-    tap_length = int(0.5*(k**2-1))
+    tap_length = int(((k+1)*(k+3))/8)
     lin = np.linspace((1.-k)/2., (k-1.)/2., k)
     X, Y = np.meshgrid(lin, lin)
     R = X**2 + Y**2

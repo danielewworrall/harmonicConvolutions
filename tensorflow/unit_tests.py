@@ -428,12 +428,21 @@ def complex_basis_test():
 
 def get_basis_taps():
 	k = 3
-	tap = np.random.randn(k)
-	W = np.zeros((k,k))
+	tap = np.random.randn(int(0.5*(k**2-1)))
+	
 	lin = np.linspace((1.-k)/2., (k-1.)/2., k)
 	X, Y = np.meshgrid(lin, lin)
-	R = X**2 + Y**2
-	print R
+	R = np.sqrt(X**2 + Y**2)
+	unique = np.unique(R)
+	
+	W = np.zeros((k,k))
+	for i in xrange(len(unique)):
+		mask = (R == unique[i])
+		W += mask*tap[i]*X
+
+	plt.figure(1)
+	plt.imshow(W, cmap='gray', interpolation='nearest')
+	plt.show()
 	
 if __name__ == '__main__':
 	#get_rotation_as_vectors_test()
