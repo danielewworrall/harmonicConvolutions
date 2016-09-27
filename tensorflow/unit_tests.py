@@ -426,8 +426,8 @@ def complex_basis_test():
 		plt.draw()
 		raw_input(i*np.pi/10)
 
-def get_basis_taps():############THIS IS ALL WRONG
-	k = 30
+def get_basis_taps():
+	k = 100
 	tap = np.random.randn(int(0.5*(k**2-1)))
 	
 	lin = np.linspace((1.-k)/2., (k-1.)/2., k)
@@ -438,8 +438,10 @@ def get_basis_taps():############THIS IS ALL WRONG
 	W = np.zeros((k,k))
 	for i in xrange(len(unique)):
 		mask = (R == unique[i])
-		W += mask*tap[i]*X
-
+		W += mask*tap[i]*X/R
+		
+	print np.std(W[:10,:10])
+	print np.std(W[45:55,45:55])
 	plt.figure(1)
 	plt.imshow(W, cmap='gray', interpolation='nearest')
 	plt.show()

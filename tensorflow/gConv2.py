@@ -241,7 +241,7 @@ def get_basis_masks(k):
     unique = np.unique(R)
     masks = []
     for i in xrange(tap_length):
-        masks.append(to_constant_variable((R == unique[i])*X))
+        masks.append(to_constant_variable((R == unique[i])*X/R))
     return masks
 
 def get_complex_basis(k=3, n=2, wrap=1.):

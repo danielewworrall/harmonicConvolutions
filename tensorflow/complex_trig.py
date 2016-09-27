@@ -27,7 +27,7 @@ def get_basis_taps(k=3):##################THIS IS ALL WRONG
 	
 	return (Wx, Wy)
 
-k = 100
+k = 10
 s = 0.1
 
 lin = np.linspace((1.-k)/2., (k-1.)/2., k)
