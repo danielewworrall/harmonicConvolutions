@@ -427,7 +427,7 @@ def complex_basis_test():
 		raw_input(i*np.pi/10)
 
 def get_basis_taps():
-	k = 100
+	k = 5
 	tap = np.random.randn(int(0.5*(k**2-1)))
 	
 	lin = np.linspace((1.-k)/2., (k-1.)/2., k)
@@ -438,14 +438,66 @@ def get_basis_taps():
 	W = np.zeros((k,k))
 	for i in xrange(len(unique)):
 		mask = (R == unique[i])
-		W += mask*tap[i]*X/R
-		
-	print np.std(W[:10,:10])
-	print np.std(W[45:55,45:55])
-	plt.figure(1)
-	plt.imshow(W, cmap='gray', interpolation='nearest')
-	plt.show()
+		W += mask*tap[i]*X/np.maximum(R,1.)
 	
+	N = 18
+	WT = np.flipud(W.T)
+	plt.figure(1)
+	plt.ion()
+	plt.show()
+	for i in xrange(N):
+		plt.cla()
+		theta = i*2.*np.pi/N
+		WR = np.cos(theta)*W + np.sin(theta)*WT
+		plt.imshow(WR, cmap='gray', interpolation='nearest')
+		plt.draw()
+		raw_input(theta)
+
+def get_complex_basis_taps():
+	k = 5
+	tap0 = np.random.randn(int(0.5*(k**2-1)))
+	tap1 = np.random.randn(int(0.5*(k**2-1)))
+	
+	lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+	X, Y = np.meshgrid(lin, lin)
+	R = np.sqrt(X**2 + Y**2)
+	unique = np.unique(R)
+	
+	W0 = np.zeros((k,k))
+	W1 = np.zeros((k,k))
+	for i in xrange(len(unique)):
+		mask = (R == unique[i])
+		W0 += mask*tap0[i]*X/np.maximum(R,1.)
+		W1 += mask*tap1[i]*X/np.maximum(R,1.)
+	
+	N = 20
+	W0_quad = np.flipud(W0.T)
+	W1_quad = np.flipud(W1.T)
+
+	plt.ion()
+	plt.show()
+	for i in xrange(N):
+		plt.cla()
+		theta = i*2.*np.pi/N
+		# Steerable bases
+		Wx = np.cos(theta)*W0 + np.sin(theta)*W0_quad
+		Wy = np.cos(theta)*W1 + np.sin(theta)*W1_quad
+		# With global rotation
+		#Wx_ = Wx*np.cos(theta) + Wy*np.sin(theta)
+		#Wy_ = Wx*np.sin(theta) - Wy*np.cos(theta)
+		#Wr = np.sqrt(Wx_**2 + Wy_**2)
+		#Wx = Wx_/Wr
+		#Wy = Wy_/Wr
+		plt.figure(1)
+		plt.imshow(Wx, cmap='gray', interpolation='nearest')
+		plt.figure(2)
+		plt.imshow(Wy, cmap='gray', interpolation='nearest')
+		plt.figure(3)
+		plt.quiver(Wx,Wy)
+		plt.draw()
+		raw_input(theta)
+
+
 if __name__ == '__main__':
 	#get_rotation_as_vectors_test()
 	#mutual_tile_test()
@@ -457,7 +509,8 @@ if __name__ == '__main__':
 	#grad_descent_test()
 	#zConv_test()
 	#complex_basis_test()
-	get_basis_taps()
+	#get_basis_taps()
+	get_complex_basis_taps()
 
 
 
