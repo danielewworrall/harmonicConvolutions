@@ -454,9 +454,11 @@ def get_basis_taps():
 		raw_input(theta)
 
 def get_complex_basis_taps():
-	k = 5
-	tap0 = np.random.randn(int(0.5*(k**2-1)))
-	tap1 = np.random.randn(int(0.5*(k**2-1)))
+	k = 3
+	#tap0 = np.random.randn(int(0.5*(k**2-1)))
+	#tap1 = np.random.randn(int(0.5*(k**2-1)))
+	tap0 = np.asarray([1,0.5,0.4])
+	tap1 = np.asarray([1,0.5,0.4])
 	
 	lin = np.linspace((1.-k)/2., (k-1.)/2., k)
 	X, Y = np.meshgrid(lin, lin)
@@ -467,8 +469,8 @@ def get_complex_basis_taps():
 	W1 = np.zeros((k,k))
 	for i in xrange(len(unique)):
 		mask = (R == unique[i])
-		W0 += mask*tap0[i]*X/np.maximum(R,1.)
-		W1 += mask*tap1[i]*X/np.maximum(R,1.)
+		W0 += mask*tap0[i]/np.maximum(R,1.)
+		W1 += mask*tap1[i]/np.maximum(R,1.)
 	
 	N = 20
 	W0_quad = np.flipud(W0.T)
@@ -479,20 +481,18 @@ def get_complex_basis_taps():
 	for i in xrange(N):
 		plt.cla()
 		theta = i*2.*np.pi/N
-		# Steerable bases
-		Wx = np.cos(theta)*W0 + np.sin(theta)*W0_quad
-		Wy = np.cos(theta)*W1 + np.sin(theta)*W1_quad
-		# With global rotation
-		#Wx_ = Wx*np.cos(theta) + Wy*np.sin(theta)
-		#Wy_ = Wx*np.sin(theta) - Wy*np.cos(theta)
-		#Wr = np.sqrt(Wx_**2 + Wy_**2)
-		#Wx = Wx_/Wr
-		#Wy = Wy_/Wr
-		plt.figure(1)
-		plt.imshow(Wx, cmap='gray', interpolation='nearest')
-		plt.figure(2)
-		plt.imshow(Wy, cmap='gray', interpolation='nearest')
-		plt.figure(3)
+		# Global rotation bases
+		Wx = W0*np.cos(theta)
+		Wy = W0*np.sin(theta)
+		Wr = np.sqrt(Wx**2 + Wy**2)
+		Wx = Wx/Wr
+		Wy = Wy/Wr
+		#plt.figure(1)
+		#plt.imshow(Wx, cmap='gray', interpolation='nearest')
+		#plt.figure(2)
+		#plt.imshow(Wy, cmap='gray', interpolation='nearest')
+		#plt.figure(3)
+		plt.imshow(Wr, cmap='jet', interpolation='nearest')
 		plt.quiver(Wx,Wy)
 		plt.draw()
 		raw_input(theta)

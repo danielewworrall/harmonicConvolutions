@@ -9,6 +9,7 @@ import scipy.linalg as scilin
 import tensorflow as tf
 
 
+####### Taco Cohen's stuff #######
 def gConv(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='gConv'):
     """Run a Taco Cohen G-convolution module"""
     V_ = get_rotation_stack(V, name=name+'stack')
@@ -41,6 +42,11 @@ def rotate_90_clockwise(V):
     V_ = tf.image.rot90(V, k=1)
     return tf.reshape(V_, [Vsh[0],Vsh[1],Vsh[2],Vsh[3]])
 
+####### My old stuff #######
+
+def gaussian_derivative(x,y,direction):
+    return -2*direction*np.exp(-(x**2 + y**2))
+
 def steer_conv(X, V, b=None, strides=(1,1,1,1), padding='VALID', k=3, n=2,
                name='steerConv'):
     Q = get_basis(k=k,n=n)
@@ -63,6 +69,55 @@ def equi_steer_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
     Y_blade = tf.nn.conv2d(Z, V_blade, strides=(1,1,1,1), padding='VALID', name=name+'1d')
     return Y_dot, Y_blade
 
+def get_basis_(k=3, n=2):
+    """Return a tensor of steerable filter bases"""
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+    x, y = np.meshgrid(lin, lin)
+    gdx = gaussian_derivative(x, y, x)
+    gdy = gaussian_derivative(x, y, y)
+    G0 = np.reshape(gdx/np.sqrt(np.sum(gdx**2)), [k,k,1,1])
+    G1 = np.reshape(gdy/np.sqrt(np.sum(gdy**2)), [k,k,1,1])
+    return to_constant_variable(np.concatenate([G0,G1], axis=3))
+
+def get_basis(k=3, n=2):
+    """Return a learnable steerable basis"""
+    tap_length = int(((k+1)*(k+3))/8)
+    tap = get_weights([tap_length], name='tap')
+    masks = get_basis_masks(k)
+    
+    new_masks = []
+    for i in xrange(tap_length):
+        new_masks.append(masks[i]*tap[i])
+    
+    Wx = tf.reshape(tf.add_n(new_masks, name='Wx'), [k,k,1,1])
+    Wy = tf.reverse(tf.transpose(Wx, perm=[1,0,2,3]), [False,True,False,False])
+    return tf.concat(3, [Wx, Wy])
+
+def get_basis_masks(k):
+    """Return tf cosine masks for custom tap learning (works with odd sizes)"""
+    tap_length = int(((k+1)*(k+3))/8)
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+    X, Y = np.meshgrid(lin, lin)
+    R = X**2 + Y**2
+    unique = np.unique(R)
+    
+    masks = []
+    for i in xrange(tap_length):
+        mask = (R == unique[i])*X/np.maximum(R,1.)
+        masks.append(to_constant_variable(mask))
+    return masks
+
+####### My new stuff #######
+
+def to_constant_variable(Q):
+    Q = tf.Variable(Q, trainable=False)
+    return tf.to_float(Q)
+
+def get_weights(filter_shape, W_init=None, collection=None, name=''):
+    if W_init == None:
+        W_init = tf.random_normal(filter_shape, stddev=0.01)
+    return tf.Variable(W_init, collections=collection, name=name)
+
 def equi_real_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
                     name='equiRealConv'):
     """Equivariant real convolution"""
@@ -75,7 +130,7 @@ def get_steerable_filter(V, n=2):
     """Return a steerable filter of n bases from the input V"""
     Vsh = V.get_shape().as_list()     # [tap_length,i,o]
     k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
-    masks = tf.reshape(get_basis_matrices(k), [k*k,Vsh[0]])
+    masks = tf.reshape(get_basis_matrices(k, order=1), [k*k,Vsh[0]])
     V = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]])
 
     Wx = tf.matmul(masks, V, name='Wx')
@@ -83,7 +138,11 @@ def get_steerable_filter(V, n=2):
     Wy = -tf.reverse(tf.transpose(Wx, perm=[1,0,2,3]), [False,True,False,False])
     return tf.concat(3, [Wx, Wy])
 
-def get_basis_matrices(k):
+def get_complex_steerable_filter(V, n=2):
+    """Return a 0th order complex steerable filter from input V"""
+    pass
+
+def get_basis_matrices(k, order=1):
     """Return tf cosine masks for custom tap learning (works with odd sizes)"""
     tap_length = int(((k+1)*(k+3))/8)
     lin = np.linspace((1.-k)/2., (k-1.)/2., k)
@@ -93,26 +152,16 @@ def get_basis_matrices(k):
     
     masks = []
     for i in xrange(tap_length):
-        mask = (R == unique[i])*X/np.maximum(R,1.)
+        if order == 0:
+            mask = (R == unique[i])/np.maximum(R,1.)
+        elif order == 1:
+            mask = (R == unique[i])*X/np.maximum(R,1.)
+        else:
+            print('Order not yet implemented')
+            sys.exit(1)
         masks.append(to_constant_variable(mask))
     masks = tf.pack(masks, axis=-1)
     return tf.reshape(masks, [k,k,tap_length])
-
-def equi_steer_conv_(X, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
-                    name='equisteerConv'):
-    """Steerable convolution returning max and argmax"""
-    Q = get_basis(k=k,n=n)
-    
-    Qsh = Q.get_shape().as_list()
-    Xsh = X.get_shape().as_list()
-    tile_shape = tf.pack([1,1,Xsh[3],1])
-    Q = tf.tile(Q, tile_shape, name='Q_tile')
-    V, V_ = dot_blade_filter(V)
-    
-    V_ = tf.concat(3, [V,V_])
-    Y = tf.nn.separable_conv2d(X, Q, V_, strides=strides, padding='VALID',
-                               name='sep_conv')
-    return Y
 
 def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
                        name='complexsteerconv'):
@@ -128,6 +177,56 @@ def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
     # Filter dot blade
     return complex_dot_blade(Y, V)
 
+def complex_relu(Z, b, eps=1e-4):
+    """Apply a ReLU to the modulus of the complex feature map"""
+    X, Y = Z
+    R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
+    Rb = tf.nn.bias_add(R,b)
+    c = tf.nn.relu(Rb)/R
+    X = X * c
+    Y = Y * c
+    return X, Y
+
+def get_complex_basis(k=3, n=2, wrap=1.):
+    """Return a tensor of complex steerable filter bases (X, Y)"""
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+    X, Y = np.meshgrid(lin, lin)
+    Y = -Y
+    X = tf.to_float(X)
+    Y = tf.to_float(Y)
+    
+    tap_length = int(((k+1)*(k+3))/8)
+    tap = get_weights([tap_length], name='tap')
+    masks = get_complex_basis_masks(k)
+    new_masks = []
+    for i in xrange(tap_length):
+        new_masks.append(masks[i]*tap[i])
+    modulus = tf.add_n(new_masks, name='modulus')
+    
+    phase = wrap*atan2(Y, X) 
+    Rcos = tf.reshape(modulus*tf.cos(phase), [k,k,1,1])
+    Rsin = tf.reshape(modulus*tf.sin(phase), [k,k,1,1])
+    X0, Y0 = Rcos, Rsin
+    X1, Y1 = -Rsin, Rcos
+    X = tf.concat(3, [X0,X1])
+    Y = tf.concat(3, [Y0,Y1])
+    return (X,Y)
+
+def get_complex_basis_masks(k):
+    """Return tf cosine masks for custom tap learning (works with odd sizes)"""
+    tap_length = int(((k+1)*(k+3))/8)
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+    X, Y = np.meshgrid(lin, lin)
+    R = X**2 + Y**2
+    unique = np.unique(R)
+    
+    masks = []
+    for i in xrange(tap_length):
+        mask = (R == unique[i])
+        masks.append(to_constant_variable(mask))
+    return masks
+
+## Do we need all this?
 def complex_dot_blade(Z, V, name='complexdotblade'):
     V_dot, V_blade = dot_blade_filter(V)
     Dx = tf.nn.conv2d(Z, V_dot, strides=(1,1,1,1), padding='VALID', name='Dx')
@@ -147,19 +246,6 @@ def complex_depthwise_conv(Z, W, strides=(1,1,1,1), padding='VALID',
     YV = tf.nn.depthwise_conv2d(Y, V, strides=strides, padding=padding, name='YV')
     return XU - YV
 
-def get_arg(Y):
-    """Get the argument of the steerable convolution"""
-    return atan2(Y[:,:,:,1,:],Y[:,:,:,0,:])
-
-def get_modulus(Y):
-    """Get the per-pixel modulus of a steerable convolution"""
-    return tf.sqrt(tf.reduce_sum(tf.pow(Y,2.), reduction_indices=3))
-
-def to_dot_blade(Y):
-    """Convert tensor to dot-blade form for modulus/argument extraction"""
-    Ysh = Y.get_shape().as_list()
-    return tf.reshape(Y, tf.pack([-1,Ysh[1],Ysh[2],2,Ysh[3]/2]))
-
 def dot_blade_filter(V):
     """Convert the [1,1,2i,o] filter to a dot-blade format size [1,1,2i,2o]"""
     V_ = tf.squeeze(V, squeeze_dims=[0,1])
@@ -171,12 +257,7 @@ def dot_blade_filter(V):
     V_blade = tf.transpose(V_blade, perm=[0,1,3,2])
     return V, V_blade
 
-def interleave(A,B):
-    """Interleave two 4D tensors along final axis"""
-    Ash = A.get_shape().as_list()
-    C = tf.pack([A,B], axis=-1)
-    return tf.reshape(C, tf.pack([Ash[0],Ash[1],Ash[2],Ash[3]*2]))
-
+## Not working yet
 def steer_pool(X):
     """Return the max and argmax over steering rotation"""
     R = tf.sqrt(tf.reduce_sum(tf.pow(X, 2.), reduction_indices=4))
@@ -222,129 +303,16 @@ def complex_maxpool2d(X, k=2):
     
     return U_, V_
 
-def complex_relu(Z, b, eps=1e-4):
-    """Apply a ReLU to the modulus of the complex feature map"""
-    X, Y = Z
-    R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
-    Rb = tf.nn.bias_add(R,b)
-    c = tf.nn.relu(Rb)/R
-    X = X * c
-    Y = Y * c
-    return X, Y
 
-def complex_relu_(Z, b, eps=1e-6):
-    """Apply a ReLU to the modulus of the complex feature map"""
-    X, Y = Z
-    R = tf.sqrt(tf.square(X) + tf.square(Y))
-    R = tf.maximum(R,eps)
-    X = X/R
-    Y = Y/R
-    c = tf.nn.relu(tf.nn.bias_add(R,b), name='relu')
-    X = c*X
-    Y = c*Y
-    return X, Y
 
-def get_basis_(k=3, n=2):
-    """Return a tensor of steerable filter bases"""
-    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
-    x, y = np.meshgrid(lin, lin)
-    gdx = gaussian_derivative(x, y, x)
-    gdy = gaussian_derivative(x, y, y)
-    G0 = np.reshape(gdx/np.sqrt(np.sum(gdx**2)), [k,k,1,1])
-    G1 = np.reshape(gdy/np.sqrt(np.sum(gdy**2)), [k,k,1,1])
-    return to_constant_variable(np.concatenate([G0,G1], axis=3))
 
-def get_basis(k=3, n=2):
-    """Return a learnable steerable basis"""
-    tap_length = int(((k+1)*(k+3))/8)
-    tap = get_weights([tap_length], name='tap')
-    masks = get_basis_masks(k)
-    
-    new_masks = []
-    for i in xrange(tap_length):
-        new_masks.append(masks[i]*tap[i])
-    
-    Wx = tf.reshape(tf.add_n(new_masks, name='Wx'), [k,k,1,1])
-    Wy = tf.reverse(tf.transpose(Wx, perm=[1,0,2,3]), [False,True,False,False])
-    return tf.concat(3, [Wx, Wy])
 
-def get_basis_masks(k):
-    """Return tf cosine masks for custom tap learning (works with odd sizes)"""
-    tap_length = int(((k+1)*(k+3))/8)
-    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
-    X, Y = np.meshgrid(lin, lin)
-    R = X**2 + Y**2
-    unique = np.unique(R)
-    
-    masks = []
-    for i in xrange(tap_length):
-        mask = (R == unique[i])*X/np.maximum(R,1.)
-        masks.append(to_constant_variable(mask))
-    return masks
 
-def get_complex_basis_(k=3, n=2, wrap=1.):
-    """Return a tensor of complex steerable filter bases (X, Y)"""
-    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
-    X, Y = np.meshgrid(lin, lin)
-    Y = np.flipud(Y)
-    X = tf.to_float(X)
-    Y = tf.to_float(Y)
-    R = tf.sqrt(X**2 + Y**2)
-    modulus = R*tf.exp(-R**2)
-    phase = wrap*atan2(Y, X) 
-    Rcos = tf.reshape(modulus*tf.cos(phase), [k,k,1,1])
-    Rsin = tf.reshape(modulus*tf.sin(phase), [k,k,1,1])
-    X0, Y0 = Rcos, Rsin
-    X1, Y1 = -Rsin, Rcos
-    X = tf.concat(3, [X0,X1])
-    Y = tf.concat(3, [Y0,Y1])
-    return (X,Y)
 
-def get_complex_basis(k=3, n=2, wrap=1.):
-    """Return a tensor of complex steerable filter bases (X, Y)"""
-    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
-    X, Y = np.meshgrid(lin, lin)
-    Y = -Y
-    X = tf.to_float(X)
-    Y = tf.to_float(Y)
-    
-    tap_length = int(((k+1)*(k+3))/8)
-    tap = get_weights([tap_length], name='tap')
-    masks = get_complex_basis_masks(k)
-    new_masks = []
-    for i in xrange(tap_length):
-        new_masks.append(masks[i]*tap[i])
-    modulus = tf.add_n(new_masks, name='modulus')
-    
-    phase = wrap*atan2(Y, X) 
-    Rcos = tf.reshape(modulus*tf.cos(phase), [k,k,1,1])
-    Rsin = tf.reshape(modulus*tf.sin(phase), [k,k,1,1])
-    X0, Y0 = Rcos, Rsin
-    X1, Y1 = -Rsin, Rcos
-    X = tf.concat(3, [X0,X1])
-    Y = tf.concat(3, [Y0,Y1])
-    return (X,Y)
 
-def get_complex_basis_masks(k):
-    """Return tf cosine masks for custom tap learning (works with odd sizes)"""
-    tap_length = int(((k+1)*(k+3))/8)
-    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
-    X, Y = np.meshgrid(lin, lin)
-    R = X**2 + Y**2
-    unique = np.unique(R)
-    
-    masks = []
-    for i in xrange(tap_length):
-        mask = (R == unique[i])
-        masks.append(to_constant_variable(mask))
-    return masks
 
-def to_constant_variable(Q):
-    Q = tf.Variable(Q, trainable=False)
-    return tf.to_float(Q)
 
-def gaussian_derivative(x,y,direction):
-    return -2*direction*np.exp(-(x**2 + y**2))
+####### Very olde #######
 
 def gConv_(X, filter_size, n_filters, name=''):
     """Create a group convolutional module"""
@@ -532,55 +500,9 @@ def modulus(x,y):
     """Perform x % y and maintain sgn(x) = sgn(y)"""
     return x - y*tf.floordiv(x, y)
 
-def get_weights(filter_shape, W_init=None, collection=None, name=''):
-    if W_init == None:
-        W_init = tf.random_normal(filter_shape, stddev=0.01)
-    return tf.Variable(W_init, collections=collection, name=name)
 
-def Q_init():
-    Q = getQ()
-    P = permuation_matrix()
-    Q_ = np.real(np.dot(Q,P))
-    return np.reshape(Q_, [3,3,1,9]).astype(np.float32)
 
-def getQ():
-    n = 9
-    Q = np.eye(n, dtype=np.complex)
-    Q[:n-1,:n-1] = scilin.dft(n-1)/(np.sqrt(n-1.))
-    P = permuteFourier(Q)
-    u = np.asarray([[1,1],[1j,-1j]])
-    U = np.eye(n, dtype=np.complex)
-    U[2:4,2:4] = u
-    U[4:6,4:6] = u
-    U[6:8,6:8] = u
-    Q = np.real(np.dot(U,P))
-    return Q
 
-def permuteFourier(F):
-    P = np.zeros((9,9))
-    P[0,0] = 1
-    P[1,4] = 1
-    P[2,1] = 1
-    P[3,7] = 1
-    P[4,2] = 1
-    P[5,6] = 1
-    P[6,3] = 1
-    P[7,5] = 1
-    P[8,8] = 1
-    return np.dot(P, F)
-
-def permuation_matrix():
-    P = np.zeros((9,9))
-    P[0,0] = 1
-    P[1,1] = 1
-    P[2,2] = 1
-    P[3,5] = 1
-    P[4,8] = 1
-    P[5,7] = 1
-    P[6,6] = 1
-    P[7,3] = 1
-    P[8,4] = 1
-    return P
 
 
 
