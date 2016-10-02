@@ -279,32 +279,32 @@ def deep_steer(x, n_filters, n_classes, bs, phase_train, eps=1e-2):
 	
 	# Convolution Layer
 	rc1 = equi_real_conv(x, weights['w1'])
-	#rc1 = complex_batch_norm(rc1, phase_train)
+	rc1 = complex_batch_norm(rc1, phase_train)
 	rc1 = complex_relu(rc1, biases['b1'])
 	
-	cc2 = complex_steer_conv(rc1, weights['w2'])
-	#cc2 = complex_batch_norm(cc2, phase_train)
+	cc2 = equi_complex_conv(rc1, weights['w2'])
+	cc2 = complex_batch_norm(cc2, phase_train)
 	cc2 = complex_relu(cc2, biases['b2'])
 	
 	
-	cc3 = complex_steer_conv(cc2, weights['w3'], strides=(1,2,2,1))
-	#cc3 = complex_batch_norm(cc3, phase_train)
+	cc3 = equi_complex_conv(cc2, weights['w3'], strides=(1,2,2,1))
+	cc3 = complex_batch_norm(cc3, phase_train)
 	cc3 = complex_relu(cc3, biases['b3'])
 	
-	cc4 = complex_steer_conv(cc3, weights['w4'])
-	#cc4 = complex_batch_norm(cc4, phase_train)
+	cc4 = equi_complex_conv(cc3, weights['w4'])
+	cc4 = complex_batch_norm(cc4, phase_train)
 	cc4 = complex_relu(cc4, biases['b4'])
 	
-	cc5 = complex_steer_conv(cc4, weights['w5'])	
-	#cc5 = complex_batch_norm(cc5, phase_train)
+	cc5 = equi_complex_conv(cc4, weights['w5'])	
+	cc5 = complex_batch_norm(cc5, phase_train)
 	cc5 = complex_relu(cc5, biases['b5'])
 	
-	cc6 = complex_steer_conv(cc5, weights['w6'])
-	#cc6 = complex_batch_norm(cc6, phase_train)
+	cc6 = equi_complex_conv(cc5, weights['w6'])
+	cc6 = complex_batch_norm(cc6, phase_train)
 	cc6 = complex_relu(cc6, biases['b6'])
 	
 	
-	cc7 = complex_steer_conv(cc6, weights['w7'])
+	cc7 = equi_complex_conv(cc6, weights['w7'])
 	nlx, nly = cc7
 	
 	R = tf.sqrt(tf.square(nlx) + tf.square(nly) + eps)
@@ -370,28 +370,25 @@ def ring_rotation(X, n=50):
 		X_[i,...] = cv2.warpAffine(X, M, (Xsh[1],Xsh[0])).reshape(Xsh)
 	return X_.reshape(-1,784)
 
-def run():
+def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30):
 	#mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 	mnist_train = np.load('./data/mnist_rotation_new/rotated_train.npz')
 	mnist_valid = np.load('./data/mnist_rotation_new/rotated_valid.npz')
 	mnist_test = np.load('./data/mnist_rotation_new/rotated_test.npz')
 
 	# Parameters
-	lr = 1e-2
-	batch_size = 250
-	dataset_size = 50000
-	valid_size = 5000
-	n_epochs = 500
-	display_step = dataset_size / batch_size
+	lr = lr
+	batch_size = batch_size
+	n_epochs = n_epochs
 	save_step = 100
-	model = 'deep_steer'
-	test_rot = True
+	model = model
 	
 	# Network Parameters
 	n_input = 784 # MNIST data input (img shape: 28*28)
 	n_classes = 10 # MNIST total classes (0-9 digits)
 	dropout = 0.75 # Dropout, probability to keep units
-	n_filters = 20
+	n_filters = n_filters
+	dataset_size = 50000	#CHANGE
 	
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [batch_size, n_input])
@@ -484,7 +481,7 @@ def run():
 			tacc_total += tacc
 		tacc_total = tacc_total/(i+1.)
 		print('Test accuracy: %f' % (tacc_total,))
-
+	return tacc_total
 
 def forward():
 	"""Experiment to demonstrate the equivariance of the convolution"""
@@ -705,20 +702,22 @@ def complex_steer_test():
 def complex_small_patch_test():
 	"""Test the steer_conv on small rotated patches"""
 	N = 50
-	X = np.asarray([1.,1.,1.,0.,0.,0.,-1.,-1.,-1.])
-	Q = get_Q()
+	k=3
+	X = np.random.randn(k**2)
+	Q = get_Q(k=k)
+
 	X = gen_data(X, N, Q)
 	X = np.reshape(X, [N,3,3,1])
 	
-	x = tf.placeholder('float', [None,3,3,1], name='x')
-	v0 = tf.placeholder('float', [1,1,2,1], name='v0')
+	x = tf.placeholder('float', [None,k,k,1], name='x')
+	v0 = tf.placeholder('float', [3,1,1], name='v0')
 	v1 = tf.placeholder('float', [1,1,2,1], name='v1')
 	b0 = tf.placeholder('float', [1,], name='b0')
-	esc1 = equi_steer_conv(x, v0)
+	esc1 = equi_real_conv(x, v0, order=1)
 	esc1 = complex_relu(esc1, b0)
-	z = complex_steer_conv(esc1, v1, k=1)
+	z = equi_complex_conv(esc1, v1, k=1)
 	
-	V0 = np.random.randn(1,1,2,1)
+	V0 = np.random.randn(3,1,1)
 	V1 = np.random.randn(1,1,2,1)
 	B0 = np.random.rand(1)
 
@@ -749,12 +748,12 @@ def small_patch_test():
 	
 	x = tf.placeholder('float', [None,3,3,1], name='x')
 	v = tf.placeholder('float', [3,1,1], name='v')
-	r, a = equi_real_conv(x, v)
+	z = equi_real_conv(x, v)
 	print V
 	with tf.Session() as sess:
 		init_op = tf.initialize_all_variables()
 		sess.run(init_op)
-		X, Y = sess.run([r,a], feed_dict={x : X, v : V})
+		X, Y = sess.run(z, feed_dict={x : X, v : V})
 	
 	R = np.sqrt(X**2 + Y**2)
 	A = np.arctan2(Y, X)

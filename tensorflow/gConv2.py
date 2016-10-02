@@ -118,29 +118,49 @@ def get_weights(filter_shape, W_init=None, collection=None, name=''):
         W_init = tf.random_normal(filter_shape, stddev=0.01)
     return tf.Variable(W_init, collections=collection, name=name)
 
-def equi_real_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
+def equi_real_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
                     name='equiRealConv'):
     """Equivariant real convolution"""
     Xsh = tf.shape(X)
-    Q = get_steerable_filter(V, n)
+    Q = get_steerable_filter(V, order)
     Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
     return tf.split(3, 2, Z)
+
+def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
+                       name='complexsteerconv'):
+    """Simpler complex steerable filter returning max real phase and modulus"""
+    Zsh = Z[0].get_shape().as_list()
+    tile_shape = tf.pack([1,1,Zsh[3],1])
+    wrap = 0.
+    Q = get_complex_basis(k=k, order=order, wrap=wrap)
     
-def get_steerable_filter(V, n=2):
-    """Return a steerable filter of n bases from the input V"""
+    Q = (tf.tile(Q[0], tile_shape), tf.tile(Q[1], tile_shape))
+    # Filter channels
+    Y = complex_depthwise_conv(Z, Q, strides=strides, padding=padding, name='cd')
+    # Filter dot blade
+    return complex_dot_blade(Y, V)
+
+def complex_relu(Z, b, eps=1e-4):
+    """Apply a ReLU to the modulus of the complex feature map"""
+    X, Y = Z
+    R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
+    Rb = tf.nn.bias_add(R,b)
+    c = tf.nn.relu(Rb)/R
+    X = X * c
+    Y = Y * c
+    return X, Y
+
+def get_steerable_filter(V, order=1):
+    """Return a steerable filter of order n from the input V"""
     Vsh = V.get_shape().as_list()     # [tap_length,i,o]
     k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
-    masks = tf.reshape(get_basis_matrices(k, order=1), [k*k,Vsh[0]])
+    masks = tf.reshape(get_basis_matrices(k, order=order), [k*k,Vsh[0]])
     V = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]])
 
     Wx = tf.matmul(masks, V, name='Wx')
     Wx = tf.reshape(Wx, [k,k,Vsh[1],Vsh[2]])
     Wy = -tf.reverse(tf.transpose(Wx, perm=[1,0,2,3]), [False,True,False,False])
     return tf.concat(3, [Wx, Wy])
-
-def get_complex_steerable_filter(V, n=2):
-    """Return a 0th order complex steerable filter from input V"""
-    pass
 
 def get_basis_matrices(k, order=1):
     """Return tf cosine masks for custom tap learning (works with odd sizes)"""
@@ -163,31 +183,30 @@ def get_basis_matrices(k, order=1):
     masks = tf.pack(masks, axis=-1)
     return tf.reshape(masks, [k,k,tap_length])
 
-def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, n=2,
-                       name='complexsteerconv'):
-    """Simpler complex steerable filter returning max real phase and modulus"""
+def equi_complex_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, order=0,
+                      name='equiComplexConv'):
     Zsh = Z[0].get_shape().as_list()
     tile_shape = tf.pack([1,1,Zsh[3],1])
     wrap = 0.
-    Q = get_complex_basis(k=k, n=n, wrap=wrap)
+    Q = get_complex_basis(k=k, order=order, wrap=wrap)
     
-    Q = (tf.tile(Q[0], tile_shape), tf.tile(Q[1], tile_shape))
+    Q = (tf.tile(Q[0], tile_shape), -tf.tile(Q[1], tile_shape))
     # Filter channels
     Y = complex_depthwise_conv(Z, Q, strides=strides, padding=padding, name='cd')
     # Filter dot blade
     return complex_dot_blade(Y, V)
 
-def complex_relu(Z, b, eps=1e-4):
-    """Apply a ReLU to the modulus of the complex feature map"""
-    X, Y = Z
-    R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
-    Rb = tf.nn.bias_add(R,b)
-    c = tf.nn.relu(Rb)/R
-    X = X * c
-    Y = Y * c
-    return X, Y
+def get_steerable_complex_filter(V, order=0):
+    """Return a steerable filter of order n from the input V"""
+    Vsh = V.get_shape().as_list()     # [tap_length,i,o]
+    k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
+    masks = tf.reshape(get_basis_matrices(k, order=order), [k*k,Vsh[0]])
+    
+    V = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]])
+    Wr = tf.matmul(masks, V, name='Wx')
+    return tf.reshape(Wr, [k,k,Vsh[1],Vsh[2]])
 
-def get_complex_basis(k=3, n=2, wrap=1.):
+def get_complex_basis(k=3, order=2, wrap=1.):
     """Return a tensor of complex steerable filter bases (X, Y)"""
     lin = np.linspace((1.-k)/2., (k-1.)/2., k)
     X, Y = np.meshgrid(lin, lin)
