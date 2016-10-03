@@ -255,7 +255,8 @@ def deep_Z(x, n_filters, n_classes, bs, phase_train):
 def deep_steer(x, n_filters, n_classes, bs, phase_train, eps=1e-2):
 	# Store layers weight & bias
 	weights = {
-		'w1' : get_weights([3,1,n_filters], name='W1'),
+		'w1' : [get_weights([3,1,n_filters], name='W1_0'),
+				get_weights([3,1,n_filters], name='W1_1')],
 		'w2' : get_weights([1,1,2*n_filters,n_filters], name='W2'),
 		'w3' : get_weights([1,1,2*n_filters,n_filters], name='W3'),
 		'w4' : get_weights([1,1,2*n_filters,n_filters], name='W4'),
@@ -273,35 +274,37 @@ def deep_steer(x, n_filters, n_classes, bs, phase_train, eps=1e-2):
 		'b6': tf.Variable(tf.constant(1e-2, shape=[n_filters]), name='b6'),
 		'b7': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7'),
 	}
+	nonlinearity = complex_softplus
 	
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
 	
 	# Convolution Layer
 	rc1 = equi_real_conv(x, weights['w1'])
-	rc1 = complex_batch_norm(rc1, phase_train)
-	rc1 = complex_relu(rc1, biases['b1'])
+	#rc1 = complex_batch_norm(rc1, phase_train)
+	rc1 = nonlinearity(rc1, biases['b1'], order=1)
+	rc1 = rc1[1:]
 	
 	cc2 = equi_complex_conv(rc1, weights['w2'])
-	cc2 = complex_batch_norm(cc2, phase_train)
-	cc2 = complex_relu(cc2, biases['b2'])
+	#cc2 = complex_batch_norm(cc2, phase_train)
+	cc2 = nonlinearity(cc2, biases['b2'])
 	
 	
 	cc3 = equi_complex_conv(cc2, weights['w3'], strides=(1,2,2,1))
-	cc3 = complex_batch_norm(cc3, phase_train)
-	cc3 = complex_relu(cc3, biases['b3'])
+	#cc3 = complex_batch_norm(cc3, phase_train)
+	cc3 = nonlinearity(cc3, biases['b3'])
 	
 	cc4 = equi_complex_conv(cc3, weights['w4'])
-	cc4 = complex_batch_norm(cc4, phase_train)
-	cc4 = complex_relu(cc4, biases['b4'])
+	#cc4 = complex_batch_norm(cc4, phase_train)
+	cc4 = nonlinearity(cc4, biases['b4'])
 	
 	cc5 = equi_complex_conv(cc4, weights['w5'])	
-	cc5 = complex_batch_norm(cc5, phase_train)
-	cc5 = complex_relu(cc5, biases['b5'])
+	#cc5 = complex_batch_norm(cc5, phase_train)
+	cc5 = nonlinearity(cc5, biases['b5'])
 	
 	cc6 = equi_complex_conv(cc5, weights['w6'])
-	cc6 = complex_batch_norm(cc6, phase_train)
-	cc6 = complex_relu(cc6, biases['b6'])
+	#cc6 = complex_batch_norm(cc6, phase_train)
+	cc6 = nonlinearity(cc6, biases['b6'])
 	
 	
 	cc7 = equi_complex_conv(cc6, weights['w7'])
@@ -370,7 +373,7 @@ def ring_rotation(X, n=50):
 		X_[i,...] = cv2.warpAffine(X, M, (Xsh[1],Xsh[0])).reshape(Xsh)
 	return X_.reshape(-1,784)
 
-def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30):
+def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, trial_num='N'):
 	#mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 	mnist_train = np.load('./data/mnist_rotation_new/rotated_train.npz')
 	mnist_valid = np.load('./data/mnist_rotation_new/rotated_valid.npz')
@@ -388,7 +391,7 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30)
 	n_classes = 10 # MNIST total classes (0-9 digits)
 	dropout = 0.75 # Dropout, probability to keep units
 	n_filters = n_filters
-	dataset_size = 50000	#CHANGE
+	dataset_size = 10000
 	
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [batch_size, n_input])
@@ -461,7 +464,7 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30)
 				vacc_total += vacc_
 			vacc_total = vacc_total/(i+1.)		
 
-			print "[" + str(epoch) + \
+			print "[" + str(trial_num),str(epoch) + \
 				"], Minibatch Loss: " + \
 				"{:.6f}".format(cost_total) + ", Train Acc: " + \
 				"{:.5f}".format(acc_total) + ", Time: " + \
@@ -857,7 +860,7 @@ def batch_norm(x, n_out, phase_train, scope='bn'):
 
 
 if __name__ == '__main__':
-	run()
+	run(model='deep_steer', lr=1e-2, batch_size=132, n_epochs=500, n_filters=30)
 	#forward()
 	#angular()
 	#real_steer_comparison()
