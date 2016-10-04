@@ -126,6 +126,22 @@ def equi_real_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
     Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
     return tf.split(3, 2*order+1, Z)
 
+def equi_real_conv_(X, V, theta_c, strides=(1,1,1,1), padding='VALID', k=3,
+                    order=1, name='equiRealConv'):
+    """Equivariant real convolution"""
+    Xsh = tf.shape(X)
+    Q = get_steerable_filter_(V, order, theta_c=theta_c)
+    Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
+    return tf.split(3, 2*order+1, Z)
+
+def stack_moduli(Z, eps=1e-2):
+    """Stack the moduli of the filter responses"""
+    R = []
+    R.append(Z[0])
+    for i in xrange(len(Z)/2):
+        R.append(tf.sqrt(tf.square(Z[2*i+1]) + tf.square(Z[2*i+2]) + eps))
+    return tf.pack(R, 3)
+
 def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
                        name='complexsteerconv'):
     """Simpler complex steerable filter returning max real phase and modulus"""
@@ -139,6 +155,26 @@ def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
     Y = complex_depthwise_conv(Z, Q, strides=strides, padding=padding, name='cd')
     # Filter dot blade
     return complex_dot_blade(Y, V)
+
+def conv_catenation(conv_list):
+    """Combine the results for a series of convolutions"""
+    order = len(conv_list)
+    output = []
+    for i in arange(order):
+        if i == 0:
+            responses = []
+            for response in conv_list:
+                responses.append(response[0])
+            output.append(tf.concat(3,responses))
+        else:
+            responsex = []
+            responsey = []
+            for response in conv_list:
+                responsex.append(response[2*i-1])
+                responsey.append(response[2*i])
+            output.append(tf.concat(3,responsex))
+            output.append(tf.concat(3,responsey))
+    return output
 
 def complex_relu(Z, b, order=1, eps=1e-4):
     """Apply a ReLU to the modulus of the complex feature map"""
@@ -172,13 +208,47 @@ def complex_softplus(Z, b, order=1, eps=1e-4):
         Z_.append(Y * c)
     return Z_
 
+def complex_GAP(Z, W):
+    """Take the average of a set of feature maps over the spatial dimensions
+    and return the real part of a fully-connected complex transformation"""
+    X, Y = Z
+    R, I = W
+    X = tf.reduce_mean(X, reduction_indices=[1,2])
+    Y = tf.reduce_mean(Y, reduction_indices=[1,2])
+    return tf.matmul(X, R) + tf.matmul(Y, I)
+    
 def get_steerable_filter(V, order=1):
     """Return a steerable filter up to order n from the input V"""
     Vsh = V[0].get_shape().as_list()     # [tap_length,i,o]
     k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
     masks = {}
     for i in xrange(order + 1):
-        masks[i] = tf.reshape(get_basis_matrices(k, order=i), [k*k,Vsh[0]])
+        masks[i] = tf.reshape(get_basis_matrices(k, order=i), [k*k,Vsh[0]-(i>0)])
+    
+    W = []
+    V0 = tf.reshape(V[0], [Vsh[0],Vsh[1]*Vsh[2]])
+    W.append(tf.reshape(tf.matmul(masks[0], V0, name='Wx'), [k,k,Vsh[1],Vsh[2]]))
+    for i in xrange(order):
+        ord_ = str(i+1)
+        Vi = tf.reshape(V[i+1], [Vsh[0]-1,Vsh[1]*Vsh[2]])
+        Wx = tf.matmul(masks[i+1], Vi, name='Wx')
+        W.append(tf.reshape(Wx, [k,k,Vsh[1],Vsh[2]]))
+        W.append(-tf.reverse(tf.transpose(W[-1], perm=[1,0,2,3]), [False,True,False,False]))
+    return tf.concat(3, W)
+
+def get_steerable_filter_(V, order=1, theta_c=None):
+    """Return a steerable filter up to order n from the input V"""
+    if order > 0:
+        assert theta_c is not None
+    
+    Vsh = V[0].get_shape().as_list()     # [tap_length,i,o]
+    k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
+    masks = {}
+    for i in xrange(order + 1):
+        # Get mask for angles
+        mask = tf.reshape(get_theta_matrices(k), [k*k,Vsh[0]])
+        # Manipulate angles before applying cosine
+        masks[i] = tf.cos(i*mask)
     
     W = []
     V0 = tf.reshape(V[0], [Vsh[0],Vsh[1]*Vsh[2]])
@@ -186,22 +256,12 @@ def get_steerable_filter(V, order=1):
     for i in xrange(order):
         ord_ = str(i+1)
         Vi = tf.reshape(V[i+1], [Vsh[0],Vsh[1]*Vsh[2]])
-        Wx = tf.matmul(masks[i+1], Vi, name='Wx')
+        Wx_cos = tf.matmul(tf.cos(masks[i+1]), Vi, name='Wxcos')
+        Wx_sin = tf.matmul(tf.sin(masks[i+1]), Vi, name='Wxsin')
+        theta_ci = tf.reshape(theta_c[i], [Vsh[1]*Vsh[2]])
+        Wx = tf.cos(theta_ci)*Wx_cos - tf.sin(theta_ci)*Wx_sin
         W.append(tf.reshape(Wx, [k,k,Vsh[1],Vsh[2]]))
         W.append(-tf.reverse(tf.transpose(W[-1], perm=[1,0,2,3]), [False,True,False,False]))
-    return tf.concat(3, W)
-
-def get_steerable_filter_(V):
-    """Return a steerable filter of order n from the input V"""
-    Vsh = V[0].get_shape().as_list()     # [tap_length,i,o]
-    k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
-    masks = tf.reshape(get_basis_matrices(k, order=order), [k*k,Vsh[0]])
-    
-    W = []
-    Vi = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]])
-    Wx = tf.matmul(masks, Vi, name='Wx')
-    W.append(tf.reshape(Wx, [k,k,Vsh[1],Vsh[2]]))
-    W.append(-tf.reverse(tf.transpose(W[-1], perm=[1,0,2,3]), [False,True,False,False]))
     return tf.concat(3, W)
 
 def get_basis_matrices(k, order=1):
@@ -209,19 +269,34 @@ def get_basis_matrices(k, order=1):
     tap_length = int(((k+1)*(k+3))/8)
     lin = np.linspace((1.-k)/2., (k-1.)/2., k)
     X, Y = np.meshgrid(lin, lin)
-    R = X**2 + Y**2
+    R = np.sqrt(X**2 + Y**2)
     unique = np.unique(R)
-    
+    theta = np.arctan2(-Y, X)
+
     masks = []
     for i in xrange(tap_length):
         if order == 0:
-            mask = (R == unique[i])/np.maximum(R,1.)
-        elif order == 1:
-            mask = (R == unique[i])*X/np.maximum(R,1.)
-        else:
-            print('Order not yet implemented')
-            sys.exit(1)
-        masks.append(to_constant_variable(mask))
+            mask = (R == unique[i])*1.
+            masks.append(to_constant_variable(mask))
+        elif order > 0:
+            if unique[i] != 0.:
+                mask = (R == unique[i])*np.cos(order*theta)
+                masks.append(to_constant_variable(mask))
+    masks = tf.pack(masks, axis=-1)
+    return tf.reshape(masks, [k,k,tap_length-(order>0)])
+
+def get_theta_matrices(k):
+    """Return tf cosine masks for custom tap learning (works with odd sizes)"""
+    tap_length = int(((k+1)*(k+3))/8)
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+    X, Y = np.meshgrid(lin, lin)
+    R = X**2 + Y**2
+    unique = np.unique(R)
+    theta = np.arctan2(-Y, X)
+    
+    masks = []
+    for i in xrange(tap_length):
+        masks.append(to_constant_variable((R == unique[i])*theta))
     masks = tf.pack(masks, axis=-1)
     return tf.reshape(masks, [k,k,tap_length])
 
@@ -374,6 +449,19 @@ def complex_maxpool2d(X, k=2):
 
 
 ####### Very olde #######
+
+def get_steerable_filter_asdfghjkj(V):
+    """Return a steerable filter of order n from the input V"""
+    Vsh = V[0].get_shape().as_list()     # [tap_length,i,o]
+    k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
+    masks = tf.reshape(get_basis_matrices(k, order=order), [k*k,Vsh[0]])
+    
+    W = []
+    Vi = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]])
+    Wx = tf.matmul(masks, Vi, name='Wx')
+    W.append(tf.reshape(Wx, [k,k,Vsh[1],Vsh[2]]))
+    W.append(-tf.reverse(tf.transpose(W[-1], perm=[1,0,2,3]), [False,True,False,False]))
+    return tf.concat(3, W)
 
 def gConv_(X, filter_size, n_filters, name=''):
     """Create a group convolutional module"""

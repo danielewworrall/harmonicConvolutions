@@ -12,13 +12,13 @@ def random_independent(n_trials=24):
 	y_best = 0.
 	best_params = {}
 	for i in xrange(n_trials):
-		lr = log_uniform_rand(2e-1, 1e-3)
+		lr = log_uniform_rand(2e-2, 1e-3)
 		batch_size = int(uniform_rand(50, 500))
 		n_epochs = int(uniform_rand(100,500))
 		n_filters = int(uniform_rand(10,40))
 		print lr, batch_size, n_epochs, n_filters
 		y = run(model='deep_steer', lr=lr, batch_size=batch_size, 
-			n_epochs=n_epochs, n_filters=n_filters)
+			n_epochs=n_epochs, n_filters=n_filters, trial_num=i)
 		if y > y_best:
 			y_best = y
 			best_params['lr'] = lr
@@ -50,7 +50,7 @@ def binary_thinning(n_trials=256):
 	params = {}
 	for trial in xrange(n_trials):
 		params[trial] = {}
-		params[trial]['lr'] = log_uniform_rand(2e-1, 1e-3)
+		params[trial]['lr'] = log_uniform_rand(5e-2, 1e-4)
 		params[trial]['batch_size'] = int(uniform_rand(50, 500))
 		params[trial]['n_filters'] = int(uniform_rand(10,40))
 	
@@ -96,4 +96,5 @@ def log_uniform_rand(min_, max_):
 
 
 if __name__ == '__main__':
-	binary_thinning(64)
+	random_independent()
+	#binary_thinning(64)

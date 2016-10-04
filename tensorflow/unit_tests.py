@@ -455,10 +455,10 @@ def get_basis_taps():
 
 def get_complex_basis_taps():
 	k = 3
-	#tap0 = np.random.randn(int(0.5*(k**2-1)))
-	#tap1 = np.random.randn(int(0.5*(k**2-1)))
-	tap0 = np.asarray([1,0.5,0.4])
-	tap1 = np.asarray([1,0.5,0.4])
+	tap0 = np.random.randn(int(0.5*(k**2-1)))
+	tap1 = np.random.randn(int(0.5*(k**2-1)))
+	#tap0 = np.asarray([1,0.5,0.4])
+	#tap1 = np.asarray([1,0.5,0.4])
 	
 	lin = np.linspace((1.-k)/2., (k-1.)/2., k)
 	X, Y = np.meshgrid(lin, lin)
