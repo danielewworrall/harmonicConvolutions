@@ -40,6 +40,15 @@ def stack_moduli(Z, eps=1e-3):
         R.append(tf.sqrt(tf.square(Z[2*i+1]) + tf.square(Z[2*i+2]) + eps))
     return tf.concat(3, R)
 
+def sum_moduli(Z, eps=1e-3):
+    """Stack the moduli of the filter responses. Z is the output of a
+    real_equi_conv."""
+    R = []
+    R.append(Z[0])
+    for i in xrange(len(Z)/2):
+        R.append(tf.sqrt(tf.square(Z[2*i+1]) + tf.square(Z[2*i+2]) + eps))
+    return tf.add_n(R)
+
 ##### NONLINEARITIES #####
 # Just use the phase_invariant_relu for now
 def phase_invariant_relu(Z, b, order=1, eps=1e-3):

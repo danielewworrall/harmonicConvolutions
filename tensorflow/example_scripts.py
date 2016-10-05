@@ -105,6 +105,57 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	out = tf.nn.bias_add(tf.matmul(fc, weights['out']), biases['out'])
 	return out
 
+def conv_linear_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
+	"""A slight variation on the conv_so2 architecture, where the equi real conv
+	is pooled then summed then passed through a nonlinearity. Hopefully this
+	setup should be more ameanable to resnet style blocks."""
+	# Store layers weight & bias
+	order = 3
+	nf = n_filters
+	
+	weights = {
+		'w1' : get_weights_list([3,2,2,2], 1, nf, name='W1'),
+		'w2' : get_weights_list([3,2,2,2], nf, nf, name='W2'),
+		'w3' : get_weights_list([3,2,2,2], nf, nf, name='W3'),
+		'w4' : get_weights([nf*7*7, 500], name='W4'),
+		'out': get_weights([500, n_classes], name='out')
+	}
+	
+	biases = {
+		'b1' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b1'),
+		'b2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b2'),
+		'b3' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3'),
+		'b4': tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
+		'out': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
+	}
+	# Reshape input picture
+	x = tf.reshape(x, shape=[bs, 28, 28, 1])
+	
+	# Convolutional Layers
+	re1 = equi_real_conv(x, weights['w1'], order=order, padding='SAME')
+	re1 = tf.nn.bias_add(sum_moduli(re1), biases['b1']),
+	re1 = tf.nn.relu(re1)
+	
+	re2 = equi_real_conv(re1, weights['w2'], order=order, padding='SAME')
+	re2 = tf.nn.bias_add(sum_moduli(re2), biases['b2']),
+	re2 = tf.nn.relu(re2)
+	re2 = maxpool2d(re2, k=2)
+	
+	re3 = equi_real_conv(re2, weights['w3'], order=order, padding='SAME')
+	re3 = tf.nn.bias_add(sum_moduli(re3), biases['b3']),
+	re3 = tf.nn.relu(re3)
+	re3 = maxpool2d(re3, k=2)
+	
+	# Fully-connected layers
+	fc = tf.reshape(tf.nn.dropout(re3, drop_prob), [bs, weights['w4'].get_shape().as_list()[0]])
+	fc = tf.nn.bias_add(tf.matmul(fc, weights['w4']), biases['b4'])
+	fc = tf.nn.relu(fc)
+	fc = tf.nn.dropout(fc, drop_prob)
+	
+	# Output, class prediction
+	out = tf.nn.bias_add(tf.matmul(fc, weights['out']), biases['out'])
+	return out
+
 def resnet_so2(x, drop_prob, n_filters, n_classes, bs, bn_config, phase_train):
 	# Store layers weight & bias
 	weights = {
@@ -145,7 +196,7 @@ def residual_block(x, n_in, n_out, order, phase_train, pool_in=True, bn=True, na
 	W1 = get_weights_list([3]+order*[2], n_in, n_out, name=name+'W1')
 	W2 = get_weights_list([3]+order*[2], n_out, n_out, name=name+'W2')
 	b1 = get_bias_list(n_out, order, name=name+'b1')
-	b2 = get_bias_list(n_out, order, name='b2')
+	b2 = get_bias_list(n_out, order, name=name+'b2')
 	
 	if pool_in:
 		x = maxpool2d(x)
@@ -251,7 +302,10 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		# A standard Z-convolution network
 		pred = conv_Z(x, keep_prob, n_filters, n_classes)
 	elif model == 'conv_so2':
-		# A rotational convolution network [SO(2)-convolution]
+		# A rotational convolution network [SO(2)-convolution]: conv-pool-relu-sum
+		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
+	elif model == 'conv_linear_so2':
+		# A rotational convolution network [SO(2)-convolution]: conv-pool-sum-relu
 		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
 	elif model == 'resnet_so2':
 		# Experimentation with resnets and SO(2)-convolution
@@ -259,6 +313,7 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
+	print('Usin model: %s' % (model,))
 
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
@@ -334,5 +389,5 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='conv_so2', lr=1e-3, batch_size=132, n_epochs=500,
+	run(model='conv_linear_so2', lr=1e-3, batch_size=132, n_epochs=500,
 		n_filters=15, combine_train_val=False)
