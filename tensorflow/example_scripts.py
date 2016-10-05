@@ -69,16 +69,18 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
 		'w1' : get_weights_list([3,2,2,2], 1, nf, name='W1'),
 		'w2' : get_weights_list([3,2,2,2], nf, nf, name='W2'),
 		'w3' : get_weights_list([3,2,2,2], nf, nf, name='W3'),
-		'w4' : get_weights([nf*7*7, 500], name='W4'),
-		'out': get_weights([500, n_classes], name='out')
+		'w4' : get_weights_list([3,2,2,2], nf, nf, name='W4'),
+		'out0' : get_weights([nf*7*7, 500], name='W4'),
+		'out1': get_weights([500, n_classes], name='out')
 	}
 	
 	biases = {
 		'b1' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b1'),
 		'b2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b2'),
 		'b3' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3'),
-		'b4' : tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
-		'out': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
+		'b4' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b4'),
+		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
+		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
 	}
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
@@ -96,16 +98,20 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	re3 = equi_real_conv(re2, weights['w3'], order=order, padding='SAME')
 	re3 = tf.nn.bias_add(sum_moduli(re3), biases['b3'])
 	re3 = tf.nn.relu(re3)
-	re3 = maxpool2d(re3, k=2)
+	
+	re4 = equi_real_conv(re3, weights['w4'], order=order, padding='SAME')
+	re4 = tf.nn.bias_add(sum_moduli(re4), biases['b4'])
+	re4 = tf.nn.relu(re4)
+	re4 = maxpool2d(re4, k=2)
 	
 	# Fully-connected layers
-	fc = tf.reshape(tf.nn.dropout(re3, drop_prob), [bs, weights['w4'].get_shape().as_list()[0]])
-	fc = tf.nn.bias_add(tf.matmul(fc, weights['w4']), biases['b4'])
+	fc = tf.reshape(tf.nn.dropout(re4, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
+	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
 	fc = tf.nn.relu(fc)
 	fc = tf.nn.dropout(fc, drop_prob)
 	
 	# Output, class prediction
-	out = tf.nn.bias_add(tf.matmul(fc, weights['out']), biases['out'])
+	out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
 	return out
 
 def resnet_so2(x, drop_prob, n_filters, n_classes, bs, bn_config, phase_train):
@@ -115,8 +121,8 @@ def resnet_so2(x, drop_prob, n_filters, n_classes, bs, bn_config, phase_train):
 	pt = phase_train
 	# Store layers weight & bias
 	weights = {
-		'w0' : get_weights_list([3]+order*[2], n_in, n_out, name='W0'),
-		'out0' : get_weights([n_filters*7*7,500], name='out0'),
+		'w0' : get_weights_list([3]+order*[2], 1, nf, name='W0'),
+		'out0' : get_weights([n_filters*6*6,500], name='out0'),
 		'out1': get_weights([500, n_classes], name='out1')
 	}
 	
@@ -130,17 +136,17 @@ def resnet_so2(x, drop_prob, n_filters, n_classes, bs, bn_config, phase_train):
 	
 	# Convolutional layer
 	re0 = equi_real_conv(x, weights['w0'], order=order, padding='VALID')
-	re0 = tf.nn.bias_add(sum_moduli(re0), biases['b0']),
+	re0 = tf.nn.bias_add(sum_moduli(re0), biases['b0'])
 	re0 = tf.nn.relu(re0)
 	
 	# Residual layers
-	rb1 = residual(x, 1, nf, order, pt, pool_in=True, bn=bn[0], name='rb1')
-	rb2 = residual(rb1, nf, nf, order, pt, pool_in=True, bn=bn[1], name='rb2')
+	rb1 = residual(re0, nf, nf, order, pt, pool_in=True, bn=bn[0], name='rb1')
+	#rb2 = residual(rb1, nf, nf, order, pt, pool_in=True, bn=bn[1], name='rb2')
 		
 	# Fully connected layers
-	rb2 = maxpool2d(rb2)
+	fc = maxpool2d(rb1)
 	fcsh = weights['out0'].get_shape().as_list()[0]
-	fc = tf.reshape(tf.nn.dropout(rb2, drop_prob), [bs, fcsh])
+	fc = tf.reshape(tf.nn.dropout(fc, drop_prob), [bs, fcsh])
 	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
 	fc = tf.nn.relu(fc)
 	fc = tf.nn.dropout(fc, drop_prob)
@@ -155,24 +161,24 @@ def resnet_so2(x, drop_prob, n_filters, n_classes, bs, bn_config, phase_train):
 def residual(x, n_in, n_out, order, phase_train, pool_in=True, bn=True, name='rb'):
 	W1 = get_weights_list([3]+order*[2], n_in, n_out, name=name+'W1')
 	W2 = get_weights_list([3]+order*[2], n_out, n_out, name=name+'W2')
-	b1 = tf.Variable(tf.constant(1e-2, shape=[nf]), name=name+'b1'),
-	b2 = tf.Variable(tf.constant(1e-2, shape=[nf]), name=name+'b2')
+	b1 = tf.Variable(tf.constant(1e-2, shape=[n_out]), name=name+'b1')
+	#b2 = tf.Variable(tf.constant(1e-2, shape=[n_out]), name=name+'b2')
 	
 	if pool_in:
 		x = maxpool2d(x)
 	re1 = equi_real_conv(x, W1, order=order, padding='SAME')
-	re1 = tf.nn.bias_add(sum_moduli(re1), biases['b1'])
+	re1 = tf.nn.bias_add(sum_moduli(re1), b1)
 	re1 = tf.nn.relu(re1)
 		
-	re2 = equi_real_conv(re2, W2, order=order, padding='SAME')
-	re2 = tf.nn.bias_add(sum_moduli(re2), biases['b2'])
-	re2 = tf.nn.relu(re2)
-	
-	# Residual connexion---will have to adapt this later
-	re2 = re2 + x
+	re2 = equi_real_conv(re1, W2, order=order, padding='SAME')
+	re2 = sum_moduli(re2)
+	#re2 = tf.nn.bias_add(sum_moduli(re2), b2)
+	#re2 = tf.nn.relu(re2)######################### This needs changing
 	if bn:
 		re2 = batch_norm(re2, n_out, phase_train)
-	return re2
+	
+	# Residual connexion---will have to adapt this later
+	return re2 + x #tf.nn.relu(re2)
 
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
     """conv2d wrapper. Supply input X, weights V and optional bias"""
@@ -271,7 +277,7 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
-	print('Usin model: %s' % (model,))
+	print('Using model: %s' % (model,))
 
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
@@ -347,5 +353,5 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='conv_so2', lr=1e-3, batch_size=132, n_epochs=500,
-		n_filters=10, combine_train_val=False)
+	run(model='resnet_so2', lr=1e-2, batch_size=132, n_epochs=500,
+		n_filters=10, combine_train_val=False, bn_config=[True,])
