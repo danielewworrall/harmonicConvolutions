@@ -497,6 +497,34 @@ def get_complex_basis_taps():
 		plt.draw()
 		raw_input(theta)
 
+def filter_test():
+	"""Test that the filters returned by the get_steerable look right"""
+	V1 = tf.placeholder(tf.float32, [3,1,1], 'V1')
+	V2 = tf.placeholder(tf.float32, [2,1,1], 'V2')
+	V3 = tf.placeholder(tf.float32, [2,1,1], 'V3')
+	V4 = tf.placeholder(tf.float32, [2,1,1], 'V4')
+	V = [V1, V2, V3, V4]
+	Q = get_steerable_filter(V, order=3)
+	
+	V1_ = np.random.randn(3,1,1)
+	V2_ = np.random.randn(2,1,1)
+	V3_ = np.random.randn(2,1,1)
+	V4_ = np.random.randn(2,1,1)
+	
+	with tf.Session() as sess:
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
+		Q_ = sess.run(Q, feed_dict={V1 : V1_, V2 : V2_, V3 : V3_, V4 : V4_})
+	print Q_.shape
+	plt.figure(1)
+	plt.ion()
+	plt.show()
+	for i in xrange(7):
+		plt.cla()
+		plt.imshow(Q_[:,:,0,i], cmap='gray', interpolation='nearest')
+		plt.draw()
+		raw_input(i)
+
 
 if __name__ == '__main__':
 	#get_rotation_as_vectors_test()
@@ -510,8 +538,8 @@ if __name__ == '__main__':
 	#zConv_test()
 	#complex_basis_test()
 	#get_basis_taps()
-	get_complex_basis_taps()
-
+	#get_complex_basis_taps()
+	filter_test()
 
 
 

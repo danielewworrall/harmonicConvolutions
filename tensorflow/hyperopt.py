@@ -6,25 +6,28 @@ import time
 
 import numpy as np
 
-from mnist_tests import run
+from example_scripts import run
 
-def random_independent(n_trials=24):
+def random_independent(n_trials=3):
 	y_best = 0.
 	best_params = {}
 	for i in xrange(n_trials):
-		lr = log_uniform_rand(2e-2, 1e-3)
-		batch_size = int(uniform_rand(50, 500))
+		lr = log_uniform_rand(1e-2, 2e-5)
+		batch_size = int(uniform_rand(50,500))
 		n_epochs = int(uniform_rand(100,500))
-		n_filters = int(uniform_rand(10,40))
+		n_filters = int(uniform_rand(10,20))
+		batch_norm = [uniform_rand(0,1)>0.5, uniform_rand(0,1)>0.5]
 		print lr, batch_size, n_epochs, n_filters
-		y = run(model='deep_steer', lr=lr, batch_size=batch_size, 
-			n_epochs=n_epochs, n_filters=n_filters, trial_num=i)
+		y = run(model='phase_discard', lr=lr, batch_size=batch_size,
+				n_epochs=n_epochs, n_filters=n_filters,
+				bn_config=batch_norm, trial_num=i)
 		if y > y_best:
 			y_best = y
 			best_params['lr'] = lr
 			best_params['batch_size'] = batch_size
 			best_params['n_epochs'] = n_epochs
 			best_params['n_filters'] = n_filters
+			best_params['batch_norm'] = batch_norm
 		
 		print
 		print
@@ -39,6 +42,28 @@ def random_independent(n_trials=24):
 	print y_best
 	print('Best params overall')	
 	print best_params
+	
+	y = []
+	for i in xrange(5):
+		y.append(run(model='phase_discard', lr=best_params['lr'],
+				 batch_size=best_params['batch_size'],
+				 n_epochs=best_params['n_epochs'],
+				 n_filters=best_params['n_filters'],
+				 batch_norm_config=best_params['batch_norm'],
+				 trial_num='T-'+str(i), combine_train_val=True))
+		print
+		print('Current y: %f' % (y[i],))
+		print
+	
+	print('Best y overall')
+	print y_best
+	print('Best params overall')	
+	print best_params
+	print y
+	y = np.asarray(y)
+	mean = np.mean(y)
+	print 'Mean: ' + mean
+	print 'Std: ' + np.mean((y - mean)**2)
 
 def binary_thinning(n_trials=256):
 	y_best = 0.
