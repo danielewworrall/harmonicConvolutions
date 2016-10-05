@@ -264,15 +264,15 @@ def dot_blade_filter(V):
     V_blade = tf.transpose(V_blade, perm=[0,1,3,2])
     return V, V_blade
 
-def batch_norm(x, n_out, phase_train, scope='bn'):
+def batch_norm(x, n_out, phase_train, name='bn'):
     """bgshi @ http://stackoverflow.com/questions/33949786/how-could-i-use-
     batch-normalization-in-tensorflow"""
-    with tf.variable_scope(scope):
-        beta = tf.Variable(tf.constant(0.0, shape=[n_out]), name='beta',
+    with tf.variable_scope(name) as scope:
+        beta = tf.Variable(tf.constant(0.0, shape=[n_out]), name=scope.name+'beta',
                            trainable=True)
-        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]), name='gamma',
+        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]), name=scope.name+'gamma',
                             trainable=True)
-        batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
+        batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name=scope.name+'moments')
         ema = tf.train.ExponentialMovingAverage(decay=0.99)
 
         def mean_var_with_update():

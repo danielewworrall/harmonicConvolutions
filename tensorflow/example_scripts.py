@@ -123,7 +123,8 @@ def resnet_so2(x, drop_prob, n_filters, n_classes, bs, bn_config, phase_train):
 	weights = {
 		'w0' : get_weights_list([3]+order*[2], 1, nf, name='W0'),
 		'out0' : get_weights([n_filters*6*6,500], name='out0'),
-		'out1': get_weights([500, n_classes], name='out1')
+		#'out1': get_weights([500, n_classes], name='out1')
+		'out1': get_weights([n_filters, n_classes], name='out1')
 	}
 	
 	biases = {
@@ -132,29 +133,35 @@ def resnet_so2(x, drop_prob, n_filters, n_classes, bs, bn_config, phase_train):
 		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]))
 	}
 	# Reshape input picture
-	x = tf.reshape(x, shape=[bs, 28, 28, 1])
+	with tf.variable_scope('input') as scope:
+		x = tf.reshape(x, shape=[bs, 28, 28, 1])
 	
-	# Convolutional layer
-	re0 = equi_real_conv(x, weights['w0'], order=order, padding='VALID')
-	re0 = tf.nn.bias_add(sum_moduli(re0), biases['b0'])
-	re0 = tf.nn.relu(re0)
+	with tf.variable_scope('ipconv') as scope:
+		# Convolutional layer
+		re0 = equi_real_conv(x, weights['w0'], order=order, padding='VALID', name=scope.name)
+		re0 = tf.nn.bias_add(sum_moduli(re0), biases['b0'])
+		re0 = tf.nn.relu(re0)
 	
 	# Residual layers
-	rb1 = residual(re0, nf, nf, order, pt, pool_in=True, bn=bn[0], name='rb1')
-	#rb2 = residual(rb1, nf, nf, order, pt, pool_in=True, bn=bn[1], name='rb2')
+	with tf.variable_scope('residual') as scope:
+		rb = residual(re0, nf, nf, order, pt, pool_in=True, bn=bn[0], name='rb1')
+		rb = residual(rb, nf, nf, order, pt, pool_in=False, bn=bn[1], name='rb2')
+		rb = residual(rb, nf, nf, order, pt, pool_in=False, bn=bn[2], name='rb3')
 		
 	# Fully connected layers
-	fc = maxpool2d(rb1)
-	fcsh = weights['out0'].get_shape().as_list()[0]
-	fc = tf.reshape(tf.nn.dropout(fc, drop_prob), [bs, fcsh])
-	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
-	fc = tf.nn.relu(fc)
-	fc = tf.nn.dropout(fc, drop_prob)
+	#with tf.variable_scope('fc') as scope:
+	#	fc = maxpool2d(rb2)
+	#	fcsh = weights['out0'].get_shape().as_list()[0]
+	#	fc = tf.reshape(tf.nn.dropout(fc, drop_prob), [bs, fcsh])
+	#	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
+	#	fc = tf.nn.relu(fc)
+	#		fc = tf.nn.dropout(fc, drop_prob)
+	fc = tf.reduce_mean(rb, reduction_indices=[1,2])
 	
 	# Output, class prediction
-	out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
-	return out
-
+	with tf.variable_scope('output') as scope:
+		out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
+		return out
 
 
 ##### CUSTOM BLOCKS #####
@@ -164,21 +171,26 @@ def residual(x, n_in, n_out, order, phase_train, pool_in=True, bn=True, name='rb
 	b1 = tf.Variable(tf.constant(1e-2, shape=[n_out]), name=name+'b1')
 	#b2 = tf.Variable(tf.constant(1e-2, shape=[n_out]), name=name+'b2')
 	
-	if pool_in:
-		x = maxpool2d(x)
-	re1 = equi_real_conv(x, W1, order=order, padding='SAME')
-	re1 = tf.nn.bias_add(sum_moduli(re1), b1)
-	re1 = tf.nn.relu(re1)
-		
-	re2 = equi_real_conv(re1, W2, order=order, padding='SAME')
-	re2 = sum_moduli(re2)
-	#re2 = tf.nn.bias_add(sum_moduli(re2), b2)
-	#re2 = tf.nn.relu(re2)######################### This needs changing
-	if bn:
-		re2 = batch_norm(re2, n_out, phase_train)
-	
-	# Residual connexion---will have to adapt this later
-	return re2 + x #tf.nn.relu(re2)
+	with tf.variable_scope(name) as scope:
+		#if pool_in:
+			#x = maxpool2d(x)
+		if pool_in:
+			strides = (1,2,2,1)
+		else:
+			strides = (1,1,1,1)
+		re1 = equi_real_conv(x, W1, order=order, strides=strides, padding='SAME', name=scope.name+'_re1')
+		re1 = tf.nn.bias_add(sum_moduli(re1), b1)
+		re1 = tf.nn.relu(re1)
+			
+		re2 = equi_real_conv(re1, W2, order=order, padding='SAME', name=scope.name+'_re2')
+		re2 = sum_moduli(re2)
+
+		if bn:
+			re2 = batch_norm(re2, n_out, phase_train, name=scope.name+'_bn')
+		if pool_in:
+			x = tf.nn.max_pool(x, (1,1,1,1), (1,2,2,1), padding='VALID')
+		# Residual connexion---will have to adapt this later
+		return re2 + x 
 
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
     """conv2d wrapper. Supply input X, weights V and optional bias"""
@@ -294,64 +306,81 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		mnist_trainx = np.vstack([mnist_trainx, mnist_validx])
 		mnist_trainy = np.hstack([mnist_trainy, mnist_validy])
 	
+	# Summary writers
+	acc_ph = tf.placeholder(tf.float32, [], name='acc_')
+	acc_op = tf.scalar_summary("Validation Accuracy", acc_ph)
+	cost_ph = tf.placeholder(tf.float32, [], name='cost_')
+	cost_op = tf.scalar_summary("Training Cost", cost_ph)
+	lr_ph = tf.placeholder(tf.float32, [], name='lr_')
+	lr_op = tf.scalar_summary("Learning Rate", lr_ph)
+	sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
+	summary = tf.train.SummaryWriter('logs/', sess.graph)
+	
 	# Launch the graph
-	with tf.Session() as sess:
-		sess.run(init)
-		epoch = 0
-		start = time.time()
-		# Keep training until reach max iterations
-		while epoch < n_epochs:
-			generator = minibatcher(mnist_trainx, mnist_trainy, batch_size, shuffle=True)
-			cost_total = 0.
-			acc_total = 0.
-			vacc_total = 0.
-			for i, batch in enumerate(generator):
-				batch_x, batch_y = batch
-				lr_current = lr/np.sqrt(1.+epoch*(float(batch_size) / dataset_size))
-				
-				# Optimize
-				feed_dict = {x: batch_x, y: batch_y, keep_prob: dropout,
-							 learning_rate : lr_current, phase_train : True}
-				__, cost_, acc_ = sess.run([optimizer, cost, accuracy], feed_dict=feed_dict)
-				cost_total += cost_
-				acc_total += acc_
-			cost_total /=(i+1.)
-			acc_total /=(i+1.)
-			
-			if not combine_train_val:
-				val_generator = minibatcher(mnist_validx, mnist_validy, batch_size, shuffle=False)
-				for i, batch in enumerate(val_generator):
-					batch_x, batch_y = batch
-					# Calculate batch loss and accuracy
-					feed_dict = {x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
-					vacc_ = sess.run(accuracy, feed_dict=feed_dict)
-					vacc_total += vacc_
-				vacc_total = vacc_total/(i+1.)		
-
-			print "[" + str(trial_num),str(epoch) + \
-				"], Minibatch Loss: " + \
-				"{:.6f}".format(cost_total) + ", Train Acc: " + \
-				"{:.5f}".format(acc_total) + ", Time: " + \
-				"{:.5f}".format(time.time()-start) + ", Val acc: " + \
-				"{:.5f}".format(vacc_total)
-			epoch += 1
-		
-		print "Testing"
-		
-		# Test accuracy
-		tacc_total = 0.
-		test_generator = minibatcher(mnist_testx, mnist_testy, batch_size, shuffle=False)
-		for i, batch in enumerate(test_generator):
+	sess.run(init)
+	epoch = 0
+	start = time.time()
+	# Keep training until reach max iterations
+	while epoch < n_epochs:
+		generator = minibatcher(mnist_trainx, mnist_trainy, batch_size, shuffle=True)
+		cost_total = 0.
+		acc_total = 0.
+		vacc_total = 0.
+		for i, batch in enumerate(generator):
 			batch_x, batch_y = batch
-			feed_dict={x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
-			tacc = sess.run(accuracy, feed_dict=feed_dict)
-			tacc_total += tacc
-		tacc_total = tacc_total/(i+1.)
-		print('Test accuracy: %f' % (tacc_total,))
+			#lr_current = lr/np.sqrt(1.+epoch*(float(batch_size) / dataset_size))
+			lr_current = lr/(1.+np.floor(epoch/100))
+			
+			# Optimize
+			feed_dict = {x: batch_x, y: batch_y, keep_prob: dropout,
+						 learning_rate : lr_current, phase_train : True}
+			__, cost_, acc_ = sess.run([optimizer, cost, accuracy], feed_dict=feed_dict)
+			cost_total += cost_
+			acc_total += acc_
+		cost_total /=(i+1.)
+		acc_total /=(i+1.)
+		
+		if not combine_train_val:
+			val_generator = minibatcher(mnist_validx, mnist_validy, batch_size, shuffle=False)
+			for i, batch in enumerate(val_generator):
+				batch_x, batch_y = batch
+				# Calculate batch loss and accuracy
+				feed_dict = {x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
+				vacc_ = sess.run(accuracy, feed_dict=feed_dict)
+				vacc_total += vacc_
+			vacc_total = vacc_total/(i+1.)
+		
+		feed_dict={cost_ph : cost_total, acc_ph : vacc_total, lr_ph : lr_current}
+		summaries = sess.run([cost_op, acc_op, lr_op], feed_dict=feed_dict)
+		summary.add_summary(summaries[0], epoch)
+		summary.add_summary(summaries[1], epoch)
+		summary.add_summary(summaries[2], epoch)
+
+		print "[" + str(trial_num),str(epoch) + \
+			"], Minibatch Loss: " + \
+			"{:.6f}".format(cost_total) + ", Train Acc: " + \
+			"{:.5f}".format(acc_total) + ", Time: " + \
+			"{:.5f}".format(time.time()-start) + ", Val acc: " + \
+			"{:.5f}".format(vacc_total)
+		epoch += 1
+	
+	print "Testing"
+	
+	# Test accuracy
+	tacc_total = 0.
+	test_generator = minibatcher(mnist_testx, mnist_testy, batch_size, shuffle=False)
+	for i, batch in enumerate(test_generator):
+		batch_x, batch_y = batch
+		feed_dict={x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
+		tacc = sess.run(accuracy, feed_dict=feed_dict)
+		tacc_total += tacc
+	tacc_total = tacc_total/(i+1.)
+	print('Test accuracy: %f' % (tacc_total,))
+	sess.close()
 	return tacc_total
 
 
 
 if __name__ == '__main__':
-	run(model='resnet_so2', lr=1e-2, batch_size=132, n_epochs=500,
-		n_filters=10, combine_train_val=False, bn_config=[True,])
+	run(model='resnet_so2', lr=1e-3, batch_size=132, n_epochs=500,
+		n_filters=10, combine_train_val=False, bn_config=[True,True,True])
