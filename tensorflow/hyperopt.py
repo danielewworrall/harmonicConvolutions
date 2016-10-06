@@ -8,17 +8,17 @@ import numpy as np
 
 from example_scripts import run
 
-def random_independent(n_trials=3):
+def random_independent(n_trials=24):
 	y_best = 0.
 	best_params = {}
 	for i in xrange(n_trials):
-		lr = log_uniform_rand(1e-2, 2e-5)
-		batch_size = int(uniform_rand(50,500))
+		lr = log_uniform_rand(1e-2, 1e-4)
+		batch_size = int(log_uniform_rand(25,500))
 		n_epochs = int(uniform_rand(100,500))
-		n_filters = int(uniform_rand(10,20))
-		batch_norm = [uniform_rand(0,1)>0.5, uniform_rand(0,1)>0.5]
+		n_filters = 10
+		batch_norm = None
 		print lr, batch_size, n_epochs, n_filters
-		y = run(model='phase_discard', lr=lr, batch_size=batch_size,
+		y = run(model='conv_so2', lr=lr, batch_size=batch_size,
 				n_epochs=n_epochs, n_filters=n_filters,
 				bn_config=batch_norm, trial_num=i)
 		if y > y_best:
@@ -45,11 +45,11 @@ def random_independent(n_trials=3):
 	
 	y = []
 	for i in xrange(5):
-		y.append(run(model='phase_discard', lr=best_params['lr'],
+		y.append(run(model='conv_so2', lr=best_params['lr'],
 				 batch_size=best_params['batch_size'],
 				 n_epochs=best_params['n_epochs'],
 				 n_filters=best_params['n_filters'],
-				 batch_norm_config=best_params['batch_norm'],
+				 bn_config=best_params['batch_norm'],
 				 trial_num='T-'+str(i), combine_train_val=True))
 		print
 		print('Current y: %f' % (y[i],))
@@ -121,5 +121,5 @@ def log_uniform_rand(min_, max_):
 
 
 if __name__ == '__main__':
-	random_independent()
+	random_independent(24)
 	#binary_thinning(64)

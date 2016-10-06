@@ -163,6 +163,80 @@ def resnet_so2(x, drop_prob, n_filters, n_classes, bs, bn_config, phase_train):
 		out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
 		return out
 
+def conv_nin(x, drop_prob, n_filters, n_classes, bs, phase_train):
+	"""The conv_so2 architecture, scatters first through an equi_real_conv
+	followed by phase-pooling then summation and a nonlinearity. Current
+	test time score is 95.12% for 3 layers deep, 15 filters"""
+	# Store layers weight & bias
+	order = 3
+	nf = n_filters
+	
+	weights = {
+		'w1' : get_weights_list([3,2,2,2], 1, nf, name='W1'),
+		'w1n' : get_weights([1,1,(order+1)*nf,nf], name='W1n'),
+		'w1n2' : get_weights([1,1,nf,nf], name='W1n2'),
+		'w2' : get_weights_list([3,2,2,2], nf, nf, name='W2'),
+		'w2n' : get_weights([1,1,(order+1)*nf,nf], name='W2n'),
+		'w2n2' : get_weights([1,1,nf,nf], name='W2n2'),
+		'w3' : get_weights_list([3,2,2,2], nf, nf, name='W3'),
+		'w3n' : get_weights([1,1,(order+1)*nf,nf], name='W3n'),
+		'out0' : get_weights([nf*7*7, 500], name='W4'),
+		'out1': get_weights([500, n_classes], name='out')
+	}
+	
+	biases = {
+		'b1' : tf.Variable(tf.constant(1e-2, shape=[4*nf]), name='b1'),
+		'b1n' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b1n'),
+		'b1n2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b1n2'),
+		'b2' : tf.Variable(tf.constant(1e-2, shape=[4*nf]), name='b2'),
+		'b2n' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b2n'),
+		'b2n2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b2n2'),
+		'b3' : tf.Variable(tf.constant(1e-2, shape=[4*nf]), name='b3'),
+		'b3n' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3n'),
+		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
+		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
+	}
+	# Reshape input picture
+	x = tf.reshape(x, shape=[bs, 28, 28, 1])
+	outputs = []
+	
+	# Convolutional Layers
+	re1 = equi_real_conv(x, weights['w1'], order=order, padding='SAME')
+	re1 = tf.nn.bias_add(stack_moduli(re1), biases['b1'])
+	re1 = conv2d(re1, weights['w1n'])
+	re1 = tf.nn.relu(re1)
+	re1 = conv2d(re1, weights['w1n2'], biases['b1n2'])
+	re1 = batch_norm(re1, nf, phase_train)
+	re1 = maxpool2d(tf.nn.relu(re1))
+	outputs.append(re1)
+	
+	re2 = equi_real_conv(re1, weights['w2'], order=order, padding='SAME')
+	re2 = tf.nn.bias_add(stack_moduli(re2), biases['b2'])
+	re2 = conv2d(re2, weights['w2n'])
+	re2 = tf.nn.relu(re2)
+	re2 = conv2d(re2, weights['w2n2'], biases['b2n2'])
+	re2 = batch_norm(re2, nf, phase_train)
+	outputs.append(re2)
+	
+	re3 = equi_real_conv(re2, weights['w3'], order=order, padding='SAME')
+	re3 = tf.nn.bias_add(stack_moduli(re3), biases['b3'])
+	re3 = conv2d(re3, weights['w3n'])
+	re3 = batch_norm(re3, nf, phase_train)
+	re3 = maxpool2d(tf.nn.relu(re3))
+	outputs.append(re3)
+	
+	# Fully-connected layers
+	print re3
+	fc = tf.reshape(tf.nn.dropout(re3, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
+	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
+	fc = tf.nn.relu(fc)
+	fc = tf.nn.dropout(fc, drop_prob)
+	
+	# Output, class prediction
+	out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
+	outputs.append(out)
+	return outputs
+
 
 ##### CUSTOM BLOCKS #####
 def residual(x, n_in, n_out, order, phase_train, pool_in=True, bn=True, name='rb'):
@@ -185,12 +259,12 @@ def residual(x, n_in, n_out, order, phase_train, pool_in=True, bn=True, name='rb
 		re2 = equi_real_conv(re1, W2, order=order, padding='SAME', name=scope.name+'_re2')
 		re2 = sum_moduli(re2)
 
-		if bn:
-			re2 = batch_norm(re2, n_out, phase_train, name=scope.name+'_bn')
+		#if bn:
+		#	re2 = batch_norm(re2, n_out, phase_train, name=scope.name+'_bn')
 		if pool_in:
 			x = tf.nn.max_pool(x, (1,1,1,1), (1,2,2,1), padding='VALID')
 		# Residual connexion---will have to adapt this later
-		return re2 + x 
+		return 0.2*re2 + x 
 
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
     """conv2d wrapper. Supply input X, weights V and optional bias"""
@@ -242,11 +316,15 @@ def minibatcher(inputs, targets, batch_size, shuffle=False):
 			excerpt = slice(start_idx, start_idx + batch_size)
 		yield inputs[excerpt], targets[excerpt]
 
-
+def save_model(saver, saveDir, sess):
+	"""Save a model checkpoint"""
+	save_path = saver.save(sess, saveDir + "checkpoints/model.ckpt")
+	print("Model saved in file: %s" % save_path)
+	
 ##### MAIN SCRIPT #####
 def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		bn_config=[False, False], trial_num='N', combine_train_val=False):
-	
+	tf.reset_default_graph()
 	# Load dataset
 	mnist_train = np.load('./data/mnist_rotation_new/rotated_train.npz')
 	mnist_valid = np.load('./data/mnist_rotation_new/rotated_valid.npz')
@@ -286,10 +364,13 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	elif model == 'resnet_so2':
 		# Experimentation with resnets and SO(2)-convolution
 		pred= resnet_so2(x, keep_prob, n_filters, n_classes, batch_size, bn_config, phase_train)
+	elif model == 'conv_nin':
+		pred = conv_nin(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
 	print('Using model: %s' % (model,))
+	pred = pred[-1]
 
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
@@ -318,6 +399,7 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	
 	# Launch the graph
 	sess.run(init)
+	saver = tf.train.Saver()
 	epoch = 0
 	start = time.time()
 	# Keep training until reach max iterations
@@ -328,8 +410,8 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		vacc_total = 0.
 		for i, batch in enumerate(generator):
 			batch_x, batch_y = batch
-			#lr_current = lr/np.sqrt(1.+epoch*(float(batch_size) / dataset_size))
-			lr_current = lr/(1.+np.floor(epoch/100))
+			lr_current = lr/np.sqrt(1.+epoch*(float(batch_size) / dataset_size))
+			#lr_current = lr/(10.**np.floor(epoch/150))
 			
 			# Optimize
 			feed_dict = {x: batch_x, y: batch_y, keep_prob: dropout,
@@ -363,6 +445,9 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 			"{:.5f}".format(time.time()-start) + ", Val acc: " + \
 			"{:.5f}".format(vacc_total)
 		epoch += 1
+		
+		if (epoch) % 50 == 0:
+			save_model(saver, './', sess)
 	
 	print "Testing"
 	
@@ -376,11 +461,12 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		tacc_total += tacc
 	tacc_total = tacc_total/(i+1.)
 	print('Test accuracy: %f' % (tacc_total,))
+	save_model(saver, './', sess)
 	sess.close()
 	return tacc_total
 
 
 
 if __name__ == '__main__':
-	run(model='resnet_so2', lr=1e-3, batch_size=132, n_epochs=500,
+	run(model='conv_nin', lr=1e-3, batch_size=132, n_epochs=500,
 		n_filters=10, combine_train_val=False, bn_config=[True,True,True])

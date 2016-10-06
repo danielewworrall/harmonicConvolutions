@@ -147,18 +147,12 @@ def get_basis_matrices(k, order=1):
 
 
 ##### COMPLEX-VALUED STUFF---IGNORE FOR NOW#####
-def equi_complex_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, order=0,
+def equi_complex_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3,
                       name='equiComplexConv'):
-    Zsh = Z[0].get_shape().as_list()
-    tile_shape = tf.pack([1,1,Zsh[3],1])
-    wrap = 0.
-    Q = get_complex_basis(k=k, order=order, wrap=wrap)
-    
-    Q = (tf.tile(Q[0], tile_shape), -tf.tile(Q[1], tile_shape))
-    # Filter channels
-    Y = complex_depthwise_conv(Z, Q, strides=strides, padding=padding, name='cd')
-    # Filter dot blade
-    return complex_dot_blade(Y, V)
+    Xsh = tf.shape(X)
+    Q = get_steerable_filter(V, order)
+    Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
+    return tf.split(3, 2*order+1, Z)
 
 def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
                        name='complexsteerconv'):
