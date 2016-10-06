@@ -65,6 +65,63 @@ def visualize():
 		print('MSE %f' % (MSE,))
 		raw_input(i)
 
+def complex_filters():
+	'''Visualize the complex filters'''
+	v = tf.placeholder(tf.float32, [3,1,1])
+	f = get_steerable_complex_filter(v, order=0)
+	
+	V = np.random.randn(3,1,1)
+	init_op = tf.initialize_all_variables()
+	with tf.Session() as sess:
+		sess.run(init_op)
+		Y = sess.run(f, feed_dict={v : V})
+	Y = np.squeeze(Y)
+	Yq = np.flipud(Y).T
+	
+	plt.ion()
+	plt.show()
+	for i in xrange(20):
+		Xx = np.cos(i/5.)*Y
+		Xy = np.sin(i/5.)*Yq
+		plt.figure(1)
+		plt.cla()
+		plt.imshow(np.sqrt(Xx**2+Xy**2), cmap='gray', interpolation='nearest')
+		plt.quiver(Xx, Xy)
+		plt.draw()
+		raw_input(i)
+	
+
 
 if __name__ == '__main__':
-	visualize()
+	complex_filters()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

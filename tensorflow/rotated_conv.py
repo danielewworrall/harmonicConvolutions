@@ -26,7 +26,6 @@ def equi_real_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
     output = [Z0, Z1c, Z1s, Z2c, Z2s, ...]. Z0 is zeroth frequency, Z1 is
     the first frequency, Z2 the second etc., Z1c is the cosine response, Z1s
     is the sine response."""
-    Xsh = tf.shape(X)
     Q = get_steerable_filter(V, order)
     Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
     return tf.split(3, 2*order+1, Z)
@@ -67,15 +66,13 @@ def phase_invariant_relu(Z, b, order=1, eps=1e-3):
         Z_.append(tf.nn.relu(Rb))
     return Z_
 
-def complex_relu(Z, b, order=1, eps=1e-4):
+def complex_relu(Z, b, eps=1e-4):
     """Apply a ReLU to the modulus of the complex feature map"""
     Z_ = []
-    oddness = len(Z) % 2
-    if oddness:
-        Z_.append(tf.nn.bias_add(Z[0], b[0]))
-    for i in xrange(order):
-        X = Z[2*i-1-oddness]
-        Y = Z[2*i-oddness]
+    Z_.append(tf.nn.bias_add(Z[0], b[0]))
+    for i in xrange(len(Z)/2):
+        X = Z[2*i+1]
+        Y = Z[2*i+2]
         R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
         Rb = tf.nn.bias_add(R, b[i+1])
         c = tf.nn.relu(Rb)/R
@@ -145,14 +142,48 @@ def get_basis_matrices(k, order=1):
     masks = tf.pack(masks, axis=-1)
     return tf.reshape(masks, [k,k,tap_length-(order>0)])
 
+def get_steerable_complex_filter(V, order=0):
+    """Return an order 0 complex steerable filter from the input V"""
+    Vsh = V.get_shape().as_list()     # [tap_length,i,o]
+    k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
+    masks = tf.reshape(get_basis_matrices(k, order=order), [k*k,Vsh[0]])
+    
+    V = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]])
+    Wr = tf.matmul(masks, V, name='Wx')
+    Wr = tf.reshape(Wr, [k,k,Vsh[1],Vsh[2]])
+    Wi = tf.reverse(tf.transpose(Wr, perm=[1,0,2,3]), [False, True, False, False])
+    return Wr, Wi
 
-##### COMPLEX-VALUED STUFF---IGNORE FOR NOW#####
 def equi_complex_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3,
                       name='equiComplexConv'):
-    Xsh = tf.shape(X)
-    Q = get_steerable_filter(V, order)
-    Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
-    return tf.split(3, 2*order+1, Z)
+    X, Y = Z
+    Qr, Qi = get_steerable_complex_filter(V)
+    Rxx = tf.nn.conv2d(X, Qr, strides=strides, padding=padding, name='compX')
+    Ryy = tf.nn.conv2d(Y, Qi, strides=strides, padding=padding, name='compY')
+    Rxy = tf.nn.conv2d(X, Qi, strides=strides, padding=padding, name='compX')
+    Ryx = tf.nn.conv2d(Y, Qr, strides=strides, padding=padding, name='compY')
+    Rx = Rxx + Ryy
+    Ry = Rxy - Ryx
+    return Rx, Ry
+
+def stack_responses(X):
+    Z_ = []
+    X_ = []
+    Y_ = []
+    Z_.append(X[0])
+    for i in xrange(len(X)/2):
+        X_.append(X[2*i+1])
+        Y_.append(X[2*i+2])
+    Z_.append(tf.concat(3, X_))
+    Z_.append(tf.concat(3, Y_))
+    return Z_
+
+def splice_responses(X, Z):
+    """Splice the responses from X and Z"""
+    print X
+    print Z
+
+##### COMPLEX-VALUED STUFF---IGNORE FOR NOW#####
 
 def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
                        name='complexsteerconv'):
@@ -168,16 +199,6 @@ def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
     Y = complex_depthwise_conv(Z, Q, strides=strides, padding=padding, name='cd')
     # Filter dot blade
     return complex_dot_blade(Y, V)
-
-def get_steerable_complex_filter(V, order=0):
-    """Return a steerable filter of order n from the input V"""
-    Vsh = V.get_shape().as_list()     # [tap_length,i,o]
-    k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
-    masks = tf.reshape(get_basis_matrices(k, order=order), [k*k,Vsh[0]])
-    
-    V = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]])
-    Wr = tf.matmul(masks, V, name='Wx')
-    return tf.reshape(Wr, [k,k,Vsh[1],Vsh[2]])
 
 def get_complex_basis(k=3, order=2, wrap=1.):
     """Return a tensor of complex steerable filter bases (X, Y)"""

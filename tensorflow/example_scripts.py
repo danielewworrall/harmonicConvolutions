@@ -147,21 +147,71 @@ def resnet_so2(x, drop_prob, n_filters, n_classes, bs, bn_config, phase_train):
 		rb = residual(re0, nf, nf, order, pt, pool_in=True, bn=bn[0], name='rb1')
 		rb = residual(rb, nf, nf, order, pt, pool_in=False, bn=bn[1], name='rb2')
 		rb = residual(rb, nf, nf, order, pt, pool_in=False, bn=bn[2], name='rb3')
-		
-	# Fully connected layers
-	#with tf.variable_scope('fc') as scope:
-	#	fc = maxpool2d(rb2)
-	#	fcsh = weights['out0'].get_shape().as_list()[0]
-	#	fc = tf.reshape(tf.nn.dropout(fc, drop_prob), [bs, fcsh])
-	#	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
-	#	fc = tf.nn.relu(fc)
-	#		fc = tf.nn.dropout(fc, drop_prob)
+
 	fc = tf.reduce_mean(rb, reduction_indices=[1,2])
 	
 	# Output, class prediction
 	with tf.variable_scope('output') as scope:
 		out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
 		return out
+
+def conv_complex(x, drop_prob, n_filters, n_classes, bs, phase_train):
+	"""The conv_so2 architecture, with complex convolutions"""
+	# Store layers weight & bias
+	order = 3
+	nf = n_filters
+	
+	weights = {
+		'w1' : get_weights_list([3,2,2,2], 1, nf, name='W1'),
+		'w2' : get_weights_list([3,2,2,2], nf, nf, name='W2'),
+		'w2c': get_weights([3,nf,nf], name='wc2'),
+		'w3' : get_weights_list([3,2,2,2], nf, nf, name='W3'),
+		#'w2r' : get_weights_list([3,2,2,2], nf, nf, name='W2r'),
+		#'w2c' : get_weights([3,30,10], name='W2c'),
+		'out0' : get_weights([nf*7*7, 500], name='W4'),
+		'out1': get_weights([500, n_classes], name='out')
+	}
+	
+	biases = {
+		'b1' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b1'),
+		'b1c' : get_bias_list(nf, order=3, name='b1c'),
+		'b2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b2'),
+		'b3' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3'),
+		'b4' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b4'),
+		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
+		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
+	}
+	# Reshape input picture
+	x = tf.reshape(x, shape=[bs, 28, 28, 1])
+	
+	# Convolutional Layers
+	re1_ = equi_real_conv(x, weights['w1'], order=order, padding='SAME')
+	# Real channel
+	re1 = tf.nn.relu(tf.nn.bias_add(sum_moduli(re1_), biases['b1']))
+	# Complex channel
+	rc1 = complex_relu(re1_, biases['b1c'])
+	rc1 = (rc1[1], rc1[2])
+	
+	# Real conv
+	re2 = equi_real_conv(re1, weights['w2'], order=order, padding='SAME')
+	# Complex conv
+	rc2 = equi_complex_conv(rc1, weights['w2c'])
+	
+	re2 = tf.nn.relu(tf.nn.bias_add(sum_moduli(re2), biases['b2']))
+	
+	re3 = equi_real_conv(re2, weights['w3'], order=order, padding='SAME')
+	re3 = tf.nn.relu(tf.nn.bias_add(sum_moduli(re3), biases['b3']))
+	re3 = maxpool2d(re3, k=2)
+	
+	# Fully-connected layers
+	fc = tf.reshape(tf.nn.dropout(re3, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
+	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
+	fc = tf.nn.relu(fc)
+	fc = tf.nn.dropout(fc, drop_prob)
+	
+	# Output, class prediction
+	out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
+	return out
 
 def conv_nin(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	"""The conv_so2 architecture, scatters first through an equi_real_conv
@@ -366,11 +416,13 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		pred= resnet_so2(x, keep_prob, n_filters, n_classes, batch_size, bn_config, phase_train)
 	elif model == 'conv_nin':
 		pred = conv_nin(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
+	elif model == 'conv_complex':
+		pred = conv_complex(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
 	print('Using model: %s' % (model,))
-	pred = pred[-1]
+	#pred = pred[-1]
 
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
@@ -468,5 +520,5 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='conv_nin', lr=1e-3, batch_size=132, n_epochs=500,
+	run(model='conv_complex', lr=1e-3, batch_size=132, n_epochs=500,
 		n_filters=10, combine_train_val=False, bn_config=[True,True,True])
