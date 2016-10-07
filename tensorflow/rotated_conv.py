@@ -51,22 +51,36 @@ def complex_symmetric_conv(X, R, filter_size, orders=[0,], strides=(1,1,1,1),
     more complicated, because we have to match up the rotation orders correctly.
     """
     # Perform initial scan to link up all filter orders with input image orders
-    get_key_pairings(X, R, orders)
-    
+    pairings = get_key_pairings(X, R, orders)
+    Q = get_complex_filters(R, filter_size=filter_size)
+    for m, v in pairings.iteritems():
+        for pair in v:
+            q, x = pair
+            s, q = np.sign(q), Q[np.abs(q)]
+            x = X[x]
+            if s != 0:
+                Z = complex_conv(x, (q[0], s*q[1]), strides=strides, padding=padding)
+            else:
+                Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding, name='sym_real')
+                Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding, name='sym_im')
+            
     return Z
 
 def get_key_pairings(X, R, orders):
-    """Return all filter--input pairings with complimentary rotation order"""
+    """Return all filter--input pairings with complimentary rotation order.
+    Returns {order : (r,x)} pairs.
+    """
     X_keys = np.asarray(X.keys())
     R_keys = np.asarray(get_filter_keys(R.keys()))[:,np.newaxis]
+    # The compatibility matrix lists all sums of key pairings
     compatibility = X_keys + R_keys
     pairings = {}
     for order in orders:
         where = np.argwhere(compatibility == order)
         pairings[order] = []
         for k in where:
-            pairings[order].append(R_keys[k[0]], X_keys[k[1]])
-                    
+            pairings[order].append((R_keys[k[0],0], X_keys[k[1]]))
+    return pairings
 
 
 def get_filter_keys(R_keys):
@@ -265,10 +279,9 @@ def get_steerable_complex_filter(V, order=0):
     Wi = tf.reverse(tf.transpose(Wr, perm=[1,0,2,3]), [False, True, False, False])
     return Wr, Wi
 
-def equi_complex_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3,
-                      name='equiComplexConv'):
+def complex_conv(Z, Q, strides=(1,1,1,1), padding='VALID', name='equiComplexConv'):
     X, Y = Z
-    Qr, Qi = get_steerable_complex_filter(V)
+    Qr, Qi = Q
     Rxx = tf.nn.conv2d(X, Qr, strides=strides, padding=padding, name='compX')
     Ryy = tf.nn.conv2d(Y, Qi, strides=strides, padding=padding, name='compY')
     Rxy = tf.nn.conv2d(X, Qi, strides=strides, padding=padding, name='compX')
