@@ -30,6 +30,32 @@ def equi_real_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
     Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
     return tf.split(3, 2*order+1, Z)
 
+def real_symmetric_conv(X, R, filter_size, strides=(1,1,1,1), padding='VALID',
+                        name='equiSymmConv'):
+    """Equivariant complex convolution for a real input. Returns a list of
+    filter responses output = [Z-2, Z-1, Z0, Z1, Z2, ...]. Z0 is zeroth
+    frequency, Z1 is the first frequency, Z2 the second etc.."""
+    Q = get_complex_filters(R, filter_size=filter_size)
+    Z = {}
+    for m, q in Q.iteritems():
+        Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding, name='sym_real')
+        Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding, name='sym_im')
+        Z[m] = (Zr, Zi)
+    return Z
+
+def complex_symmetric_conv(X, R, filter_size, orders=[0], strides=(1,1,1,1),
+                        padding='VALID', name='equiSymmConv'):
+    """Equivariant complex convolution for a real input. Returns a list of
+    filter responses output = [Z-2, Z-1, Z0, Z1, Z2, ...]. Z0 is zeroth
+    frequency, Z1 is the first frequency, Z2 the second etc.."""
+    Q = get_complex_filters(R, filter_size=filter_size, orders=orders)
+    Z = []
+    for q in Q:
+        Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding, name='sym_real')
+        Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding, name='sym_im')
+        Z.append((Zr, Zi))
+    return Z
+
 def stack_moduli(Z, eps=1e-3):
     """Stack the moduli of the filter responses. Z is the output of a
     real_equi_conv."""
@@ -80,6 +106,16 @@ def complex_relu(Z, b, eps=1e-4):
         Z_.append(Y * c)
     return Z_
 
+def complex_relu_dict(Z, b, eps=1e-4):
+    """Apply a ReLU to the modulus of the complex feature map"""
+    Z_ = {}
+    for m, r in Z.iteritems():
+        R = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
+        Rb = tf.nn.bias_add(R, b[m])
+        c = tf.nn.relu(Rb)/R
+        Z_[m] = (r[0]*c, r[1]*c)
+    return Z_
+
 def complex_softplus(Z, b, order=1, eps=1e-4):
     """Apply a ReLU to the modulus of the complex feature map"""
     Z_ = []
@@ -121,8 +157,29 @@ def get_steerable_filter(V, order=1):
         W.append(-tf.reverse(tf.transpose(W[-1], perm=[1,0,2,3]), [False,True,False,False]))
     return tf.concat(3, W)
 
+def get_complex_filters(R, filter_size):
+    """Return a complex filter of the form u(r,t) = R(r)e^{imt}, but in #
+    Cartesian coordinates. m is the rotation order, t the orientation and
+    r the radius. R is a dict of filter taps with keys denoting the rotation
+    orders.
+    """
+    filters = {}
+    k = filter_size
+    for m, r in R.iteritems():
+        rsh = r.get_shape().as_list()
+        cosine, sine = get_complex_basis_matrices(k, order=m)
+        cosine = tf.reshape(cosine, tf.pack([k*k, rsh[0]]))
+        sine = tf.reshape(sine, tf.pack([k*k, rsh[0]]))
+        # Project taps on to rotational basis
+        r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
+        ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
+        usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
+        filters[m] = (ucos, usin)
+    return filters
+
 def get_basis_matrices(k, order=1):
-    """Return tf cosine masks for custom tap learning (works with odd sizes)"""
+    """Return tf cosine masks for custom tap learning (works with odd sizes).
+    k is filter size, order is rotation order"""
     tap_length = int(((k+1)*(k+3))/8)
     lin = np.linspace((1.-k)/2., (k-1.)/2., k)
     X, Y = np.meshgrid(lin, lin)
@@ -141,6 +198,36 @@ def get_basis_matrices(k, order=1):
                 masks.append(to_constant_variable(mask))
     masks = tf.pack(masks, axis=-1)
     return tf.reshape(masks, [k,k,tap_length-(order>0)])
+
+def get_complex_basis_matrices(k, order=1):
+    """Return e^{i.order.t} masks for custom tap learning (works with odd sizes).
+    k is filter size, order is rotation order"""
+    tap_length = int(((k+1)*(k+3))/8)
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+    X, Y = np.meshgrid(lin, lin)
+    R = np.sqrt(X**2 + Y**2)
+    unique = np.unique(R)
+    theta = np.arctan2(-Y, X)
+    
+    # There will be a cosine and quadrature sine mask
+    cmasks = []
+    smasks = []
+    for i in xrange(tap_length):
+        if order == 0:
+            mask = (R == unique[i])*1.
+            cmasks.append(to_constant_variable(mask))
+            smasks.append(to_constant_variable(mask))
+        elif order > 0:
+            if unique[i] != 0.:
+                cmask = (R == unique[i])*np.cos(order*theta)
+                cmasks.append(to_constant_variable(cmask))
+                smask = (R == unique[i])*np.sin(order*theta)
+                smasks.append(to_constant_variable(smask))
+    cmasks = tf.pack(cmasks, axis=-1)
+    cmasks = tf.reshape(cmasks, [k,k,tap_length-(order>0)])
+    smasks = tf.pack(smasks, axis=-1)
+    smasks = tf.reshape(smasks, [k,k,tap_length-(order>0)])
+    return cmasks, smasks
 
 def get_steerable_complex_filter(V, order=0):
     """Return an order 0 complex steerable filter from the input V"""

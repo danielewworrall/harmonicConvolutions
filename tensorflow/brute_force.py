@@ -28,41 +28,117 @@ from spatial_transformer import transformer
 
 ##### MODELS #####
 
-def conv_Z(x, weights, biases, drop_prob, n_filters, n_classes):
+def conv_Z(x, weights, biases, drop_prob, n_filters, n_classes, phase_train):
+	# Store layers weight & bias
+	fm = []
+	# Reshape input picture
+	x = tf.reshape(x, shape=[-1, 28, 28, 1])
+	fm = []
+	
+	# Convolution Layer
+	cv1 = tf.nn.relu(conv2d(x, weights['w1'], biases['b1'], name='gc1'))
+	cv2 = conv2d(cv1, weights['w2'], name='gc2')
+	mp2 = maxpool2d(cv2, k=2)	
+	mp2 = tf.nn.relu(batch_norm(mp2, n_filters, phase_train))
+	fm.append(mp2)
+	
+	cv3 = tf.nn.relu(conv2d(mp2, weights['w3'], biases['b3'], name='gc3'))
+	cv4 = conv2d(cv3, weights['w4'], name='gc4')
+	mp4 = tf.nn.relu(batch_norm(cv4, n_filters, phase_train))
+	fm.append(mp4)
+	
+	cv5 = tf.nn.relu(conv2d(mp4, weights['w5'], biases['b5'], name='gc5'))
+	cv6 = conv2d(cv5, weights['w6'], name='gc6')
+	mp6 = tf.nn.relu(batch_norm(cv6, n_filters, phase_train))
+	fm.append(mp6)
+	
+	cv7 = tf.nn.relu(conv2d(mp6, weights['w7'], biases['b7'], name='gc7'))
+
+	out = tf.reduce_mean(cv7, reduction_indices=[1,2])
+	out = tf.nn.bias_add(out, biases['out'])
+	return out, fm
+
+def conv_Z_simple(x, weights, biases, drop_prob, n_filters, n_classes, phase_train):
 	# Store layers weight & bias
 	fm = []
 	# Reshape input picture
 	x = tf.reshape(x, shape=[-1, 28, 28, 1])
 	
 	# Convolution Layer
-	cv1 = conv2d(x, weights['w1'], biases['b1'], name='gc1')
-	fm.append(cv1)
-	mp1 = tf.nn.relu(maxpool2d(cv1, k=2))
-	fm.append(mp1)
+	cv1 = tf.nn.relu(conv2d(x, weights['w1'], biases['b1'], name='gc1'))
+	cv2 = conv2d(cv1, weights['w2'], name='gc2')
+	mp2 = maxpool2d(cv2, k=2)
+	bn2 = tf.nn.relu(batch_norm(mp2, n_filters, phase_train))
 	
-	# Convolution Layer
-	cv2 = conv2d(mp1, weights['w2'], biases['b2'], name='gc2')
-	fm.append(cv2)
-	mp2 = tf.nn.relu(maxpool2d(cv2, k=2))
-	fm.append(mp2)
+	cv3 = tf.nn.relu(conv2d(bn2, weights['w3'], biases['b3'], name='gc3'))
+	cv4 = conv2d(cv3, weights['w4'], name='gc4')
+	bn4 = tf.nn.relu(batch_norm(cv4, n_filters, phase_train))
+	
+	out = tf.reduce_mean(bn4, reduction_indices=[1,2])
+	out = tf.nn.bias_add(out, biases['out'])
+	return out, bn4
 
-	# Fully connected layer
-	fc3 = tf.reshape(mp2, [-1, weights['w3'].get_shape().as_list()[0]])
-	fc3 = tf.nn.bias_add(tf.matmul(fc3, weights['w3']), biases['b3'])
-	fc3 = tf.nn.relu(fc3)
-	# Apply Dropout
-	fc3 = tf.nn.dropout(fc3, drop_prob)
+def conv_so2(x, weights, biases, drop_prob, n_filters, n_classes):
+	"""The conv_so2 architecture, scatters first through an equi_real_conv
+	followed by phase-pooling then summation and a nonlinearity. Current
+	test time score is 95.12% for 3 layers deep, 15 filters"""
+	# Store layers weight & bias
+	order = 3
+	
+	# Reshape input picture
+	x = tf.reshape(x, shape=[-1, 28, 28, 1])
+	fm = []
+	
+	# Convolutional Layers
+	re1 = equi_real_conv(x, weights['w1'], order=order, padding='SAME')
+	re1 = tf.nn.bias_add(sum_moduli(re1), biases['b1'])
+	re1 = tf.nn.relu(re1)
+	fm.append(re1)
+	
+	re2 = equi_real_conv(re1, weights['w2'], order=order, padding='SAME')
+	re2 = tf.nn.bias_add(sum_moduli(re2), biases['b2'])
+	re2 = tf.nn.relu(re2)
+	re2 = maxpool2d(re2, k=2)
+	fm.append(re2)
+	
+	re3 = equi_real_conv(re2, weights['w3'], order=order, padding='SAME')
+	re3 = tf.nn.bias_add(sum_moduli(re3), biases['b3'])
+	re3 = tf.nn.relu(re3)
+	fm.append(re3)
+	
+	re4 = equi_real_conv(re3, weights['w4'], order=order, padding='SAME')
+	re4 = tf.nn.bias_add(sum_moduli(re4), biases['b4'])
+	re4 = tf.nn.relu(re4)
+	re4 = maxpool2d(re4, k=2)
+	fm.append(re4)
+	
+	# Fully-connected layers
+	fc = tf.reshape(tf.nn.dropout(re4, drop_prob), [-1, weights['out0'].get_shape().as_list()[0]])
+	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
+	fc = tf.nn.relu(fc)
+	fc = tf.nn.dropout(fc, drop_prob)
 	
 	# Output, class prediction
-	out = tf.nn.bias_add(tf.matmul(fc3, weights['out']), biases['out'])
+	out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
 	return out, fm
 
 def transformer_loss(X, Y, angles):
 	"""Return loss from transforming Y into X"""
-	print Y
-	print X
-	Y_ = transformer(Y, angles, tf.shape(X)[1:3])
-	return tf.reduce_mean(tf.square(X) - tf.square(Y_))
+	Y_ = transformer(Y, angles, X.get_shape()[1:3])
+	weights = weighting(X.get_shape()[1])
+	return tf.reduce_mean(tf.square(weights*(X-Y_)))
+
+def weighting(k):
+	k = int(k)
+	lin = np.linspace((1.-k)/2., (k-1.)/2., k)/k
+	X, Y = np.meshgrid(lin, lin)
+	R = X**2 + Y**2
+	return tf.reshape(to_constant_variable(np.exp(-R)), tf.pack([1,k,k,1]))
+
+def to_constant_variable(Q):
+    """Converts a numpy tensor to a tf constant"""
+    Q = tf.Variable(Q, trainable=False)
+    return tf.to_float(Q)
 
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
     """conv2d wrapper. Supply input X, weights V and optional bias"""
@@ -143,15 +219,43 @@ def make_parameters(n_filters, n_classes):
 	weights = {
 		'w1' : get_weights([3,3,1,n_filters], name='W1'),
 		'w2' : get_weights([3,3,n_filters,n_filters], name='W2'),
-		'w3' : get_weights([n_filters*5*5,500], name='W3'),
-		'out': get_weights([500, n_classes], name='W4')
+		'w3' : get_weights([3,3,n_filters,n_filters], name='W3'),
+		'w4' : get_weights([3,3,n_filters,n_filters], name='W4'),
+		'w5' : get_weights([3,3,n_filters,n_filters], name='W5'),
+		'w6' : get_weights([3,3,n_filters,n_filters], name='W6'),
+		'w7' : get_weights([3,3,n_filters,n_classes], name='W7'),
 	}
 	
 	biases = {
 		'b1': tf.Variable(tf.constant(1e-2, shape=[n_filters])),
 		'b2': tf.Variable(tf.constant(1e-2, shape=[n_filters])),
-		'b3': tf.Variable(tf.constant(1e-2, shape=[500])),
+		'b3': tf.Variable(tf.constant(1e-2, shape=[n_filters])),
+		'b4': tf.Variable(tf.constant(1e-2, shape=[n_filters])),
+		'b5': tf.Variable(tf.constant(1e-2, shape=[n_filters])),
+		'b6': tf.Variable(tf.constant(1e-2, shape=[n_filters])),
+		'b7': tf.Variable(tf.constant(1e-2, shape=[n_filters])),
 		'out': tf.Variable(tf.constant(1e-2, shape=[n_classes]))
+	}
+	return weights, biases
+
+def make_so2_parameters(n_filters, n_classes):
+	nf = n_filters
+	weights = {
+		'w1' : get_weights_list([3,2,2,2], 1, nf, name='W1'),
+		'w2' : get_weights_list([3,2,2,2], nf, nf, name='W2'),
+		'w3' : get_weights_list([3,2,2,2], nf, nf, name='W3'),
+		'w4' : get_weights_list([3,2,2,2], nf, nf, name='W4'),
+		'out0' : get_weights([nf*7*7, 500], name='W4'),
+		'out1': get_weights([500, n_classes], name='out')
+	}
+	
+	biases = {
+		'b1' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b1'),
+		'b2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b2'),
+		'b3' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3'),
+		'b4' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b4'),
+		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
+		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
 	}
 	return weights, biases
 
@@ -160,16 +264,16 @@ def get_angles(angles, batch_size):
 	angles = 2.*np.pi*angles/360.
 	params = np.zeros((batch_size,6))
 	params[:,0] = np.cos(angles)
-	params[:,1] = -np.sin(angles)
-	params[:,2] = 1.
-	params[:,3] = np.sin(angles)
+	params[:,1] = np.sin(angles)
+	params[:,2] = 0.
+	params[:,3] = -np.sin(angles)
 	params[:,4] = np.cos(angles)
-	params[:,5] = 1.
+	params[:,5] = 0.
 	return params
 	
 ##### MAIN SCRIPT #####
 def run(model='conv_Z', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
-		bn_config=[False, False], trial_num='N', combine_train_val=False):
+		trial_num='N', combine_train_val=False, st_loss=[1., 1., 1., 1.]):
 	tf.reset_default_graph()
 	
 	# Load dataset
@@ -193,7 +297,7 @@ def run(model='conv_Z', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	dropout = 0.75 	# Dropout, probability to keep units
 	n_filters = n_filters
 	dataset_size = 10000
-	st_loss = 0.01
+	st_loss = st_loss
 	
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [batch_size, n_input])
@@ -204,17 +308,32 @@ def run(model='conv_Z', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	phase_train = tf.placeholder(tf.bool)
 	angles = tf.placeholder(tf.float32, [batch_size, 6])
 	
-	weights, biases = make_parameters(n_filters, n_classes)
-	
 	# A standard Z-convolution network
-	predx, fmx = conv_Z(x, weights, biases, keep_prob, n_filters, n_classes)
-	predy, fmy = conv_Z(rx, weights, biases, keep_prob, n_filters, n_classes)
-
+	if model == 'conv_Z':
+		weights, biases = make_parameters(n_filters, n_classes)
+		predx, fmx = conv_Z(x, weights, biases, keep_prob, n_filters, n_classes, phase_train)
+		predy, fmy = conv_Z(rx, weights, biases, keep_prob, n_filters, n_classes, phase_train)
+	elif model == 'conv_Z_simple':
+		weights, biases = make_parameters(n_filters, n_classes)
+		predx, fmx = conv_Z_simple(x, weights, biases, keep_prob, n_filters, n_classes, phase_train)
+		predy, fmy = conv_Z_simple(rx, weights, biases, keep_prob, n_filters, n_classes, phase_train)
+	elif model == 'conv_so2':
+		weights, biases = make_so2_parameters(n_filters, n_classes)
+		predx, fmx = conv_so2(x, weights, biases, keep_prob, n_filters, n_classes)
+		predy, fmy = conv_so2(rx, weights, biases, keep_prob, n_filters, n_classes)
+	else:
+		print('%s not found' % (model,))
+		sys.exit(1)
+	
 	# Define loss and optimizer
 	costx = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(predx, y))
-	#costy = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(predy, y))
-	spatial_transformer_loss = transformer_loss(fmx[3], fmy[3], angles)
-	cost = costx + st_loss*spatial_transformer_loss
+	costy = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(predy, y))
+	spatial_transformer_loss = 0.
+	if np.sum(st_loss) != 0.:
+		for stl, fmx_, fmy_ in zip(st_loss, fmx, fmy):
+			spatial_transformer_loss += stl*transformer_loss(fmx_, fmy_, angles)
+			print stl
+	cost = costx + costy + spatial_transformer_loss
 	optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
 	
 	# Evaluate model
@@ -251,14 +370,15 @@ def run(model='conv_Z', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		vacc_total = 0.
 		for i, batch in enumerate(generator):
 			batch_x, batch_y = batch
-			rot_x, angles_ = rotate_feature_maps(batch_x, [28,28])
-			angles_ = get_angles(angles_, batch_size)
+			rot_x, theta = rotate_feature_maps(batch_x, [28,28])
+			angles_ = get_angles(theta, batch_size)
 			
 			lr_current = lr/np.sqrt(1.+epoch*(float(batch_size) / dataset_size))
 			
 			# Optimize
 			feed_dict = {x: batch_x, rx: rot_x, y: batch_y, angles : angles_,
-						 keep_prob: dropout, learning_rate : lr_current, }
+						 keep_prob: dropout, learning_rate : lr_current,
+						 phase_train : True}
 			__, cost_, acc_ = sess.run([optimizer, cost, accuracy], feed_dict=feed_dict)
 			cost_total += cost_
 			acc_total += acc_
@@ -282,10 +402,10 @@ def run(model='conv_Z', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		summary.add_summary(summaries[2], epoch)
 
 		print "[" + str(trial_num),str(epoch) + \
-			"], Minibatch Loss: " + \
-			"{:.6f}".format(cost_total) + ", Train Acc: " + \
+			"], T. Loss: " + \
+			"{:.6f}".format(cost_total) + ", T. Acc: " + \
 			"{:.5f}".format(acc_total) + ", Time: " + \
-			"{:.5f}".format(time.time()-start) + ", Val acc: " + \
+			"{:.5f}".format(time.time()-start) + ", V. acc: " + \
 			"{:.5f}".format(vacc_total)
 		epoch += 1
 		
@@ -311,5 +431,5 @@ def run(model='conv_Z', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='conv_Z', lr=1e-3, batch_size=132, n_epochs=500,
-		n_filters=10, combine_train_val=False, bn_config=[True,True,True])
+	run(model='conv_so2', lr=1e-3, batch_size=132, n_epochs=500,
+		n_filters=10, combine_train_val=False, st_loss=[0., 0., 0., 0.])

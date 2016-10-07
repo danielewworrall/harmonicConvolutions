@@ -6,28 +6,35 @@ import time
 
 import numpy as np
 
-from example_scripts import run
+from brute_force import run
 
 def random_independent(n_trials=24):
 	y_best = 0.
 	best_params = {}
 	for i in xrange(n_trials):
-		lr = log_uniform_rand(1e-2, 1e-4)
-		batch_size = int(log_uniform_rand(25,500))
-		n_epochs = int(uniform_rand(100,500))
+		lr = log_uniform_rand(1e-1, 1e-3)
+		batch_size = int(log_uniform_rand(64,256))
+		n_epochs = 500
 		n_filters = 10
-		batch_norm = None
-		print lr, batch_size, n_epochs, n_filters
-		y = run(model='conv_so2', lr=lr, batch_size=batch_size,
-				n_epochs=n_epochs, n_filters=n_filters,
-				bn_config=batch_norm, trial_num=i)
+		st_loss = log_uniform_rand(1e-3, 1e0, size=3)
+		print
+		print lr, batch_size, n_epochs, n_filters, st_loss
+		print
+		y = run(model='conv_Z',
+				lr=lr,
+				batch_size=batch_size,
+				n_epochs=n_epochs,
+				n_filters=n_filters,
+				trial_num=i,
+				combine_train_val=False,
+				st_loss=st_loss)
 		if y > y_best:
 			y_best = y
 			best_params['lr'] = lr
 			best_params['batch_size'] = batch_size
 			best_params['n_epochs'] = n_epochs
 			best_params['n_filters'] = n_filters
-			best_params['batch_norm'] = batch_norm
+			best_params['st_loss'] = st_loss
 		
 		print
 		print
@@ -45,12 +52,14 @@ def random_independent(n_trials=24):
 	
 	y = []
 	for i in xrange(5):
-		y.append(run(model='conv_so2', lr=best_params['lr'],
-				 batch_size=best_params['batch_size'],
-				 n_epochs=best_params['n_epochs'],
-				 n_filters=best_params['n_filters'],
-				 bn_config=best_params['batch_norm'],
-				 trial_num='T-'+str(i), combine_train_val=True))
+		y.append(run(model='conv_Z',
+					 lr=best_params['lr'],
+					 batch_size=best_params['batch_size'],
+					 n_epochs=best_params['n_epochs'],
+					 n_filters=best_params['n_filters'],
+					 st_loss=best_params['st_loss'],
+					 trial_num='T-'+str(i),
+					 combine_train_val=True))
 		print
 		print('Current y: %f' % (y[i],))
 		print
@@ -115,8 +124,14 @@ def uniform_rand(min_, max_):
 	gap = max_ - min_
 	return gap*np.random.rand() + min_
 
-def log_uniform_rand(min_, max_):
-	return 10**uniform_rand(np.log10(min_), np.log10(max_))
+def log_uniform_rand(min_, max_, size=1):
+	if size > 1:
+		output = []
+		for i in xrange(size):
+			output.append(10**uniform_rand(np.log10(min_), np.log10(max_)))
+	else:
+		output = 10**uniform_rand(np.log10(min_), np.log10(max_))
+	return output
 
 
 

@@ -370,7 +370,21 @@ def save_model(saver, saveDir, sess):
 	"""Save a model checkpoint"""
 	save_path = saver.save(sess, saveDir + "checkpoints/model.ckpt")
 	print("Model saved in file: %s" % save_path)
-	
+
+def rotate_feature_maps(X, im_shape):
+	"""Rotate feature maps"""
+	Xsh = X.shape
+	X = np.reshape(X, [-1,]+im_shape)
+	X_ = []
+	angle = []
+	for i in xrange(X.shape[0]):
+		angle.append(360*np.random.rand())
+		X_.append(sciint.rotate(X[i,...], angle[-1], reshape=False))
+	X_ = np.stack(X_, axis=0)
+	X_ = np.reshape(X_, Xsh)
+	angle = np.asarray(angle)
+	return X_, angle
+
 ##### MAIN SCRIPT #####
 def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		bn_config=[False, False], trial_num='N', combine_train_val=False):
@@ -465,8 +479,10 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 			lr_current = lr/np.sqrt(1.+epoch*(float(batch_size) / dataset_size))
 			#lr_current = lr/(10.**np.floor(epoch/150))
 			
+			rot_x, angles_ = rotate_feature_maps(batch_x, [28,28])
+			
 			# Optimize
-			feed_dict = {x: batch_x, y: batch_y, keep_prob: dropout,
+			feed_dict = {x: rot_x, y: batch_y, keep_prob: dropout,
 						 learning_rate : lr_current, phase_train : True}
 			__, cost_, acc_ = sess.run([optimizer, cost, accuracy], feed_dict=feed_dict)
 			cost_total += cost_
@@ -520,5 +536,5 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='conv_complex', lr=1e-3, batch_size=132, n_epochs=500,
+	run(model='conv_so2', lr=1e-3, batch_size=132, n_epochs=500,
 		n_filters=10, combine_train_val=False, bn_config=[True,True,True])
