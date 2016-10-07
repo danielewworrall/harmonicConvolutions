@@ -43,18 +43,42 @@ def real_symmetric_conv(X, R, filter_size, strides=(1,1,1,1), padding='VALID',
         Z[m] = (Zr, Zi)
     return Z
 
-def complex_symmetric_conv(X, R, filter_size, orders=[0], strides=(1,1,1,1),
-                        padding='VALID', name='equiSymmConv'):
-    """Equivariant complex convolution for a real input. Returns a list of
+def complex_symmetric_conv(X, R, filter_size, orders=[0,], strides=(1,1,1,1),
+                           padding='VALID', name='equiSymmConv'):
+    """Equivariant complex convolution for a complex input. Returns a list of
     filter responses output = [Z-2, Z-1, Z0, Z1, Z2, ...]. Z0 is zeroth
-    frequency, Z1 is the first frequency, Z2 the second etc.."""
-    Q = get_complex_filters(R, filter_size=filter_size, orders=orders)
-    Z = []
-    for q in Q:
-        Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding, name='sym_real')
-        Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding, name='sym_im')
-        Z.append((Zr, Zi))
+    frequency, Z1 is the first frequency, Z2 the second etc... This is a little
+    more complicated, because we have to match up the rotation orders correctly.
+    """
+    # Perform initial scan to link up all filter orders with input image orders
+    get_key_pairings(X, R, orders)
+    
     return Z
+
+def get_key_pairings(X, R, orders):
+    """Return all filter--input pairings with complimentary rotation order"""
+    X_keys = np.asarray(X.keys())
+    R_keys = np.asarray(get_filter_keys(R.keys()))[:,np.newaxis]
+    compatibility = X_keys + R_keys
+    pairings = {}
+    for order in orders:
+        where = np.argwhere(compatibility == order)
+        pairings[order] = []
+        for k in where:
+            pairings[order].append(R_keys[k[0]], X_keys[k[1]])
+                    
+
+
+def get_filter_keys(R_keys):
+    """Add negative component to filter keys"""
+    new_keys = []
+    for key in R_keys:
+        if key == 0:
+            new_keys.append(key)
+        if key > 0:
+            new_keys.append(key)
+            new_keys.append(-key)
+    return sorted(new_keys)
 
 def stack_moduli(Z, eps=1e-3):
     """Stack the moduli of the filter responses. Z is the output of a

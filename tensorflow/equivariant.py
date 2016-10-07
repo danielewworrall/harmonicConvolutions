@@ -26,7 +26,7 @@ def conv_complex(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	
 	weights = {
 		'w1' : get_weights_dict([3,2,2,2], 1, nf, name='W1'),
-		'w2' : get_weights_list([3,2,2,2], nf, nf, name='W2'),
+		'w2' : get_weights_dict([3,2,2,2], 1, nf, name='W2'),
 		'out0' : get_weights([nf*7*7, 500], name='W4'),
 		'out1': get_weights([500, n_classes], name='out')
 	}
@@ -45,8 +45,8 @@ def conv_complex(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	# Convolutional Layers
 	re1 = real_symmetric_conv(x, weights['w1'], 3)
 	re1 = complex_relu_dict(re1, biases['b1'])
-	for k, v in re1.iteritems():
-		print k, v
+	
+	re2 = complex_symmetric_conv(re1, weights['w2'], 3, orders=[0,1,2,3])
 	
 	return out
 
