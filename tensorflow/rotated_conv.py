@@ -26,11 +26,11 @@ def equi_real_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
     output = [Z0, Z1c, Z1s, Z2c, Z2s, ...]. Z0 is zeroth frequency, Z1 is
     the first frequency, Z2 the second etc., Z1c is the cosine response, Z1s
     is the sine response."""
-    Q = get_steerable_filter(V, order)
+    Q = get_steerable_filter(V, order=order)
     Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
-    return tf.split(3, 2*order+1, Z)
+    return tf.split(3, 2*(order+1), Z)
 
-def real_symmetric_conv(X, R, filter_size, strides=(1,1,1,1), padding='VALID',
+def real_symmetric_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
                         name='equiSymmConv'):
     """Equivariant complex convolution for a real input. Returns a list of
     filter responses output = [Z-2, Z-1, Z0, Z1, Z2, ...]. Z0 is zeroth
@@ -43,28 +43,41 @@ def real_symmetric_conv(X, R, filter_size, strides=(1,1,1,1), padding='VALID',
         Z[m] = (Zr, Zi)
     return Z
 
-def complex_symmetric_conv(X, R, filter_size, orders=[0,], strides=(1,1,1,1),
-                           padding='VALID', name='equiSymmConv'):
+def complex_symmetric_conv(X, R, filter_size, output_orders=[0,],
+                           strides=(1,1,1,1), padding='VALID', name='equiSymmConv'):
     """Equivariant complex convolution for a complex input. Returns a list of
     filter responses output = [Z-2, Z-1, Z0, Z1, Z2, ...]. Z0 is zeroth
     frequency, Z1 is the first frequency, Z2 the second etc... This is a little
     more complicated, because we have to match up the rotation orders correctly.
     """
     # Perform initial scan to link up all filter orders with input image orders
-    pairings = get_key_pairings(X, R, orders)
+    pairings = get_key_pairings(X, R, output_orders)
     Q = get_complex_filters(R, filter_size=filter_size)
+    Z = {}
     for m, v in pairings.iteritems():
         for pair in v:
-            q, x = pair
-            s, q = np.sign(q), Q[np.abs(q)]
-            x = X[x]
-            if s != 0:
-                Z = complex_conv(x, (q[0], s*q[1]), strides=strides, padding=padding)
-            else:
-                Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding, name='sym_real')
-                Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding, name='sym_im')
-            
-    return Z
+            q_, x_ = pair                       # filter key, input key
+            order = q_ + x_
+            s, q = np.sign(q_), Q[np.abs(q_)]   # key sign, filter
+            x = X[x_]                           # input
+            # W_{m} = conj(W_{-m})
+            Z_ = complex_conv(x, (q[0], s*q[1]), strides=strides, padding=padding)
+            if order not in Z.keys():
+                Z[order] = []
+            Z[order].append(Z_)
+    return concat_complex_tensor_list(Z)
+
+def concat_complex_tensor_list(Z):
+    output = {}
+    for order, response_list in Z.iteritems():
+        reals = []
+        ims = []
+        for re, im in response_list:
+            reals.append(re)
+            ims.append(im)
+        output[order] = (tf.concat(3, reals), tf.concat(3, ims))
+        #output[order] = (tf.add_n(reals), tf.add_n(ims))
+    return output
 
 def get_key_pairings(X, R, orders):
     """Return all filter--input pairings with complimentary rotation order.
@@ -101,6 +114,15 @@ def stack_moduli(Z, eps=1e-3):
     R.append(Z[0])
     for i in xrange(len(Z)/2):
         R.append(tf.sqrt(tf.square(Z[2*i+1]) + tf.square(Z[2*i+2]) + eps))
+    return tf.concat(3, R)
+
+def stack_moduli_dict(Z, eps=1e-3):
+    """Stack the moduli of the filter responses from a dict Z, which is the
+    output of a complex_symmetric_conv.
+    """
+    R = []
+    for k, v in Z.iteritems():
+        R.append(tf.sqrt(tf.square(v[0]) + tf.square(v[1]) + eps))
     return tf.concat(3, R)
 
 def sum_moduli(Z, eps=1e-3):
@@ -171,28 +193,31 @@ def complex_softplus(Z, b, order=1, eps=1e-4):
     return Z_
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS#####
-def get_steerable_filter(V, order=1):
-    """Return a steerable filter up to frequency 'order' from the input V"""
+def get_steerable_filter(V, orders=[0]):
+    """Return a steerable filter UP TO frequency 'order' from the input V"""
     # Some shape maths
     Vsh = V[0].get_shape().as_list()     # [tap_length,i,o]
     k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
     
     # Generate the sinusoidal masks for steering
     masks = {}
-    for i in xrange(order + 1):
-        masks[i] = tf.reshape(get_basis_matrices(k, order=i), [k*k,Vsh[0]-(i>0)])
-    
+    for order in orders:
+        bases = get_complex_basis_matrices(k, order=order)
+        base_shape = tf.pack([k*k,V[order].get_shape()[0]])
+        baseR = tf.reshape(bases[0], base_shape)
+        baseI = tf.reshape(bases[1], base_shape)
+        masks[order] = (baseR, baseI)
     # Build the filters from linear combinations of the sinusoid mask and the
     # radial weighting coefficients
     W = []
-    V0 = tf.reshape(V[0], [Vsh[0],Vsh[1]*Vsh[2]])
-    W.append(tf.reshape(tf.matmul(masks[0], V0, name='Wx'), [k,k,Vsh[1],Vsh[2]]))
-    for i in xrange(order):
-        ord_ = str(i+1)
-        Vi = tf.reshape(V[i+1], [Vsh[0]-1,Vsh[1]*Vsh[2]])
-        Wx = tf.matmul(masks[i+1], Vi, name='Wx')
-        W.append(tf.reshape(Wx, [k,k,Vsh[1],Vsh[2]]))
-        W.append(-tf.reverse(tf.transpose(W[-1], perm=[1,0,2,3]), [False,True,False,False]))
+    for order in orders:
+        Vi = V[order]
+        Vish = Vi.get_shape()
+        Vi = tf.reshape(Vi, tf.pack([Vish[0],Vish[1]*Vish[2]]))
+        Wr = tf.matmul(masks[order][0], Vi, name='WR'+'_'+str(order))
+        Wi = tf.matmul(masks[order][1], Vi, name='WI'+'_'+str(order))
+        W.append(tf.reshape(Wr, tf.pack([k,k,Vish[1],Vish[2]])))
+        W.append(tf.reshape(Wi, tf.pack([k,k,Vish[1],Vish[2]])))
     return tf.concat(3, W)
 
 def get_complex_filters(R, filter_size):
@@ -237,6 +262,7 @@ def get_basis_matrices(k, order=1):
     masks = tf.pack(masks, axis=-1)
     return tf.reshape(masks, [k,k,tap_length-(order>0)])
 
+##### COMPLEX CONVOLUTIONS #####
 def get_complex_basis_matrices(k, order=1):
     """Return e^{i.order.t} masks for custom tap learning (works with odd sizes).
     k is filter size, order is rotation order"""
@@ -280,15 +306,15 @@ def get_steerable_complex_filter(V, order=0):
     return Wr, Wi
 
 def complex_conv(Z, Q, strides=(1,1,1,1), padding='VALID', name='equiComplexConv'):
-    X, Y = Z
+    Zr, Zi = Z
     Qr, Qi = Q
-    Rxx = tf.nn.conv2d(X, Qr, strides=strides, padding=padding, name='compX')
-    Ryy = tf.nn.conv2d(Y, Qi, strides=strides, padding=padding, name='compY')
-    Rxy = tf.nn.conv2d(X, Qi, strides=strides, padding=padding, name='compX')
-    Ryx = tf.nn.conv2d(Y, Qr, strides=strides, padding=padding, name='compY')
-    Rx = Rxx + Ryy
-    Ry = Rxy - Ryx
-    return Rx, Ry
+    Rrr = tf.nn.conv2d(Zr, Qr, strides=strides, padding=padding, name='comprr')
+    Rii = tf.nn.conv2d(Zi, Qi, strides=strides, padding=padding, name='compii')
+    Rri = tf.nn.conv2d(Zr, Qi, strides=strides, padding=padding, name='compri')
+    Rir = tf.nn.conv2d(Zi, Qr, strides=strides, padding=padding, name='compir')
+    Rr = Rrr + Rii
+    Ri = Rri - Rir
+    return Rr, Ri
 
 def stack_responses(X):
     Z_ = []
