@@ -21,6 +21,10 @@ def steerable_filter(k, order):
 	
 	cos_filter = np.cos(order*theta)
 	sin_filter = np.sin(order*theta)
+	if order != 0:
+		c = k/2
+		cos_filter[c,c] = 0.
+		sin_filter[c,c] = 0.
 	cos_filter = cos_filter/np.sum(cos_filter**2.)
 	sin_filter = sin_filter/np.sum(sin_filter**2.)
 	return cos_filter, sin_filter
@@ -29,33 +33,34 @@ def steerable_filter(k, order):
 im = skio.imread('../LieNets/kingfisher.jpg')
 im = skco.rgb2gray(im)[100:200,500:600]
 
-kernels = steerable_filter(5, 0)
-imc = scisig.fftconvolve(kernels[0], im, mode='valid')
-ims = scisig.fftconvolve(kernels[1], im, mode='valid')
-
-#plt.figure(1)
-#plt.imshow(im, cmap='gray', interpolation='nearest')
-#plt.figure(2)
-#plt.imshow(imc, cmap='gray', interpolation='nearest')
-#plt.figure(3)
-#plt.imshow(ims, cmap='gray', interpolation='nearest')
-
-for angle in [0,20,40,60,80]:
+for angle in [0,45,90,135,180]:
 	kernels = steerable_filter(3, 1)
 	im_ = sciint.rotate(im, angle, reshape=False)
 	imc = scisig.fftconvolve(kernels[0], im_, mode='valid')
 	ims = scisig.fftconvolve(kernels[1], im_, mode='valid')
+	print np.std(imc), np.std(ims)
 	
+	
+	kernels = steerable_filter(3, 1)
 	imrr = scisig.fftconvolve(kernels[0], imc, mode='valid')
-	imii = scisig.fftconvolve(-kernels[1], ims, mode='valid')
+	imii = scisig.fftconvolve(kernels[1], ims, mode='valid')
 	imri = scisig.fftconvolve(kernels[0], ims, mode='valid')
-	imir = scisig.fftconvolve(-kernels[1], imc, mode='valid')
-	imc = imrr + imii
-	ims = imir - imri
+	imir = scisig.fftconvolve(kernels[1], imc, mode='valid')
+	imc = imrr - imii
+	ims = imir + imri
 	
-	#plt.figure(4)
-	#plt.imshow(imc, cmap='gray', interpolation='nearest')
+	
+	kernels = steerable_filter(3, -2)
+	imrr = scisig.fftconvolve(kernels[0], imc, mode='valid')
+	imii = scisig.fftconvolve(kernels[1], ims, mode='valid')
+	imri = scisig.fftconvolve(kernels[0], ims, mode='valid')
+	imir = scisig.fftconvolve(kernels[1], imc, mode='valid')
+	imc = imrr - imii
+	ims = imir + imri
+	
+	print np.std(imc), np.std(ims)
+	im_mod = np.sqrt(imc**2 + ims**2)
 	plt.figure(angle)
-	plt.imshow(ims, cmap='gray', interpolation='nearest')
+	plt.imshow(im_mod, cmap='gray', interpolation='nearest')
 	
 plt.show()

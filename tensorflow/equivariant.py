@@ -25,39 +25,49 @@ def conv_complex(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	nf = n_filters
 	
 	weights = {
-		'w1' : get_weights_dict([3,2,2,2], 1, nf, name='W1'),
-		'w2' : get_weights_dict([3,2,2,2], nf, nf, name='W2'),
-		'w3' : get_weights_dict([3,2,2,2], 4*nf, nf, name='W3'),
-		'out' : get_weights([5*5*nf*4*4, n_classes], name='out')
+		'w1' : get_weights_dict([[6,]], 1, nf, name='W1'),
+		#'w1_1x1' : get_weights_dict([[1,1],[1,1],[1,1]], nf, nf, name='W1'),
+		'w2' : get_weights_dict([[6,]], nf, nf, name='W2'),
+		'w3' : get_weights_dict([[6,]], nf, nf, name='W3'),
+		'out0' : get_weights([5*5*nf, 500], name='out0'),
+		'out1' : get_weights([500, n_classes], name='out1'),
 	}
 	
 	biases = {
-		'b1' : get_bias_dict(nf, order=3, name='b1c'),
-		'b2' : get_bias_dict(4*nf, order=3, name='b2'),
-		'b3' : get_bias_dict(4*nf, order=3, name='b2'),
-		'out': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
+		'b1' : get_bias_dict(nf, order=2, name='b1c'),
+		'b2' : get_bias_dict(nf, order=2, name='b2'),
+		'b3' : get_bias_dict(nf, order=2, name='b3'),
+		'out0': tf.Variable(tf.constant(1e-2, shape=[500]), name='out0'),
+		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out1')
 	}
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
 	
 	# Convolutional Layers
-	re1 = real_symmetric_conv(x, weights['w1'])
+	re1 = real_symmetric_conv(x, weights['w1'], filter_size=5)
 	re1 = complex_relu_dict(re1, biases['b1'])
+	re1 = sum_moduli_dict(re1)
 	
-	co2 = complex_symmetric_conv(re1, weights['w2'], filter_size=3,
-								 output_orders=[0,1,2,3]) #, strides=(1,2,2,1))
-	#co2 = complex_relu_dict(co2, biases['b2'])
+	co2 = complex_symmetric_conv(re1, weights['w2'], filter_size=5,
+								 output_orders=[0,1,2,3])
+	co2 = complex_relu_dict(co2, biases['b2'])
+	re1 = sum_moduli_dict(co2)
 	
-	#co3 = complex_symmetric_conv(co2, weights['w3'], filter_size=3,
-	#							 output_orders=[0,1,2,3], strides=(1,2,2,1))
-	#co3 = complex_relu_dict(co3, biases['b3'])
-	#fc = stack_moduli_dict(co3)
-	#
-	#fc = tf.reshape(fc, tf.pack([-1, weights['out'].get_shape()[0]]))
-	#out = tf.nn.bias_add(tf.matmul(fc, weights['out']), biases['out'])
-	#return out, co2
-	return 0, co2
-
+	co3 = complex_symmetric_conv(co2, weights['w3'], filter_size=5,
+								 output_orders=[0,], strides=(1,2,2,1),
+								 padding='SAME')
+	co3 = complex_relu_dict(co3, biases['b3'])
+	
+	fc = stack_moduli_dict(co3)
+	print fc
+	
+	fc = tf.nn.dropout(fc, drop_prob)
+	fc = tf.reshape(fc, tf.pack([-1, weights['out0'].get_shape()[0]]))
+	out0 = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
+	out0 = tf.nn.dropout(out0, drop_prob)
+	out1 = tf.nn.bias_add(tf.matmul(out0, weights['out1']), biases['out1'])
+	return out1, co2
+	
 
 ##### CUSTOM BLOCKS #####
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
@@ -96,7 +106,7 @@ def get_weights_dict(comp_shape, in_shape, out_shape, name='W'):
 	"""
 	weights_dict = {}
 	for i, cs in enumerate(comp_shape):
-		shape = [cs,in_shape,out_shape]
+		shape = cs + [in_shape,out_shape]
 		weights_dict[i] = get_weights(shape, name=name+'_'+str(i))
 	return weights_dict
 
@@ -355,7 +365,7 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	#run(model='conv_complex', lr=1e-3, batch_size=132, n_epochs=500,
-	#	n_filters=10, combine_train_val=False, bn_config=[True,True,True])
-	view_feature_map(20)
+	run(model='conv_complex', lr=1e-2, batch_size=64, n_epochs=500,
+		n_filters=10, combine_train_val=False, bn_config=[True,True,True])
+	#view_feature_map(20)
 	#view_filters()

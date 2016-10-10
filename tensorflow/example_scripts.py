@@ -86,23 +86,24 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
 	
 	# Convolutional Layers
-	re1 = equi_real_conv(x, weights['w1'], order=order, padding='SAME')
+	re1 = equi_real_conv(x, weights['w1'], order=[0,1,2,3], padding='SAME')
 	re1 = tf.nn.bias_add(sum_moduli(re1), biases['b1'])
 	re1 = tf.nn.relu(re1)
 	
-	re2 = equi_real_conv(re1, weights['w2'], order=order, padding='SAME')
+	re2 = equi_real_conv(re1, weights['w2'], order=[0,1,2,3], padding='SAME')
 	re2 = tf.nn.bias_add(sum_moduli(re2), biases['b2'])
 	re2 = tf.nn.relu(re2)
 	re2 = maxpool2d(re2, k=2)
 	
-	re3 = equi_real_conv(re2, weights['w3'], order=order, padding='SAME')
+	re3 = equi_real_conv(re2, weights['w3'], order=[0,1,2,3], padding='SAME')
 	re3 = tf.nn.bias_add(sum_moduli(re3), biases['b3'])
 	re3 = tf.nn.relu(re3)
-	
-	re4 = equi_real_conv(re3, weights['w4'], order=order, padding='SAME')
+	'''
+	re4 = equi_real_conv(re3, weights['w4'], order=[0,1,2,3], padding='SAME')
 	re4 = tf.nn.bias_add(sum_moduli(re4), biases['b4'])
 	re4 = tf.nn.relu(re4)
-	re4 = maxpool2d(re4, k=2)
+	'''
+	re4 = maxpool2d(re3, k=2)
 	
 	# Fully-connected layers
 	fc = tf.reshape(tf.nn.dropout(re4, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
