@@ -25,18 +25,17 @@ def conv_complex(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	nf = n_filters
 	
 	weights = {
-		'w1' : get_weights_dict([[6,]], 1, nf, name='W1'),
-		#'w1_1x1' : get_weights_dict([[1,1],[1,1],[1,1]], nf, nf, name='W1'),
-		'w2' : get_weights_dict([[6,]], nf, nf, name='W2'),
-		'w3' : get_weights_dict([[6,]], nf, nf, name='W3'),
-		'out0' : get_weights([5*5*nf, 500], name='out0'),
+		'w1' : get_weights_dict([[3,]], 1, nf, name='W1'),
+		'w2' : get_weights_dict([[3,]], nf, nf, name='W2'),
+		'w3' : get_weights_dict([[3,]], nf, nf, name='W3'),
+		'out0' : get_weights([7*7*nf, 500], name='out0'),
 		'out1' : get_weights([500, n_classes], name='out1'),
 	}
 	
 	biases = {
-		'b1' : get_bias_dict(nf, order=2, name='b1c'),
-		'b2' : get_bias_dict(nf, order=2, name='b2'),
-		'b3' : get_bias_dict(nf, order=2, name='b3'),
+		'b1' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='out0'),
+		'b2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='out0'),
+		'b3' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='out0'),
 		'out0': tf.Variable(tf.constant(1e-2, shape=[500]), name='out0'),
 		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out1')
 	}
@@ -44,22 +43,29 @@ def conv_complex(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
 	
 	# Convolutional Layers
-	re1 = real_symmetric_conv(x, weights['w1'], filter_size=5)
-	re1 = complex_relu_dict(re1, biases['b1'])
-	re1 = sum_moduli_dict(re1)
+	re1 = real_symmetric_conv(x, weights['w1'], filter_size=3, padding='SAME')
+	#re1 = complex_relu_of_sum_dict(re1, biases['b1'])[0][0]
+	re1 = tf.nn.bias_add(sum_moduli(re1), biases['b1'])
+	re1 = tf.nn.relu(re1)
+	#re1 = sum_moduli_dict(re1)
 	
-	co2 = complex_symmetric_conv(re1, weights['w2'], filter_size=5,
-								 output_orders=[0,1,2,3])
-	co2 = complex_relu_dict(co2, biases['b2'])
-	re1 = sum_moduli_dict(co2)
+	#co2 = complex_symmetric_conv(re1, weights['w2'], filter_size=3,
+	#							 output_orders=[0,], strides=(1,2,2,1),
+	#							 padding='SAME')
+	co2 = real_symmetric_conv(re1, weights['w2'], filter_size=3, padding='SAME', strides=(1,2,2,1))
+	#co2 = complex_relu_of_sum_dict(co2, biases['b2'])[0][0]
+	co2 = tf.nn.bias_add(sum_moduli(co2), biases['b2'])
+	co2 = tf.nn.relu(co2)
+	#re1 = sum_moduli_dict(co2)
 	
-	co3 = complex_symmetric_conv(co2, weights['w3'], filter_size=5,
-								 output_orders=[0,], strides=(1,2,2,1),
-								 padding='SAME')
-	co3 = complex_relu_dict(co3, biases['b3'])
-	
-	fc = stack_moduli_dict(co3)
-	print fc
+	#co3 = complex_symmetric_conv(co2, weights['w3'], filter_size=3,
+	#							 output_orders=[0,], padding='SAME')
+	co3 = real_symmetric_conv(co2, weights['w3'], filter_size=3, padding='SAME')
+	#co3 = complex_relu_of_sum_dict(co3, biases['b3'])[0][0]
+	co3 = tf.nn.bias_add(sum_moduli(co3), biases['b3'])
+	co3 = tf.nn.relu(co3)
+	#fc = sum_moduli_dict(co3)[0][0]
+	fc = maxpool2d(co3, k=2)
 	
 	fc = tf.nn.dropout(fc, drop_prob)
 	fc = tf.reshape(fc, tf.pack([-1, weights['out0'].get_shape()[0]]))
@@ -68,6 +74,52 @@ def conv_complex(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	out1 = tf.nn.bias_add(tf.matmul(out0, weights['out1']), biases['out1'])
 	return out1, co2
 	
+def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
+	"""The conv_so2 architecture, scatters first through an equi_real_conv
+	followed by phase-pooling then summation and a nonlinearity. Current
+	test time score is 95.12% for 3 layers deep, 15 filters"""
+	# Store layers weight & bias
+	order = 3
+	nf = n_filters
+	
+	weights = {
+		'w1' : get_weights_dict([[3,]], 1, nf, name='W1'),
+		'w2' : get_weights_dict([[3,]], nf, nf, name='W2'),
+		'w3' : get_weights_dict([[3,]], nf, nf, name='W3'),
+		'out0' : get_weights([nf*7*7, 500], name='W4'),
+		'out1': get_weights([500, n_classes], name='out')
+	}
+	
+	biases = {
+		'b1' : get_bias_dict(nf, 0, name='b1'),
+		'b2' : get_bias_dict(nf, 0, name='b2'),
+		'b3' : get_bias_dict(nf, 0, name='b3'),
+		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
+		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
+	}
+	# Reshape input picture
+	x = tf.reshape(x, shape=[bs, 28, 28, 1])
+	
+	# Convolutional Layers
+	re1 = real_symmetric_conv(x, weights['w1'], filter_size=3, padding='SAME')
+	re1 = complex_relu_dict(re1, biases['b1'])
+	#re1 = {0 : (re1, tf.zeros_like(re1))}
+	
+	re2 = complex_symmetric_conv(re1, weights['w2'], filter_size=3, strides=(1,2,2,1), padding='SAME')
+	re2 = complex_relu_of_sum_dict(re2, biases['b2'])[0][0]
+	
+	re3 = real_symmetric_conv(re2, weights['w3'], filter_size=3, padding='SAME')
+	re3 = complex_relu_of_sum_dict(re3, biases['b3'])[0][0]
+	re4 = maxpool2d(re3, k=2)
+	
+	# Fully-connected layers
+	fc = tf.reshape(tf.nn.dropout(re4, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
+	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
+	fc = tf.nn.relu(fc)
+	fc = tf.nn.dropout(fc, drop_prob)
+	
+	# Output, class prediction
+	return tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
 
 ##### CUSTOM BLOCKS #####
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
@@ -84,7 +136,7 @@ def maxpool2d(X, k=2):
 def get_weights(filter_shape, W_init=None, name='W'):
 	"""Initialize weights variable with Xavier method"""
 	if W_init == None:
-		stddev = np.sqrt(2.0 / np.prod(filter_shape[:2]))
+		stddev = 0.4*np.sqrt(2.0 / np.prod(filter_shape[:2]))
 		W_init = tf.random_normal(filter_shape, stddev=stddev)
 	return tf.Variable(W_init, name=name)
 
@@ -265,6 +317,8 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	# Construct model
 	if model == 'conv_complex':
 		pred, __ = conv_complex(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
+	elif model == 'conv_so2':
+		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
@@ -365,7 +419,7 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='conv_complex', lr=1e-2, batch_size=64, n_epochs=500,
+	run(model='conv_so2', lr=1e-3, batch_size=132, n_epochs=500,
 		n_filters=10, combine_train_val=False, bn_config=[True,True,True])
 	#view_feature_map(20)
 	#view_filters()

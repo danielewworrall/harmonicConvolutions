@@ -66,10 +66,10 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	nf = n_filters
 	
 	weights = {
-		'w1' : get_weights_list([3,2,2,2], 1, nf, name='W1'),
-		'w2' : get_weights_list([3,2,2,2], nf, nf, name='W2'),
-		'w3' : get_weights_list([3,2,2,2], nf, nf, name='W3'),
-		'w4' : get_weights_list([3,2,2,2], nf, nf, name='W4'),
+		'w1' : get_weights_list([3,], 1, nf, name='W1'),
+		'w2' : get_weights_list([3,], nf, nf, name='W2'),
+		'w3' : get_weights_list([3,], nf, nf, name='W3'),
+		'w4' : get_weights_list([3,], nf, nf, name='W4'),
 		'out0' : get_weights([nf*7*7, 500], name='W4'),
 		'out1': get_weights([500, n_classes], name='out')
 	}
@@ -86,23 +86,18 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
 	
 	# Convolutional Layers
-	re1 = equi_real_conv(x, weights['w1'], order=[0,1,2,3], padding='SAME')
+	re1 = equi_real_conv(x, weights['w1'], order=0, padding='SAME')
 	re1 = tf.nn.bias_add(sum_moduli(re1), biases['b1'])
 	re1 = tf.nn.relu(re1)
 	
-	re2 = equi_real_conv(re1, weights['w2'], order=[0,1,2,3], padding='SAME')
+	re2 = equi_real_conv(re1, weights['w2'], order=0, strides=(1,2,2,1), padding='SAME')
 	re2 = tf.nn.bias_add(sum_moduli(re2), biases['b2'])
 	re2 = tf.nn.relu(re2)
-	re2 = maxpool2d(re2, k=2)
+	#re2 = maxpool2d(re2, k=2)
 	
-	re3 = equi_real_conv(re2, weights['w3'], order=[0,1,2,3], padding='SAME')
+	re3 = equi_real_conv(re2, weights['w3'], order=0, padding='SAME')
 	re3 = tf.nn.bias_add(sum_moduli(re3), biases['b3'])
 	re3 = tf.nn.relu(re3)
-	'''
-	re4 = equi_real_conv(re3, weights['w4'], order=[0,1,2,3], padding='SAME')
-	re4 = tf.nn.bias_add(sum_moduli(re4), biases['b4'])
-	re4 = tf.nn.relu(re4)
-	'''
 	re4 = maxpool2d(re3, k=2)
 	
 	# Fully-connected layers
@@ -112,211 +107,9 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	fc = tf.nn.dropout(fc, drop_prob)
 	
 	# Output, class prediction
-	out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
-	return out
-
-def resnet_so2(x, drop_prob, n_filters, n_classes, bs, bn_config, phase_train):
-	order = 3
-	bn = bn_config
-	nf = n_filters
-	pt = phase_train
-	# Store layers weight & bias
-	weights = {
-		'w0' : get_weights_list([3]+order*[2], 1, nf, name='W0'),
-		'out0' : get_weights([n_filters*6*6,500], name='out0'),
-		#'out1': get_weights([500, n_classes], name='out1')
-		'out1': get_weights([n_filters, n_classes], name='out1')
-	}
-	
-	biases = {
-		'b0' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b0'),
-		'out0': tf.Variable(tf.constant(1e-2, shape=[500])),
-		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]))
-	}
-	# Reshape input picture
-	with tf.variable_scope('input') as scope:
-		x = tf.reshape(x, shape=[bs, 28, 28, 1])
-	
-	with tf.variable_scope('ipconv') as scope:
-		# Convolutional layer
-		re0 = equi_real_conv(x, weights['w0'], order=order, padding='VALID', name=scope.name)
-		re0 = tf.nn.bias_add(sum_moduli(re0), biases['b0'])
-		re0 = tf.nn.relu(re0)
-	
-	# Residual layers
-	with tf.variable_scope('residual') as scope:
-		rb = residual(re0, nf, nf, order, pt, pool_in=True, bn=bn[0], name='rb1')
-		rb = residual(rb, nf, nf, order, pt, pool_in=False, bn=bn[1], name='rb2')
-		rb = residual(rb, nf, nf, order, pt, pool_in=False, bn=bn[2], name='rb3')
-
-	fc = tf.reduce_mean(rb, reduction_indices=[1,2])
-	
-	# Output, class prediction
-	with tf.variable_scope('output') as scope:
-		out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
-		return out
-
-def conv_complex(x, drop_prob, n_filters, n_classes, bs, phase_train):
-	"""The conv_so2 architecture, with complex convolutions"""
-	# Store layers weight & bias
-	order = 3
-	nf = n_filters
-	
-	weights = {
-		'w1' : get_weights_list([3,2,2,2], 1, nf, name='W1'),
-		'w2' : get_weights_list([3,2,2,2], nf, nf, name='W2'),
-		'w2c': get_weights([3,nf,nf], name='wc2'),
-		'w3' : get_weights_list([3,2,2,2], nf, nf, name='W3'),
-		#'w2r' : get_weights_list([3,2,2,2], nf, nf, name='W2r'),
-		#'w2c' : get_weights([3,30,10], name='W2c'),
-		'out0' : get_weights([nf*7*7, 500], name='W4'),
-		'out1': get_weights([500, n_classes], name='out')
-	}
-	
-	biases = {
-		'b1' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b1'),
-		'b1c' : get_bias_list(nf, order=3, name='b1c'),
-		'b2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b2'),
-		'b3' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3'),
-		'b4' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b4'),
-		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
-		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
-	}
-	# Reshape input picture
-	x = tf.reshape(x, shape=[bs, 28, 28, 1])
-	
-	# Convolutional Layers
-	re1_ = equi_real_conv(x, weights['w1'], order=order, padding='SAME')
-	# Real channel
-	re1 = tf.nn.relu(tf.nn.bias_add(sum_moduli(re1_), biases['b1']))
-	# Complex channel
-	rc1 = complex_relu(re1_, biases['b1c'])
-	rc1 = (rc1[1], rc1[2])
-	
-	# Real conv
-	re2 = equi_real_conv(re1, weights['w2'], order=order, padding='SAME')
-	# Complex conv
-	rc2 = equi_complex_conv(rc1, weights['w2c'])
-	
-	re2 = tf.nn.relu(tf.nn.bias_add(sum_moduli(re2), biases['b2']))
-	
-	re3 = equi_real_conv(re2, weights['w3'], order=order, padding='SAME')
-	re3 = tf.nn.relu(tf.nn.bias_add(sum_moduli(re3), biases['b3']))
-	re3 = maxpool2d(re3, k=2)
-	
-	# Fully-connected layers
-	fc = tf.reshape(tf.nn.dropout(re3, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
-	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
-	fc = tf.nn.relu(fc)
-	fc = tf.nn.dropout(fc, drop_prob)
-	
-	# Output, class prediction
-	out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
-	return out
-
-def conv_nin(x, drop_prob, n_filters, n_classes, bs, phase_train):
-	"""The conv_so2 architecture, scatters first through an equi_real_conv
-	followed by phase-pooling then summation and a nonlinearity. Current
-	test time score is 95.12% for 3 layers deep, 15 filters"""
-	# Store layers weight & bias
-	order = 3
-	nf = n_filters
-	
-	weights = {
-		'w1' : get_weights_list([3,2,2,2], 1, nf, name='W1'),
-		'w1n' : get_weights([1,1,(order+1)*nf,nf], name='W1n'),
-		'w1n2' : get_weights([1,1,nf,nf], name='W1n2'),
-		'w2' : get_weights_list([3,2,2,2], nf, nf, name='W2'),
-		'w2n' : get_weights([1,1,(order+1)*nf,nf], name='W2n'),
-		'w2n2' : get_weights([1,1,nf,nf], name='W2n2'),
-		'w3' : get_weights_list([3,2,2,2], nf, nf, name='W3'),
-		'w3n' : get_weights([1,1,(order+1)*nf,nf], name='W3n'),
-		'out0' : get_weights([nf*7*7, 500], name='W4'),
-		'out1': get_weights([500, n_classes], name='out')
-	}
-	
-	biases = {
-		'b1' : tf.Variable(tf.constant(1e-2, shape=[4*nf]), name='b1'),
-		'b1n' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b1n'),
-		'b1n2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b1n2'),
-		'b2' : tf.Variable(tf.constant(1e-2, shape=[4*nf]), name='b2'),
-		'b2n' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b2n'),
-		'b2n2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b2n2'),
-		'b3' : tf.Variable(tf.constant(1e-2, shape=[4*nf]), name='b3'),
-		'b3n' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3n'),
-		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
-		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
-	}
-	# Reshape input picture
-	x = tf.reshape(x, shape=[bs, 28, 28, 1])
-	outputs = []
-	
-	# Convolutional Layers
-	re1 = equi_real_conv(x, weights['w1'], order=order, padding='SAME')
-	re1 = tf.nn.bias_add(stack_moduli(re1), biases['b1'])
-	re1 = conv2d(re1, weights['w1n'])
-	re1 = tf.nn.relu(re1)
-	re1 = conv2d(re1, weights['w1n2'], biases['b1n2'])
-	re1 = batch_norm(re1, nf, phase_train)
-	re1 = maxpool2d(tf.nn.relu(re1))
-	outputs.append(re1)
-	
-	re2 = equi_real_conv(re1, weights['w2'], order=order, padding='SAME')
-	re2 = tf.nn.bias_add(stack_moduli(re2), biases['b2'])
-	re2 = conv2d(re2, weights['w2n'])
-	re2 = tf.nn.relu(re2)
-	re2 = conv2d(re2, weights['w2n2'], biases['b2n2'])
-	re2 = batch_norm(re2, nf, phase_train)
-	outputs.append(re2)
-	
-	re3 = equi_real_conv(re2, weights['w3'], order=order, padding='SAME')
-	re3 = tf.nn.bias_add(stack_moduli(re3), biases['b3'])
-	re3 = conv2d(re3, weights['w3n'])
-	re3 = batch_norm(re3, nf, phase_train)
-	re3 = maxpool2d(tf.nn.relu(re3))
-	outputs.append(re3)
-	
-	# Fully-connected layers
-	print re3
-	fc = tf.reshape(tf.nn.dropout(re3, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
-	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
-	fc = tf.nn.relu(fc)
-	fc = tf.nn.dropout(fc, drop_prob)
-	
-	# Output, class prediction
-	out = tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
-	outputs.append(out)
-	return outputs
-
+	return tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
 
 ##### CUSTOM BLOCKS #####
-def residual(x, n_in, n_out, order, phase_train, pool_in=True, bn=True, name='rb'):
-	W1 = get_weights_list([3]+order*[2], n_in, n_out, name=name+'W1')
-	W2 = get_weights_list([3]+order*[2], n_out, n_out, name=name+'W2')
-	b1 = tf.Variable(tf.constant(1e-2, shape=[n_out]), name=name+'b1')
-	#b2 = tf.Variable(tf.constant(1e-2, shape=[n_out]), name=name+'b2')
-	
-	with tf.variable_scope(name) as scope:
-		#if pool_in:
-			#x = maxpool2d(x)
-		if pool_in:
-			strides = (1,2,2,1)
-		else:
-			strides = (1,1,1,1)
-		re1 = equi_real_conv(x, W1, order=order, strides=strides, padding='SAME', name=scope.name+'_re1')
-		re1 = tf.nn.bias_add(sum_moduli(re1), b1)
-		re1 = tf.nn.relu(re1)
-			
-		re2 = equi_real_conv(re1, W2, order=order, padding='SAME', name=scope.name+'_re2')
-		re2 = sum_moduli(re2)
-
-		#if bn:
-		#	re2 = batch_norm(re2, n_out, phase_train, name=scope.name+'_bn')
-		if pool_in:
-			x = tf.nn.max_pool(x, (1,1,1,1), (1,2,2,1), padding='VALID')
-		# Residual connexion---will have to adapt this later
-		return 0.2*re2 + x 
-
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
     """conv2d wrapper. Supply input X, weights V and optional bias"""
     VX = tf.nn.conv2d(X, V, strides=strides, padding=padding, name=name+'_')
@@ -331,7 +124,7 @@ def maxpool2d(X, k=2):
 def get_weights(filter_shape, W_init=None, name='W'):
 	"""Initialize weights variable with Xavier method"""
 	if W_init == None:
-		stddev = np.sqrt(2.0 / np.prod(filter_shape[:2]))
+		stddev = 0.4*np.sqrt(2.0 / np.prod(filter_shape[:2]))
 		W_init = tf.random_normal(filter_shape, stddev=stddev)
 	return tf.Variable(W_init, name=name)
 
@@ -480,10 +273,10 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 			lr_current = lr/np.sqrt(1.+epoch*(float(batch_size) / dataset_size))
 			#lr_current = lr/(10.**np.floor(epoch/150))
 			
-			rot_x, angles_ = rotate_feature_maps(batch_x, [28,28])
+			#rot_x, angles_ = rotate_feature_maps(batch_x, [28,28])
 			
 			# Optimize
-			feed_dict = {x: rot_x, y: batch_y, keep_prob: dropout,
+			feed_dict = {x: batch_x, y: batch_y, keep_prob: dropout,
 						 learning_rate : lr_current, phase_train : True}
 			__, cost_, acc_ = sess.run([optimizer, cost, accuracy], feed_dict=feed_dict)
 			cost_total += cost_

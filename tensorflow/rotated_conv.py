@@ -26,9 +26,9 @@ def equi_real_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
     output = [Z0, Z1c, Z1s, Z2c, Z2s, ...]. Z0 is zeroth frequency, Z1 is
     the first frequency, Z2 the second etc., Z1c is the cosine response, Z1s
     is the sine response."""
-    Q = get_steerable_filter(V, orders=order)
+    Q = get_steerable_real_filter(V, order=order)
     Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
-    return tf.split(3, 2*(order[-1]+1), Z)
+    return tf.split(3, 2*(order+1), Z)
 
 def real_symmetric_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
                         name='equiSymmConv'):
@@ -137,11 +137,11 @@ def stack_moduli_dict(Z, eps=1e-3):
         R.append(tf.sqrt(tf.square(v[0]) + tf.square(v[1]) + eps))
     return tf.concat(3, R)
 
-def sum_moduli(Z, eps=1e-3):
+def sum_moduli(Z, eps=1e-4):
     """Stack the moduli of the filter responses. Z is the output of a
     real_equi_conv."""
     R = []
-    for i in xrange(len(Z)/2):
+    for i in xrange((len(Z)/2)):
         R.append(tf.sqrt(tf.square(Z[2*i]) + tf.square(Z[2*i+1]) + eps))
     return tf.add_n(R)
 
@@ -149,11 +149,10 @@ def sum_moduli_dict(Z, eps=1e-3):
     """Sum the moduli of the filter responses. Z is the output of a
     complex_symmetric_conv."""
     R = []
-    R_ = {}
     for m, v in Z.iteritems():
         R.append(tf.sqrt(tf.square(v[0]) + tf.square(v[1]) + eps))
-    R_[0] = (tf.add_n(R), tf.zeros_like(tf.add_n(R)))
-    return R_
+    return tf.add_n(R)
+
 
 ##### NONLINEARITIES #####
 # Just use the phase_invariant_relu for now
@@ -189,13 +188,31 @@ def complex_relu(Z, b, eps=1e-4):
 
 def complex_relu_dict(Z, b, eps=1e-4):
     """Apply a ReLU to the modulus of the complex feature map"""
-    Z_ = {}
+    R = {}
     for m, r in Z.iteritems():
-        R = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-        Rb = tf.nn.bias_add(R, b[m])
-        c = tf.nn.relu(Rb)/R
-        Z_[m] = (r[0]*c, r[1]*c)
-    return Z_
+        R_ = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
+        Rb = tf.nn.bias_add(R_, b[m])
+        c = tf.nn.relu(Rb)/R_
+        R[m] = (r[0]*c, r[1]*c)
+    return R
+
+def complex_relu_of_sum_dict(Z, b, eps=1e-4):
+    """Apply a ReLU to the modulus of the complex feature map"""
+    R = []
+    for m, r in Z.iteritems():
+        R_ = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
+        R.append(tf.nn.bias_add(R_,b[m]))
+    R = tf.nn.relu(tf.add_n(R))
+    return {0 : (R,)}
+
+def complex_relu_of_sum_dict_(Z, b, eps=1e-4):
+    """Apply a ReLU to the modulus of the complex feature map"""
+    R = []
+    for m, r in Z.iteritems():
+        R_ = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
+        R.append(tf.nn.bias_add(R_,b[m]))
+    R = tf.nn.relu(tf.add_n(R))
+    return {0 : (R,)}
 
 def complex_softplus(Z, b, order=1, eps=1e-4):
     """Apply a ReLU to the modulus of the complex feature map"""
@@ -214,7 +231,7 @@ def complex_softplus(Z, b, order=1, eps=1e-4):
     return Z_
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS#####
-def get_steerable_filter(V, orders=[0,1]):
+def get_steerable_real_filter(V, order=1):
     """Return a steerable filter up to frequency 'order' from the input V"""
     # Some shape maths
     Vsh = V[0].get_shape().as_list()     # [tap_length,i,o]
@@ -222,7 +239,7 @@ def get_steerable_filter(V, orders=[0,1]):
     
     # Generate the sinusoidal masks for steering
     masks = {}
-    for i in xrange(orders[-1] + 1):
+    for i in xrange(order + 1):
         masks[i] = tf.reshape(get_basis_matrices(k, order=i), [k*k,Vsh[0]-(i>0)])
     
     # Build the filters from linear combinations of the sinusoid mask and the
@@ -231,14 +248,14 @@ def get_steerable_filter(V, orders=[0,1]):
     V0 = tf.reshape(V[0], [Vsh[0],Vsh[1]*Vsh[2]])
     W.append(tf.reshape(tf.matmul(masks[0], V0, name='Wx'), [k,k,Vsh[1],Vsh[2]]))
     W.append(tf.zeros_like(W[-1]))
-    for i in xrange(orders[-1]):
+    for i in xrange(order):
         ord_ = str(i+1)
         Vi = tf.reshape(V[i+1], [Vsh[0]-1,Vsh[1]*Vsh[2]])
         Wx = tf.matmul(masks[i+1], Vi, name='Wx')
         W.append(tf.reshape(Wx, [k,k,Vsh[1],Vsh[2]]))
         W.append(-tf.reverse(tf.transpose(W[-1], perm=[1,0,2,3]), [False,True,False,False]))
     return tf.concat(3, W)
-'''
+
 def get_steerable_filter(V, orders=[0]):
     """Return a steerable filter UP TO frequency 'order' from the input V"""
     # Some shape maths
@@ -265,7 +282,6 @@ def get_steerable_filter(V, orders=[0]):
         W.append(tf.reshape(Wr, tf.pack([k,k,Vish[1],Vish[2]])))
         W.append(tf.reshape(Wi, tf.pack([k,k,Vish[1],Vish[2]])))
     return tf.concat(3, W)
-'''
 
 def get_complex_filters(R, filter_size):
     """Return a complex filter of the form u(r,t) = R(r)e^{imt}, but in #
