@@ -87,8 +87,8 @@ def concat_complex_tensor_list(Z):
         for re, im in response_list:
             reals.append(re)
             ims.append(im)
-        output[order] = (tf.concat(3, reals), tf.concat(3, ims))
-        #output[order] = (tf.add_n(reals), tf.add_n(ims))
+        #output[order] = (tf.concat(3, reals), tf.concat(3, ims))
+        output[order] = (tf.add_n(reals), tf.add_n(ims))
     return output
 
 def get_key_pairings(X, R, orders):

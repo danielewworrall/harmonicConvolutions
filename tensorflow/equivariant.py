@@ -17,64 +17,8 @@ from rotated_conv import *
 from matplotlib import pyplot as plt
 
 ##### MODELS #####
-
-def conv_complex(x, drop_prob, n_filters, n_classes, bs, phase_train):
-	"""The conv_so2 architecture, with complex convolutions"""
-	# Store layers weight & bias
-	order = 3
-	nf = n_filters
 	
-	weights = {
-		'w1' : get_weights_dict([[3,]], 1, nf, name='W1'),
-		'w2' : get_weights_dict([[3,]], nf, nf, name='W2'),
-		'w3' : get_weights_dict([[3,]], nf, nf, name='W3'),
-		'out0' : get_weights([7*7*nf, 500], name='out0'),
-		'out1' : get_weights([500, n_classes], name='out1'),
-	}
-	
-	biases = {
-		'b1' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='out0'),
-		'b2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='out0'),
-		'b3' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='out0'),
-		'out0': tf.Variable(tf.constant(1e-2, shape=[500]), name='out0'),
-		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out1')
-	}
-	# Reshape input picture
-	x = tf.reshape(x, shape=[bs, 28, 28, 1])
-	
-	# Convolutional Layers
-	re1 = real_symmetric_conv(x, weights['w1'], filter_size=3, padding='SAME')
-	#re1 = complex_relu_of_sum_dict(re1, biases['b1'])[0][0]
-	re1 = tf.nn.bias_add(sum_moduli(re1), biases['b1'])
-	re1 = tf.nn.relu(re1)
-	#re1 = sum_moduli_dict(re1)
-	
-	#co2 = complex_symmetric_conv(re1, weights['w2'], filter_size=3,
-	#							 output_orders=[0,], strides=(1,2,2,1),
-	#							 padding='SAME')
-	co2 = real_symmetric_conv(re1, weights['w2'], filter_size=3, padding='SAME', strides=(1,2,2,1))
-	#co2 = complex_relu_of_sum_dict(co2, biases['b2'])[0][0]
-	co2 = tf.nn.bias_add(sum_moduli(co2), biases['b2'])
-	co2 = tf.nn.relu(co2)
-	#re1 = sum_moduli_dict(co2)
-	
-	#co3 = complex_symmetric_conv(co2, weights['w3'], filter_size=3,
-	#							 output_orders=[0,], padding='SAME')
-	co3 = real_symmetric_conv(co2, weights['w3'], filter_size=3, padding='SAME')
-	#co3 = complex_relu_of_sum_dict(co3, biases['b3'])[0][0]
-	co3 = tf.nn.bias_add(sum_moduli(co3), biases['b3'])
-	co3 = tf.nn.relu(co3)
-	#fc = sum_moduli_dict(co3)[0][0]
-	fc = maxpool2d(co3, k=2)
-	
-	fc = tf.nn.dropout(fc, drop_prob)
-	fc = tf.reshape(fc, tf.pack([-1, weights['out0'].get_shape()[0]]))
-	out0 = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
-	out0 = tf.nn.dropout(out0, drop_prob)
-	out1 = tf.nn.bias_add(tf.matmul(out0, weights['out1']), biases['out1'])
-	return out1, co2
-	
-def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
+def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 	"""The conv_so2 architecture, scatters first through an equi_real_conv
 	followed by phase-pooling then summation and a nonlinearity. Current
 	test time score is 95.12% for 3 layers deep, 15 filters"""
@@ -83,16 +27,16 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	nf = n_filters
 	
 	weights = {
-		'w1' : get_weights_dict([[3,]], 1, nf, name='W1'),
-		'w2' : get_weights_dict([[3,]], nf, nf, name='W2'),
-		'w3' : get_weights_dict([[3,]], nf, nf, name='W3'),
+		'w1' : get_weights_dict([[3,],[2,],[2,]], 1, nf, std_mult=std_mult, name='W1'),
+		'w2' : get_weights_dict([[3,],[2,],[2,]], nf, nf, std_mult=std_mult, name='W2'),
+		'w3' : get_weights_dict([[3,]], nf, nf, std_mult=std_mult, name='W3'),
 		'out0' : get_weights([nf*7*7, 500], name='W4'),
 		'out1': get_weights([500, n_classes], name='out')
 	}
 	
 	biases = {
-		'b1' : get_bias_dict(nf, 0, name='b1'),
-		'b2' : get_bias_dict(nf, 0, name='b2'),
+		'b1' : get_bias_dict(nf, 2, name='b1'),
+		'b2' : get_bias_dict(nf, 2, name='b2'),
 		'b3' : get_bias_dict(nf, 0, name='b3'),
 		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
 		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
@@ -103,12 +47,13 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train):
 	# Convolutional Layers
 	re1 = real_symmetric_conv(x, weights['w1'], filter_size=3, padding='SAME')
 	re1 = complex_relu_dict(re1, biases['b1'])
-	#re1 = {0 : (re1, tf.zeros_like(re1))}
+
+	re2 = complex_symmetric_conv(re1, weights['w2'], filter_size=3,
+								 output_orders=[0,1], strides=(1,2,2,1),
+								 padding='SAME')
+	re2 = complex_relu_dict(re2, biases['b2'])
 	
-	re2 = complex_symmetric_conv(re1, weights['w2'], filter_size=3, strides=(1,2,2,1), padding='SAME')
-	re2 = complex_relu_of_sum_dict(re2, biases['b2'])[0][0]
-	
-	re3 = real_symmetric_conv(re2, weights['w3'], filter_size=3, padding='SAME')
+	re3 = complex_symmetric_conv(re2, weights['w3'], filter_size=3, padding='SAME')
 	re3 = complex_relu_of_sum_dict(re3, biases['b3'])[0][0]
 	re4 = maxpool2d(re3, k=2)
 	
@@ -133,10 +78,10 @@ def maxpool2d(X, k=2):
     """Tied max pool. k is the stride and pool size"""
     return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1], padding='VALID')
 
-def get_weights(filter_shape, W_init=None, name='W'):
+def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W'):
 	"""Initialize weights variable with Xavier method"""
 	if W_init == None:
-		stddev = 0.4*np.sqrt(2.0 / np.prod(filter_shape[:2]))
+		stddev = std_mult*np.sqrt(2.0 / np.prod(filter_shape[:2]))
 		W_init = tf.random_normal(filter_shape, stddev=stddev)
 	return tf.Variable(W_init, name=name)
 
@@ -151,7 +96,7 @@ def get_weights_list(comp_shape, in_shape, out_shape, name='W'):
 		weights_list.append(get_weights(shape, name=name+'_'+str(i)))
 	return weights_list
 
-def get_weights_dict(comp_shape, in_shape, out_shape, name='W'):
+def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
 	"""Return a dict of weights for use with real_symmetric_conv. comp_shape is
 	a list of the number of elements per Fourier base. For 3x3 weights use
 	[3,2,2,2]. I currently assume order increasing from 0.
@@ -159,7 +104,7 @@ def get_weights_dict(comp_shape, in_shape, out_shape, name='W'):
 	weights_dict = {}
 	for i, cs in enumerate(comp_shape):
 		shape = cs + [in_shape,out_shape]
-		weights_dict[i] = get_weights(shape, name=name+'_'+str(i))
+		weights_dict[i] = get_weights(shape, std_mult=std_mult, name=name+'_'+str(i))
 	return weights_dict
 
 def get_bias_list(n_filters, order, name='b'):
@@ -283,7 +228,7 @@ def view_filters():
 
 ##### MAIN SCRIPT #####
 def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
-		bn_config=[False, False], trial_num='N', combine_train_val=False):
+		bn_config=[False, False], trial_num='N', combine_train_val=False, std_mult=0.4):
 	tf.reset_default_graph()
 	# Load dataset
 	mnist_train = np.load('./data/mnist_rotation_new/rotated_train.npz')
@@ -318,7 +263,7 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	if model == 'conv_complex':
 		pred, __ = conv_complex(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
 	elif model == 'conv_so2':
-		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
+		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
 	else:
 		print('Model unrecognized')
 		sys.exit(1)

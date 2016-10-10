@@ -6,35 +6,36 @@ import time
 
 import numpy as np
 
-from brute_force import run
+from equivariant import run
 
-def random_independent(n_trials=24):
+def random_independent(n_trials=3):
 	y_best = 0.
 	best_params = {}
 	for i in xrange(n_trials):
-		lr = log_uniform_rand(1e-1, 1e-3)
-		batch_size = int(log_uniform_rand(64,256))
-		n_epochs = 500
+		n_epochs = 5
 		n_filters = 10
-		st_loss = log_uniform_rand(1e-3, 1e0, size=3)
+		
+		lr = log_uniform_rand(1e-2, 1e-4)
+		batch_size = int(log_uniform_rand(64,256))
+		std_mult = uniform_rand(0.05, 1.0)
 		print
-		print lr, batch_size, n_epochs, n_filters, st_loss
+		print('Learning rate: %f' % (lr,))
+		print('Batch size: %f' % (batch_size,))
+		print('Stddev multiplier: %f' % (std_mult,))
 		print
-		y = run(model='conv_Z',
+		y = run(model='conv_so2',
 				lr=lr,
 				batch_size=batch_size,
+				std_mult=std_mult,
 				n_epochs=n_epochs,
 				n_filters=n_filters,
 				trial_num=i,
-				combine_train_val=False,
-				st_loss=st_loss)
+				combine_train_val=False)
 		if y > y_best:
 			y_best = y
 			best_params['lr'] = lr
 			best_params['batch_size'] = batch_size
-			best_params['n_epochs'] = n_epochs
-			best_params['n_filters'] = n_filters
-			best_params['st_loss'] = st_loss
+			best_params['std_mult'] = std_mult
 		
 		print
 		print
@@ -52,12 +53,12 @@ def random_independent(n_trials=24):
 	
 	y = []
 	for i in xrange(5):
-		y.append(run(model='conv_Z',
+		y.append(run(model='conv_so2',
 					 lr=best_params['lr'],
 					 batch_size=best_params['batch_size'],
-					 n_epochs=best_params['n_epochs'],
-					 n_filters=best_params['n_filters'],
-					 st_loss=best_params['st_loss'],
+					 std_mult=best_params['std_mult'],
+					 n_epochs=n_epochs,
+					 n_filters=n_filters,
 					 trial_num='T-'+str(i),
 					 combine_train_val=True))
 		print
@@ -68,11 +69,12 @@ def random_independent(n_trials=24):
 	print y_best
 	print('Best params overall')	
 	print best_params
+	# Compute statistics
 	print y
 	y = np.asarray(y)
 	mean = np.mean(y)
-	print 'Mean: ' + mean
-	print 'Std: ' + np.mean((y - mean)**2)
+	print('Mean: %f' % (mean,))
+	print('Std: %f' % (np.std(y),))
 
 def binary_thinning(n_trials=256):
 	y_best = 0.
