@@ -25,8 +25,8 @@ def steerable_filter(k, order):
 		c = k/2
 		cos_filter[c,c] = 0.
 		sin_filter[c,c] = 0.
-	cos_filter = cos_filter/np.sum(cos_filter**2.)
-	sin_filter = sin_filter/np.sum(sin_filter**2.)
+	cos_filter = cos_filter
+	sin_filter = sin_filter
 	return cos_filter, sin_filter
 
 
@@ -36,10 +36,13 @@ im = skco.rgb2gray(im)[100:200,500:600]
 for angle in [0,45,90,135,180]:
 	kernels = steerable_filter(3, 1)
 	im_ = sciint.rotate(im, angle, reshape=False)
-	imc = scisig.fftconvolve(kernels[0], im_, mode='valid')
-	ims = scisig.fftconvolve(kernels[1], im_, mode='valid')
+	imrr = scisig.fftconvolve(kernels[0], im_, mode='valid')
+	imii = scisig.fftconvolve(kernels[1], np.zeros(im_.shape), mode='valid')
+	imri = scisig.fftconvolve(kernels[0], np.zeros(im_.shape), mode='valid')
+	imir = scisig.fftconvolve(kernels[1], im_, mode='valid')
+	imc = imrr - imii
+	ims = imir + imri
 	print np.std(imc), np.std(ims)
-	
 	
 	kernels = steerable_filter(3, 1)
 	imrr = scisig.fftconvolve(kernels[0], imc, mode='valid')
@@ -48,7 +51,6 @@ for angle in [0,45,90,135,180]:
 	imir = scisig.fftconvolve(kernels[1], imc, mode='valid')
 	imc = imrr - imii
 	ims = imir + imri
-	
 	
 	kernels = steerable_filter(3, -2)
 	imrr = scisig.fftconvolve(kernels[0], imc, mode='valid')
