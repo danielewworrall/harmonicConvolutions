@@ -327,3 +327,200 @@ def dot_blade_test():
 	V, V_ = V_
 	print V
 	print V_
+	
+####### Taco Cohen's stuff---I think#######
+def gConv(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='gConv'):
+    """Run a Taco Cohen G-convolution module"""
+    V_ = get_rotation_stack(V, name=name+'stack')
+    VX = tf.nn.conv2d(X, V_, strides=strides, padding=padding, name=name+'2d')
+    if b is not None:
+        VXsh = tf.shape(VX)
+        VX = tf.reshape(VX, [VXsh[0],VXsh[1],VXsh[2],4,VXsh[3]/4])
+        VX = tf.reshape(tf.nn.bias_add(VX, b), [VXsh[0],VXsh[1],VXsh[2],VXsh[3]])
+    return VX
+
+def coset_pooling(X):
+    # Coset pooling is max-pooling over local subgroups
+    Xsh = tf.shape(X)
+    X = tf.reshape(X, [Xsh[0],Xsh[1]*Xsh[2],4,Xsh[3]/4])
+    X = tf.nn.max_pool(X, ksize=[1,1,4,1], strides=[1,1,4,1], padding='SAME')
+    return tf.reshape(X, [Xsh[0],Xsh[1],Xsh[2],Xsh[3]/4])
+
+def get_rotation_stack(V, name='rot_stack_concat'):
+    """Return stack of 90 degree rotated V"""
+    V0 = V
+    V1 = rotate_90_clockwise(V0)
+    V2 = rotate_90_clockwise(V1)
+    V3 = rotate_90_clockwise(V2)
+    return tf.concat(3, [V0,V1,V2,V3], name=name)
+
+def rotate_90_clockwise(V):
+    """Rotate a square filter clockwise by 90 degrees"""
+    Vsh = V.get_shape().as_list()
+    V = tf.reshape(V, [Vsh[0],Vsh[1],Vsh[2]*Vsh[3]])
+    V_ = tf.image.rot90(V, k=1)
+    return tf.reshape(V_, [Vsh[0],Vsh[1],Vsh[2],Vsh[3]])
+
+##### Not working yet #####
+# Two attempts at maxpooling. The problem is that the gradients don't work
+def complex_maxpool2d_(X, k=2, eps=1e-3):
+    """Max pool over complex valued feature maps by modulus only"""
+    U, V = X
+    R = tf.square(U) + tf.square(V) + eps
+    max_, argmax = tf.nn.max_pool_with_argmax(R, [1,k,k,1], strides=[1,k,k,1],
+                                              padding='VALID', name='cpool')
+    Ush = tf.shape(U)
+    batch_correct = tf.to_int64(tf.reduce_prod(Ush[1:])*tf.range(Ush[0]))
+    argmax = argmax + tf.reshape(batch_correct, [Ush[0],1,1,1])
+    
+    U_flat = tf.reshape(U, [-1])
+    V_flat = tf.reshape(V, [-1])
+    
+    U_ = tf.gather(U_flat, argmax)
+    V_ = tf.gather(V_flat, argmax)
+    
+    return U_, V_
+
+def complex_maxpool2d(X, k=2, eps=1e-3):
+    """Max pool over complex valued feature maps by modulus only"""
+    U, V = X
+    R = tf.square(U) + tf.square(V) + eps
+    max_, argmax = tf.nn.max_pool_with_argmax(R, [1,k,k,1], strides=[1,k,k,1],
+                                              padding='VALID', name='cpool')
+    argmax_list = tf.unpack(argmax, name='amunpack')
+    U_list = tf.unpack(U, name='Uunpack')
+    V_list = tf.unpack(V, name='Vunpack')
+    U_ = []
+    V_ = []
+    for am, u, v in zip(argmax_list, U_list, V_list):
+        u = tf.reshape(u, [-1])
+        v = tf.reshape(v, [-1])
+        U_.append(tf.gather(u, am))
+        V_.append(tf.gather(v, am))
+    U_ = tf.pack(U_)
+    V_ = tf.pack(V_)
+    
+    return U_, V_
+
+##### STEPHAN CAN IGNORE THIS#####
+def complex_dot_blade(Z, V, name='complexdotblade'):
+    V_dot, V_blade = dot_blade_filter(V)
+    Dx = tf.nn.conv2d(Z, V_dot, strides=(1,1,1,1), padding='VALID', name='Dx')
+    Bx = tf.nn.conv2d(Z, V_blade, strides=(1,1,1,1), padding='VALID', name='Bx')
+    return (Dx, Bx)
+
+def complex_depthwise_conv(Z, W, strides=(1,1,1,1), padding='VALID',
+                             name='complexchannelwiseconv'):
+    """
+    Channelwise convolution using complex filters using a cartesian
+    representation. Input tensors X = A+iB and filters W=U+iV. Returns: tensors
+    AU+BV + i(AV-BV) of shape [b,h',w',m*c].
+    """
+    X, Y = Z
+    U, V = W
+    XU = tf.nn.depthwise_conv2d(X, U, strides=strides, padding=padding, name='XU')
+    YV = tf.nn.depthwise_conv2d(Y, V, strides=strides, padding=padding, name='YV')
+    return XU - YV
+
+def dot_blade_filter(V):
+    """Convert the [1,1,2i,o] filter to a dot-blade format size [1,1,2i,2o]"""
+    V_ = tf.squeeze(V, squeeze_dims=[0,1])
+    Vsh = V_.get_shape()
+    V_ = tf.reshape(tf.transpose(V_), tf.pack([(Vsh[0]*Vsh[1])/2,2]))
+    S = to_constant_variable(np.asarray([[0.,1.],[-1.,0.]]))
+    V_blade = tf.matmul(V_,S)
+    V_blade = tf.reshape(V_blade, tf.pack([1,1,Vsh[1],Vsh[0]]))
+    V_blade = tf.transpose(V_blade, perm=[0,1,3,2])
+    return V, V_blade
+
+def equi_real_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
+                    name='equiRealConv'):
+    """Rotationally equivariant real convolution. Returns a list of filter responses
+    output = [Z0, Z1c, Z1s, Z2c, Z2s, ...]. Z0 is zeroth frequency, Z1 is
+    the first frequency, Z2 the second etc., Z1c is the cosine response, Z1s
+    is the sine response."""
+    Q = get_steerable_real_filter(V, order=order)
+    Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
+    return tf.split(3, 2*(order+1), Z)
+
+def stack_moduli(Z, eps=1e-3):
+    """Stack the moduli of the filter responses. Z is the output of a
+    real_equi_conv."""
+    R = []
+    R.append(Z[0])
+    for i in xrange(len(Z)/2):
+        R.append(tf.sqrt(tf.square(Z[2*i+1]) + tf.square(Z[2*i+2]) + eps))
+    return tf.concat(3, R)
+
+def stack_moduli_dict(Z, eps=1e-3):
+    """Stack the moduli of the filter responses from a dict Z, which is the
+    output of a complex_symmetric_conv.
+    """
+    R = []
+    for k, v in Z.iteritems():
+        R.append(tf.sqrt(tf.square(v[0]) + tf.square(v[1]) + eps))
+    return tf.concat(3, R)
+
+def sum_moduli(Z, eps=1e-4):
+    """Sum the moduli of the filter responses. Z is the output of a
+    real_equi_conv."""
+    R = []
+    for i in xrange((len(Z)/2)):
+        R.append(tf.sqrt(tf.square(Z[2*i]) + tf.square(Z[2*i+1]) + eps))
+    return tf.add_n(R)
+
+def sum_moduli_dict(Z, eps=1e-3):
+    """Sum the moduli of the filter responses. Z is the output of a
+    complex_symmetric_conv."""
+    R = []
+    for m, v in Z.iteritems():
+        R.append(tf.sqrt(tf.square(v[0]) + tf.square(v[1]) + eps))
+    return tf.add_n(R)
+
+def phase_invariant_relu(Z, b, order=1, eps=1e-3):
+    """Apply a ReLU to the modulus of the complex feature map, returning the
+    modulus (which is phase invariant) only. Z and b should be lists of feature
+    maps from the output of a real_equi_conv"""
+    Z_ = []
+    oddness = len(Z) % 2
+    if oddness:
+        Z_.append(tf.nn.bias_add(Z[0], b[0]))
+    for i in xrange(order):
+        X = Z[2*i-1-oddness]
+        Y = Z[2*i-oddness]
+        R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
+        Rb = tf.nn.bias_add(R, b[i+1])
+        Z_.append(tf.nn.relu(Rb))
+    return Z_
+
+def complex_relu(Z, b, eps=1e-4):
+    """Apply a ReLU to the modulus of the complex feature map"""
+    Z_ = []
+    Z_.append(tf.nn.bias_add(Z[0], b[0]))
+    for i in xrange(len(Z)/2):
+        X = Z[2*i+1]
+        Y = Z[2*i+2]
+        R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
+        Rb = tf.nn.bias_add(R, b[i+1])
+        c = tf.nn.relu(Rb)/R
+        Z_.append(X * c)
+        Z_.append(Y * c)
+    return Z_
+
+def complex_softplus(Z, b, order=1, eps=1e-4):
+    """Apply a ReLU to the modulus of the complex feature map"""
+    Z_ = []
+    oddness = len(Z) % 2
+    if oddness:
+        Z_.append(Z[0])
+    for i in xrange(order):
+        X = Z[2*i-1-oddness]
+        Y = Z[2*i-oddness]
+        R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
+        Rb = tf.nn.bias_add(R,b)
+        c = tf.nn.softplus(Rb)/R
+        Z_.append(X * c)
+        Z_.append(Y * c)
+    return Z_
+
+

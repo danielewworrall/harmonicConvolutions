@@ -12,7 +12,7 @@ def random_independent(n_trials=3):
 	y_best = 0.
 	best_params = {}
 	for i in xrange(n_trials):
-		n_epochs = 5
+		n_epochs = 500
 		n_filters = 10
 		
 		lr = log_uniform_rand(1e-2, 1e-4)

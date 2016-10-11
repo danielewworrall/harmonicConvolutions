@@ -21,44 +21,45 @@ from matplotlib import pyplot as plt
 def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 	"""The conv_so2 architecture, scatters first through an equi_real_conv
 	followed by phase-pooling then summation and a nonlinearity. Current
-	test time score is 95.12% for 3 layers deep, 15 filters"""
-	# Store layers weight & bias
+	test time score is 92.97+/-0.06% for 3 layers deep, 15 filters"""
+	# Sure layers weight & bias
 	order = 3
 	nf = n_filters
 	
 	weights = {
-		'w1' : get_weights_dict([[3,],[2,],[2,]], 1, nf, std_mult=std_mult, name='W1'),
-		'w2' : get_weights_dict([[3,],[2,],[2,]], nf, nf, std_mult=std_mult, name='W2'),
-		'w3' : get_weights_dict([[3,]], nf, nf, std_mult=std_mult, name='W3'),
-		'out0' : get_weights([nf*7*7, 500], name='W4'),
-		'out1': get_weights([500, n_classes], name='out')
+		'w1' : get_weights_dict([[6,],[5,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
+		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
+		'w3' : get_weights_dict([[6,]], nf, nf, std_mult=std_mult, name='W3'),
+		'out0' : get_weights([nf*7*7, 500], name='out0'),
+		'out1': get_weights([500, n_classes], name='out1')
 	}
 	
 	biases = {
 		'b1' : get_bias_dict(nf, 2, name='b1'),
 		'b2' : get_bias_dict(nf, 2, name='b2'),
 		'b3' : get_bias_dict(nf, 0, name='b3'),
-		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='b4'),
-		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out')
+		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='out0'),
+		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out1')
 	}
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
 	
 	# Convolutional Layers
-	re1 = real_symmetric_conv(x, weights['w1'], filter_size=3, padding='SAME')
-	re1 = complex_relu_dict(re1, biases['b1'])
-
-	re2 = complex_symmetric_conv(re1, weights['w2'], filter_size=3,
+	# LAYER 1
+	re1 = real_input_equi_conv(x, weights['w1'], filter_size=5, padding='SAME')
+	re1 = complex_relu(re1, biases['b1'])
+	# LAYER 2
+	re2 = complex_symmetric_conv(re1, weights['w2'], filter_size=5,
 								 output_orders=[0,1], strides=(1,2,2,1),
 								 padding='SAME')
-	re2 = complex_relu_dict(re2, biases['b2'])
-	
-	re3 = complex_symmetric_conv(re2, weights['w3'], filter_size=3, padding='SAME')
-	re3 = complex_relu_of_sum_dict(re3, biases['b3'])[0][0]
-	re4 = maxpool2d(re3, k=2)
-	
+	re2 = complex_relu(re2, biases['b2'])
+	# LAYER 3
+	re3 = complex_symmetric_conv(re2, weights['w3'], filter_size=5, padding='SAME')
+	re3 = complex_relu_of_sum(re3, biases['b3'])
+	re3 = maxpool2d(re3, k=2)
+
 	# Fully-connected layers
-	fc = tf.reshape(tf.nn.dropout(re4, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
+	fc = tf.reshape(tf.nn.dropout(re3, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
 	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
 	fc = tf.nn.relu(fc)
 	fc = tf.nn.dropout(fc, drop_prob)
@@ -78,13 +79,6 @@ def maxpool2d(X, k=2):
     """Tied max pool. k is the stride and pool size"""
     return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1], padding='VALID')
 
-def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W'):
-	"""Initialize weights variable with Xavier method"""
-	if W_init == None:
-		stddev = std_mult*np.sqrt(2.0 / np.prod(filter_shape[:2]))
-		W_init = tf.random_normal(filter_shape, stddev=stddev)
-	return tf.Variable(W_init, name=name)
-
 def get_weights_list(comp_shape, in_shape, out_shape, name='W'):
 	"""Return a list of weights for use with equi_real_conv(). comp_shape is a
 	list of the number of elements per Fourier base. For 3x3 weights use
@@ -97,7 +91,7 @@ def get_weights_list(comp_shape, in_shape, out_shape, name='W'):
 	return weights_list
 
 def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
-	"""Return a dict of weights for use with real_symmetric_conv. comp_shape is
+	"""Return a dict of weights for use with real_input_equi_conv. comp_shape is
 	a list of the number of elements per Fourier base. For 3x3 weights use
 	[3,2,2,2]. I currently assume order increasing from 0.
 	"""
@@ -364,7 +358,7 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='conv_so2', lr=1e-3, batch_size=132, n_epochs=500,
-		n_filters=10, combine_train_val=False, bn_config=[True,True,True])
+	run(model='conv_so2', lr=1e-3, batch_size=100, n_epochs=500, std_mult=0.4,
+		n_filters=10, combine_train_val=False)
 	#view_feature_map(20)
 	#view_filters()

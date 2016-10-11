@@ -9,50 +9,47 @@ import scipy.linalg as scilin
 import tensorflow as tf
 
 
-def to_constant_variable(Q):
-    """Converts a numpy tensor to a tf constant"""
-    Q = tf.Variable(Q, trainable=False)
-    return tf.to_float(Q)
-
-def get_weights(filter_shape, W_init=None, collection=None, name=''):
-    """Return normally initialized weight variables"""
-    if W_init == None:
-        W_init = tf.random_normal(filter_shape, stddev=0.01)
-    return tf.Variable(W_init, collections=collection, name=name)
-
-def equi_real_conv(X, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
-                    name='equiRealConv'):
-    """Equivariant real convolution. Returns a list of filter responses
-    output = [Z0, Z1c, Z1s, Z2c, Z2s, ...]. Z0 is zeroth frequency, Z1 is
-    the first frequency, Z2 the second etc., Z1c is the cosine response, Z1s
-    is the sine response."""
-    Q = get_steerable_real_filter(V, order=order)
-    Z = tf.nn.conv2d(X, Q, strides=strides, padding=padding, name='equireal')
-    return tf.split(3, 2*(order+1), Z)
-
-def real_symmetric_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
-                        name='equiSymmConv'):
-    """Equivariant complex convolution for a real input. Returns a list of
-    filter responses output = [Z-2, Z-1, Z0, Z1, Z2, ...]. Z0 is zeroth
-    frequency, Z1 is the first frequency, Z2 the second etc.."""
+def real_input_equi_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
+                        name='riec'):
+    """Equivariant complex convolution for a real input e.g. an image.
+    
+    X: tf tensor
+    R: dict of filter coefficients {rotation order: (real, imaginary)}
+    filter_size: int of filter height/width (default 3)
+    strides: as per tf convention (default (1,1,1,1))
+    padding: as per tf convention (default VALID)
+    name: (default riec)
+    
+    Returns dict filter responses {order: (real, imaginary)}
+    """
     Q = get_complex_filters(R, filter_size=filter_size)
     Z = {}
     for m, q in Q.iteritems():
-        Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding, name='sym_real')
-        Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding, name='sym_im')
+        Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding,
+                          name='reic_real')
+        Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding,
+                          name='reic_im')
         Z[m] = (Zr, Zi)
     return Z
 
-def complex_symmetric_conv(X, R, filter_size, output_orders=[0,],
-                           strides=(1,1,1,1), padding='VALID', name='equiSymmConv'):
-    """Equivariant complex convolution for a complex input. Returns a list of
-    filter responses output = [Z-2, Z-1, Z0, Z1, Z2, ...]. Z0 is zeroth
-    frequency, Z1 is the first frequency, Z2 the second etc... This is a little
-    more complicated, because we have to match up the rotation orders correctly.
+def complex_symmetric_conv(X, R, filter_size=3, output_orders=[0,],
+                           strides=(1,1,1,1), padding='VALID', name='ciec'):
+    """Equivariant complex convolution for a complex input e.g. feature maps.
+    
+    X: dict of channels {rotation order: (real, imaginary)}
+    R: dict of filter coefficients {rotation order: (real, imaginary)}
+    filter_size: int of filter height/width (default 3)
+    output_orders: list of rotation orders to output (default [0,])  
+    strides: as per tf convention (default (1,1,1,1))
+    padding: as per tf convention (default VALID)
+    name: (default riec)
+    
+    Returns dict filter responses {order: (real, imaginary)}
     """
-    # Perform initial scan to link up all filter orders with input image orders
+    # Perform initial scan to link up all filter orders with input image orders.
     pairings = get_key_pairings(X, R, output_orders)
     Q = get_complex_filters(R, filter_size=filter_size)
+    
     Z = {}
     for m, v in pairings.iteritems():
         for pair in v:
@@ -60,26 +57,19 @@ def complex_symmetric_conv(X, R, filter_size, output_orders=[0,],
             order = q_ + x_
             s, q = np.sign(q_), Q[np.abs(q_)]   # key sign, filter
             x = X[x_]                           # input
-            # W_{m} = conj(W_{-m})
+            # For negative orders take conjugate of positive order filter.
             Z_ = complex_conv(x, (q[0], s*q[1]), strides=strides, padding=padding)
             if order not in Z.keys():
                 Z[order] = []
             Z[order].append(Z_)
-    return concat_complex_tensor_list(Z)
+    return sum_complex_tensor_list(Z)
 
-def symmetric_conv_1x1(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
-                        name='equiSymmConv'):
-    """Equivariant complex convolution for a real input. Returns a list of
-    filter responses output = [Z-2, Z-1, Z0, Z1, Z2, ...]. Z0 is zeroth
-    frequency, Z1 is the first frequency, Z2 the second etc.."""
-    Z = {}
-    for m, x in X.iteritems():
-        Zr = tf.nn.conv2d(x[0], R[m], strides=strides, padding=padding, name='sym_real')
-        Zi = tf.nn.conv2d(x[1], R[m], strides=strides, padding=padding, name='sym_im')
-        Z[m] = (Zr, Zi)
-    return Z
-
-def concat_complex_tensor_list(Z):
+def sum_complex_tensor_list(Z):
+    """Z is a dict {order: [(real,im), (real,im), (real,im)]}. This function
+    sums all the real parts and all the imaginary parts for each order. I think
+    there is a better way to do this by representing each order as a single
+    feature stack.
+    """
     output = {}
     for order, response_list in Z.iteritems():
         reals = []
@@ -87,29 +77,33 @@ def concat_complex_tensor_list(Z):
         for re, im in response_list:
             reals.append(re)
             ims.append(im)
-        #output[order] = (tf.concat(3, reals), tf.concat(3, ims))
         output[order] = (tf.add_n(reals), tf.add_n(ims))
     return output
 
-def get_key_pairings(X, R, orders):
-    """Return all filter--input pairings with complimentary rotation order.
+def get_key_pairings(X, R, output_orders):
+    """Finds combinations of all inputs and filters, such that
+    input_order + filter_order = output_order
+    
+    X: dict of channels {rotation order: (real, imaginary)}
+    R: dict of filter coefficients {rotation order: (real, imaginary)}
+    output_orders: list of rotation orders to output 
+    
     Returns {order : (r,x)} pairs.
     """
     X_keys = np.asarray(X.keys())
-    R_keys = np.asarray(get_filter_keys(R.keys()))[:,np.newaxis]
+    R_keys = np.asarray(mirror_filter_keys(R.keys()))[:,np.newaxis]
     # The compatibility matrix lists all sums of key pairings
     compatibility = X_keys + R_keys
     pairings = {}
-    for order in orders:
+    for order in output_orders:
         where = np.argwhere(compatibility == order)
         pairings[order] = []
         for k in where:
             pairings[order].append((R_keys[k[0],0], X_keys[k[1]]))
     return pairings
 
-
-def get_filter_keys(R_keys):
-    """Add negative component to filter keys"""
+def mirror_filter_keys(R_keys):
+    """Add negative component to filter keys e.g. [0,1,2]->[-2,-1,0,1,2]"""
     new_keys = []
     for key in R_keys:
         if key == 0:
@@ -119,118 +113,60 @@ def get_filter_keys(R_keys):
             new_keys.append(-key)
     return sorted(new_keys)
 
-def stack_moduli(Z, eps=1e-3):
-    """Stack the moduli of the filter responses. Z is the output of a
-    real_equi_conv."""
-    R = []
-    R.append(Z[0])
-    for i in xrange(len(Z)/2):
-        R.append(tf.sqrt(tf.square(Z[2*i+1]) + tf.square(Z[2*i+2]) + eps))
-    return tf.concat(3, R)
-
-def stack_moduli_dict(Z, eps=1e-3):
-    """Stack the moduli of the filter responses from a dict Z, which is the
-    output of a complex_symmetric_conv.
-    """
-    R = []
-    for k, v in Z.iteritems():
-        R.append(tf.sqrt(tf.square(v[0]) + tf.square(v[1]) + eps))
-    return tf.concat(3, R)
-
-def sum_moduli(Z, eps=1e-4):
-    """Stack the moduli of the filter responses. Z is the output of a
-    real_equi_conv."""
-    R = []
-    for i in xrange((len(Z)/2)):
-        R.append(tf.sqrt(tf.square(Z[2*i]) + tf.square(Z[2*i+1]) + eps))
-    return tf.add_n(R)
-
-def sum_moduli_dict(Z, eps=1e-3):
-    """Sum the moduli of the filter responses. Z is the output of a
-    complex_symmetric_conv."""
-    R = []
-    for m, v in Z.iteritems():
-        R.append(tf.sqrt(tf.square(v[0]) + tf.square(v[1]) + eps))
-    return tf.add_n(R)
-
-
 ##### NONLINEARITIES #####
-# Just use the phase_invariant_relu for now
-def phase_invariant_relu(Z, b, order=1, eps=1e-3):
-    """Apply a ReLU to the modulus of the complex feature map, returning the
-    modulus (which is phase invariant) only. Z and b should be lists of feature
-    maps from the output of a real_equi_conv"""
-    Z_ = []
-    oddness = len(Z) % 2
-    if oddness:
-        Z_.append(tf.nn.bias_add(Z[0], b[0]))
-    for i in xrange(order):
-        X = Z[2*i-1-oddness]
-        Y = Z[2*i-oddness]
-        R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
-        Rb = tf.nn.bias_add(R, b[i+1])
-        Z_.append(tf.nn.relu(Rb))
-    return Z_
-
-def complex_relu(Z, b, eps=1e-4):
-    """Apply a ReLU to the modulus of the complex feature map"""
-    Z_ = []
-    Z_.append(tf.nn.bias_add(Z[0], b[0]))
-    for i in xrange(len(Z)/2):
-        X = Z[2*i+1]
-        Y = Z[2*i+2]
-        R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
-        Rb = tf.nn.bias_add(R, b[i+1])
-        c = tf.nn.relu(Rb)/R
-        Z_.append(X * c)
-        Z_.append(Y * c)
-    return Z_
-
-def complex_relu_dict(Z, b, eps=1e-4):
-    """Apply a ReLU to the modulus of the complex feature map"""
+def complex_relu(X, b, eps=1e-4):
+    """Apply a ReLU to the modulus of the complex feature map.
+    
+    Output U + iV = ReLU(|Z| + b)*(A + iB)
+    where  A + iB = Z/|Z|
+    
+    X: dict of channels {rotation order: (real, imaginary)}
+    b: dict of biases {rotation order: real-valued bias}
+    eps: regularization since grad |Z| is infinite at zero (default 1e-4)
+    """
     R = {}
-    for m, r in Z.iteritems():
-        R_ = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-        Rb = tf.nn.bias_add(R_, b[m])
-        c = tf.nn.relu(Rb)/R_
+    for m, r in X.iteritems():
+        magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
+        Rb = tf.nn.bias_add(magnitude, b[m])
+        c = tf.nn.relu(Rb)/magnitude
         R[m] = (r[0]*c, r[1]*c)
     return R
 
-def complex_relu_of_sum_dict(Z, b, eps=1e-4):
-    """Apply a ReLU to the modulus of the complex feature map"""
+def complex_relu_of_sum(Z, b, eps=1e-4):
+    """Apply a ReLU to the modulus of the sum of complex feature maps.
+    
+    Output U = complex_relu(sum(Z))
+    
+    X: dict of channels {rotation order: (real, imaginary)}
+    b: dict of biases {rotation order: real-valued bias}
+    eps: regularization since grad |Z| is infinite at zero (default 1e-4)
+    """
     R = []
     for m, r in Z.iteritems():
         R_ = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
         R.append(tf.nn.bias_add(R_,b[m]))
-    R = tf.nn.relu(tf.add_n(R))
-    return {0 : (R,)}
+    return tf.nn.relu(tf.add_n(R))
 
-def complex_relu_of_sum_dict_(Z, b, eps=1e-4):
-    """Apply a ReLU to the modulus of the complex feature map"""
-    R = []
-    for m, r in Z.iteritems():
-        R_ = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-        R.append(tf.nn.bias_add(R_,b[m]))
-    R = tf.nn.relu(tf.add_n(R))
-    return {0 : (R,)}
+##### CREATING VARIABLES #####
+def to_constant_float(Q):
+    """Converts a numpy tensor to a tf constant float"""
+    Q = tf.Variable(Q, trainable=False)
+    return tf.to_float(Q)
 
-def complex_softplus(Z, b, order=1, eps=1e-4):
-    """Apply a ReLU to the modulus of the complex feature map"""
-    Z_ = []
-    oddness = len(Z) % 2
-    if oddness:
-        Z_.append(Z[0])
-    for i in xrange(order):
-        X = Z[2*i-1-oddness]
-        Y = Z[2*i-oddness]
-        R = tf.sqrt(tf.square(X) + tf.square(Y) + eps)
-        Rb = tf.nn.bias_add(R,b)
-        c = tf.nn.softplus(Rb)/R
-        Z_.append(X * c)
-        Z_.append(Y * c)
-    return Z_
+def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W'):
+    """Initialize weights variable with He method
+    
+    filter_shape: list of filter dimensions
+    W_init: numpy initial values (default None)
+    std_mult: multiplier for weight standard deviation (default 0.4)
+    name: (default W)
+    """
+    if W_init == None:
+        stddev = std_mult*np.sqrt(2.0 / np.prod(filter_shape[:2]))
+        W_init = tf.random_normal(filter_shape, stddev=stddev)
+    return tf.Variable(W_init, name=name)
 
-##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS#####
+##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####
 def get_steerable_real_filter(V, order=1):
     """Return a steerable filter up to frequency 'order' from the input V"""
     # Some shape maths
@@ -317,11 +253,11 @@ def get_basis_matrices(k, order=1):
     for i in xrange(tap_length):
         if order == 0:
             mask = (R == unique[i])*1.
-            masks.append(to_constant_variable(mask))
+            masks.append(to_constant_float(mask))
         elif order > 0:
             if unique[i] != 0.:
                 mask = (R == unique[i])*np.cos(order*theta)
-                masks.append(to_constant_variable(mask))
+                masks.append(to_constant_float(mask))
     masks = tf.pack(masks, axis=-1)
     return tf.reshape(masks, [k,k,tap_length-(order>0)])
 
@@ -343,16 +279,16 @@ def get_complex_basis_matrices(k, order=1):
         if order == 0:
             # For order == 0 there is nonzero weight on the center pixel
             cmask = (R == unique[i])*1.
-            cmasks.append(to_constant_variable(cmask))
+            cmasks.append(to_constant_float(cmask))
             smask = (R == unique[i])*0.
-            smasks.append(to_constant_variable(smask))
+            smasks.append(to_constant_float(smask))
         elif order > 0:
             # For order > 0 there is zero weights on the center pixel
             if unique[i] != 0.:
                 cmask = (R == unique[i])*np.cos(order*theta)
-                cmasks.append(to_constant_variable(cmask))
+                cmasks.append(to_constant_float(cmask))
                 smask = (R == unique[i])*np.sin(order*theta)
-                smasks.append(to_constant_variable(smask))
+                smasks.append(to_constant_float(smask))
     cmasks = tf.pack(cmasks, axis=-1)
     cmasks = tf.reshape(cmasks, [k,k,tap_length-(order>0)])
     smasks = tf.pack(smasks, axis=-1)
@@ -452,7 +388,7 @@ def get_complex_basis_masks(k):
     masks = []
     for i in xrange(tap_length):
         mask = (R == unique[i])
-        masks.append(to_constant_variable(mask))
+        masks.append(to_constant_float(mask))
     return masks
 
 def complex_GAP(Z, W):
@@ -463,37 +399,6 @@ def complex_GAP(Z, W):
     X = tf.reduce_mean(X, reduction_indices=[1,2])
     Y = tf.reduce_mean(Y, reduction_indices=[1,2])
     return tf.matmul(X, R) + tf.matmul(Y, I)
-
-##### STEPHAN CAN IGNORE THIS#####
-def complex_dot_blade(Z, V, name='complexdotblade'):
-    V_dot, V_blade = dot_blade_filter(V)
-    Dx = tf.nn.conv2d(Z, V_dot, strides=(1,1,1,1), padding='VALID', name='Dx')
-    Bx = tf.nn.conv2d(Z, V_blade, strides=(1,1,1,1), padding='VALID', name='Bx')
-    return (Dx, Bx)
-
-def complex_depthwise_conv(Z, W, strides=(1,1,1,1), padding='VALID',
-                             name='complexchannelwiseconv'):
-    """
-    Channelwise convolution using complex filters using a cartesian
-    representation. Input tensors X = A+iB and filters W=U+iV. Returns: tensors
-    AU+BV + i(AV-BV) of shape [b,h',w',m*c].
-    """
-    X, Y = Z
-    U, V = W
-    XU = tf.nn.depthwise_conv2d(X, U, strides=strides, padding=padding, name='XU')
-    YV = tf.nn.depthwise_conv2d(Y, V, strides=strides, padding=padding, name='YV')
-    return XU - YV
-
-def dot_blade_filter(V):
-    """Convert the [1,1,2i,o] filter to a dot-blade format size [1,1,2i,2o]"""
-    V_ = tf.squeeze(V, squeeze_dims=[0,1])
-    Vsh = V_.get_shape()
-    V_ = tf.reshape(tf.transpose(V_), tf.pack([(Vsh[0]*Vsh[1])/2,2]))
-    S = to_constant_variable(np.asarray([[0.,1.],[-1.,0.]]))
-    V_blade = tf.matmul(V_,S)
-    V_blade = tf.reshape(V_blade, tf.pack([1,1,Vsh[1],Vsh[0]]))
-    V_blade = tf.transpose(V_blade, perm=[0,1,3,2])
-    return V, V_blade
 
 def batch_norm(x, n_out, phase_train, name='bn'):
     """bgshi @ http://stackoverflow.com/questions/33949786/how-could-i-use-
@@ -515,85 +420,6 @@ def batch_norm(x, n_out, phase_train, name='bn'):
                     lambda: (ema.average(batch_mean), ema.average(batch_var)))
         normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
     return normed
-
-
-####### Taco Cohen's stuff---I think#######
-def gConv(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='gConv'):
-    """Run a Taco Cohen G-convolution module"""
-    V_ = get_rotation_stack(V, name=name+'stack')
-    VX = tf.nn.conv2d(X, V_, strides=strides, padding=padding, name=name+'2d')
-    if b is not None:
-        VXsh = tf.shape(VX)
-        VX = tf.reshape(VX, [VXsh[0],VXsh[1],VXsh[2],4,VXsh[3]/4])
-        VX = tf.reshape(tf.nn.bias_add(VX, b), [VXsh[0],VXsh[1],VXsh[2],VXsh[3]])
-    return VX
-
-def coset_pooling(X):
-    # Coset pooling is max-pooling over local subgroups
-    Xsh = tf.shape(X)
-    X = tf.reshape(X, [Xsh[0],Xsh[1]*Xsh[2],4,Xsh[3]/4])
-    X = tf.nn.max_pool(X, ksize=[1,1,4,1], strides=[1,1,4,1], padding='SAME')
-    return tf.reshape(X, [Xsh[0],Xsh[1],Xsh[2],Xsh[3]/4])
-
-def get_rotation_stack(V, name='rot_stack_concat'):
-    """Return stack of 90 degree rotated V"""
-    V0 = V
-    V1 = rotate_90_clockwise(V0)
-    V2 = rotate_90_clockwise(V1)
-    V3 = rotate_90_clockwise(V2)
-    return tf.concat(3, [V0,V1,V2,V3], name=name)
-
-def rotate_90_clockwise(V):
-    """Rotate a square filter clockwise by 90 degrees"""
-    Vsh = V.get_shape().as_list()
-    V = tf.reshape(V, [Vsh[0],Vsh[1],Vsh[2]*Vsh[3]])
-    V_ = tf.image.rot90(V, k=1)
-    return tf.reshape(V_, [Vsh[0],Vsh[1],Vsh[2],Vsh[3]])
-
-##### Not working yet #####
-# Two attempts at maxpooling. The problem is that the gradients don't work
-def complex_maxpool2d_(X, k=2, eps=1e-3):
-    """Max pool over complex valued feature maps by modulus only"""
-    U, V = X
-    R = tf.square(U) + tf.square(V) + eps
-    max_, argmax = tf.nn.max_pool_with_argmax(R, [1,k,k,1], strides=[1,k,k,1],
-                                              padding='VALID', name='cpool')
-    Ush = tf.shape(U)
-    batch_correct = tf.to_int64(tf.reduce_prod(Ush[1:])*tf.range(Ush[0]))
-    argmax = argmax + tf.reshape(batch_correct, [Ush[0],1,1,1])
-    
-    U_flat = tf.reshape(U, [-1])
-    V_flat = tf.reshape(V, [-1])
-    
-    U_ = tf.gather(U_flat, argmax)
-    V_ = tf.gather(V_flat, argmax)
-    
-    return U_, V_
-
-def complex_maxpool2d(X, k=2, eps=1e-3):
-    """Max pool over complex valued feature maps by modulus only"""
-    U, V = X
-    R = tf.square(U) + tf.square(V) + eps
-    max_, argmax = tf.nn.max_pool_with_argmax(R, [1,k,k,1], strides=[1,k,k,1],
-                                              padding='VALID', name='cpool')
-    argmax_list = tf.unpack(argmax, name='amunpack')
-    U_list = tf.unpack(U, name='Uunpack')
-    V_list = tf.unpack(V, name='Vunpack')
-    U_ = []
-    V_ = []
-    for am, u, v in zip(argmax_list, U_list, V_list):
-        u = tf.reshape(u, [-1])
-        v = tf.reshape(v, [-1])
-        U_.append(tf.gather(u, am))
-        V_.append(tf.gather(v, am))
-    U_ = tf.pack(U_)
-    V_ = tf.pack(V_)
-    
-    return U_, V_
-
-
-
-
 
 
 
