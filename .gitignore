@@ -4,3 +4,4 @@ logs
 checkpoints
 pics/
 data
+*.pyc
