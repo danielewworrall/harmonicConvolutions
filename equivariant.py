@@ -12,7 +12,7 @@ import tensorflow as tf
 
 import input_data
 
-from rotated_conv import *
+from steer_conv import *
 
 from matplotlib import pyplot as plt
 
@@ -46,15 +46,15 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 	
 	# Convolutional Layers
 	# LAYER 1
-	re1 = real_input_equi_conv(x, weights['w1'], filter_size=5, padding='SAME')
+	re1 = real_input_conv(x, weights['w1'], filter_size=5, padding='SAME')
 	re1 = complex_relu(re1, biases['b1'])
 	# LAYER 2
-	re2 = complex_symmetric_conv(re1, weights['w2'], filter_size=5,
+	re2 = complex_input_conv(re1, weights['w2'], filter_size=5,
 								 output_orders=[0,1], strides=(1,2,2,1),
 								 padding='SAME')
 	re2 = complex_relu(re2, biases['b2'])
 	# LAYER 3
-	re3 = complex_symmetric_conv(re2, weights['w3'], filter_size=5, padding='SAME')
+	re3 = complex_input_conv(re2, weights['w3'], filter_size=5, padding='SAME')
 	re3 = complex_relu_of_sum(re3, biases['b3'])
 	re3 = maxpool2d(re3, k=2)
 
@@ -67,7 +67,7 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 	# Output, class prediction
 	return tf.nn.bias_add(tf.matmul(fc, weights['out1']), biases['out1'])
 
-##### CUSTOM BLOCKS #####
+##### CUSTOM BLOCKS FOR MODEL #####
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
     """conv2d wrapper. Supply input X, weights V and optional bias"""
     VX = tf.nn.conv2d(X, V, strides=strides, padding=padding, name=name+'_')
@@ -78,17 +78,6 @@ def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
 def maxpool2d(X, k=2):
     """Tied max pool. k is the stride and pool size"""
     return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1], padding='VALID')
-
-def get_weights_list(comp_shape, in_shape, out_shape, name='W'):
-	"""Return a list of weights for use with equi_real_conv(). comp_shape is a
-	list of the number of elements per Fourier base. For 3x3 weights use
-	[3,2,2,2]. I'm going to change this to just accept 'order' and kernel size
-	in future."""
-	weights_list = []
-	for i, cs in enumerate(comp_shape):
-		shape = [cs,in_shape,out_shape]
-		weights_list.append(get_weights(shape, name=name+'_'+str(i)))
-	return weights_list
 
 def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
 	"""Return a dict of weights for use with real_input_equi_conv. comp_shape is
@@ -101,14 +90,6 @@ def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
 		weights_dict[i] = get_weights(shape, std_mult=std_mult, name=name+'_'+str(i))
 	return weights_dict
 
-def get_bias_list(n_filters, order, name='b'):
-	"""Return a list of biases for use with equi_real_conv()"""
-	bias_list = []
-	for i in xrange(order+1):
-		bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'_'+str(i))
-		bias_list.append(bias)
-	return bias_list
-
 def get_bias_dict(n_filters, order, name='b'):
 	"""Return a dict of biases"""
 	bias_dict = {}
@@ -117,6 +98,7 @@ def get_bias_dict(n_filters, order, name='b'):
 		bias_dict[i] = bias
 	return bias_dict
 
+##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
 def minibatcher(inputs, targets, batch_size, shuffle=False):
 	"""Input and target are minibatched. Returns a generator"""
 	assert len(inputs) == len(targets)
@@ -145,83 +127,9 @@ def rotate_feature_maps(X, n_angles):
 	X_ = np.reshape(X_, [-1,784])
 	return X_
 
-def view_feature_map(n_rotations):
-	"""View the rotation order m feature map"""
-	tf.reset_default_graph()
-	# Load dataset
-	mnist_train = np.load('./data/mnist_rotation_new/rotated_train.npz')
-	mnist_trainx, mnist_trainy = mnist_train['x'], mnist_train['y']
-
-	# Parameters
-	batch_size = n_rotations
-	
-	# Network Parameters
-	n_input = 784 				# MNIST data input (img shape: 28*28)
-	n_classes = 10 				# MNIST total classes (0-9 digits)
-	dropout = 0.75 				# Dropout, probability to keep units
-	n_filters = 10
-	dataset_size = 10000
-	
-	# tf Graph input
-	x = tf.placeholder(tf.float32, [batch_size, n_input])
-	y = tf.placeholder(tf.int64, [batch_size])
-	learning_rate = tf.placeholder(tf.float32)
-	keep_prob = tf.placeholder(tf.float32)
-	phase_train = tf.placeholder(tf.bool)
-	
-	pred, fm = conv_complex(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
-			
-	# Initializing the variables
-	init = tf.initialize_all_variables()
-	
-	# Launch the graph
-	with tf.Session() as sess:
-		# Keep training until reach max iterations
-		sess.run(init)
-		batch_x = rotate_feature_maps(mnist_trainx[np.random.randint(10000),:], n_rotations)
-		# Optimize
-		feed_dict = {x: batch_x}
-		fmx = sess.run(fm, feed_dict=feed_dict)
-		for key, val in fmx.iteritems():
-			plt.ion()
-			plt.show()
-			for i in xrange(n_rotations):
-				plt.cla()
-				plt.figure(1)
-				plt.imshow(np.sqrt(val[0][i,:,:,0]**2+val[1][i,:,:,0]**2), cmap='gray', interpolation='nearest')
-				plt.show()
-				raw_input((key, i))
-	sess.close()
-		
-def view_filters():
-	weights = get_weights_dict([3,2,2,2], 1, 1, name='W1')
-	q = get_complex_filters(weights, 3)
-	
-	W0 = np.reshape(np.asarray([1.000,0.368,0.135]), [3,1,1])
-	W1 = np.reshape(np.asarray([0.368,0.135]), [2,1,1])
-	W2 = np.reshape(np.asarray([0.368,0.135]), [2,1,1])
-	W3 = np.reshape(np.asarray([0.368,0.135]), [2,1,1])
-	
-	with tf.Session() as sess:
-		init = tf.initialize_all_variables()
-		sess.run(init)
-		Q = sess.run(q, feed_dict={weights[0] : W0,
-								   weights[1] : W1,
-								   weights[2] : W2,
-								   weights[3] : W3})
-		plt.ion()
-		plt.show()
-		for i in xrange(4):
-			for j in xrange(2):
-				plt.cla()
-				plt.figure(1)
-				print np.squeeze(Q[i][j])
-				plt.imshow(np.squeeze(Q[i][j]), cmap='gray', interpolation='nearest')
-				plt.draw()
-				raw_input(i)
 
 ##### MAIN SCRIPT #####
-def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
+def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		bn_config=[False, False], trial_num='N', combine_train_val=False, std_mult=0.4):
 	tf.reset_default_graph()
 	# Load dataset
@@ -254,9 +162,7 @@ def run(model='deep_steer', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	phase_train = tf.placeholder(tf.bool)
 	
 	# Construct model
-	if model == 'conv_complex':
-		pred, __ = conv_complex(x, keep_prob, n_filters, n_classes, batch_size, phase_train)
-	elif model == 'conv_so2':
+	if model == 'conv_so2':
 		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
 	else:
 		print('Model unrecognized')

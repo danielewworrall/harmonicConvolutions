@@ -523,4 +523,163 @@ def complex_softplus(Z, b, order=1, eps=1e-4):
         Z_.append(Y * c)
     return Z_
 
+def get_steerable_real_filter(V, order=1):
+    """Return a steerable filter up to frequency 'order' from the input V"""
+    # Some shape maths
+    Vsh = V[0].get_shape().as_list()     # [tap_length,i,o]
+    k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
+    
+    # Generate the sinusoidal masks for steering
+    masks = {}
+    for i in xrange(order + 1):
+        masks[i] = tf.reshape(get_basis_matrices(k, order=i), [k*k,Vsh[0]-(i>0)])
+    
+    # Build the filters from linear combinations of the sinusoid mask and the
+    # radial weighting coefficients
+    W = []
+    V0 = tf.reshape(V[0], [Vsh[0],Vsh[1]*Vsh[2]])
+    W.append(tf.reshape(tf.matmul(masks[0], V0, name='Wx'), [k,k,Vsh[1],Vsh[2]]))
+    W.append(tf.zeros_like(W[-1]))
+    for i in xrange(order):
+        ord_ = str(i+1)
+        Vi = tf.reshape(V[i+1], [Vsh[0]-1,Vsh[1]*Vsh[2]])
+        Wx = tf.matmul(masks[i+1], Vi, name='Wx')
+        W.append(tf.reshape(Wx, [k,k,Vsh[1],Vsh[2]]))
+        W.append(-tf.reverse(tf.transpose(W[-1], perm=[1,0,2,3]), [False,True,False,False]))
+    return tf.concat(3, W)
 
+def get_steerable_filter(V, orders=[0]):
+    """Return a steerable filter UP TO frequency 'order' from the input V"""
+    # Some shape maths
+    Vsh = V[0].get_shape().as_list()     # [tap_length,i,o]
+    k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
+    
+    # Generate the sinusoidal masks for steering
+    masks = {}
+    for order in orders:
+        bases = get_complex_basis_matrices(k, order=order)
+        base_shape = tf.pack([k*k,V[order].get_shape()[0]])
+        baseR = tf.reshape(bases[0], base_shape)
+        baseI = tf.reshape(bases[1], base_shape)
+        masks[order] = (baseR, baseI)
+    # Build the filters from linear combinations of the sinusoid mask and the
+    # radial weighting coefficients
+    W = []
+    for order in orders:
+        Vi = V[order]
+        Vish = Vi.get_shape()
+        Vi = tf.reshape(Vi, tf.pack([Vish[0],Vish[1]*Vish[2]]))
+        Wr = tf.matmul(masks[order][0], Vi, name='WR'+'_'+str(order))
+        Wi = tf.matmul(masks[order][1], Vi, name='WI'+'_'+str(order))
+        W.append(tf.reshape(Wr, tf.pack([k,k,Vish[1],Vish[2]])))
+        W.append(tf.reshape(Wi, tf.pack([k,k,Vish[1],Vish[2]])))
+    return tf.concat(3, W)
+
+def get_steerable_complex_filter(V, order=0):
+    """Return an order 0 complex steerable filter from the input V"""
+    Vsh = V.get_shape().as_list()     # [tap_length,i,o]
+    k = int(np.sqrt(1 + 8.*Vsh[0]) - 2)
+    masks = tf.reshape(get_basis_matrices(k, order=order), [k*k,Vsh[0]])
+    
+    V = tf.reshape(V, [Vsh[0],Vsh[1]*Vsh[2]])
+    Wr = tf.matmul(masks, V, name='Wx')
+    Wr = tf.reshape(Wr, [k,k,Vsh[1],Vsh[2]])
+    Wi = tf.reverse(tf.transpose(Wr, perm=[1,0,2,3]), [False, True, False, False])
+    return Wr, Wi
+
+def stack_responses(X):
+    Z_ = []
+    X_ = []
+    Y_ = []
+    Z_.append(X[0])
+    for i in xrange(len(X)/2):
+        X_.append(X[2*i+1])
+        Y_.append(X[2*i+2])
+    Z_.append(tf.concat(3, X_))
+    Z_.append(tf.concat(3, Y_))
+    return Z_
+
+def complex_steer_conv(Z, V, strides=(1,1,1,1), padding='VALID', k=3, order=1,
+                       name='complexsteerconv'):
+    """Simpler complex steerable filter returning max real phase and modulus.
+    Ignore this currently, it doesn't work"""
+    Zsh = Z[0].get_shape().as_list()
+    tile_shape = tf.pack([1,1,Zsh[3],1])
+    wrap = 0.
+    Q = get_complex_basis(k=k, order=order, wrap=wrap)
+    
+    Q = (tf.tile(Q[0], tile_shape), tf.tile(Q[1], tile_shape))
+    # Filter channels
+    Y = complex_depthwise_conv(Z, Q, strides=strides, padding=padding, name='cd')
+    # Filter dot blade
+    return complex_dot_blade(Y, V)
+
+def get_complex_basis(k=3, order=2, wrap=1.):
+    """Return a tensor of complex steerable filter bases (X, Y)"""
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+    X, Y = np.meshgrid(lin, lin)
+    Y = -Y
+    X = tf.to_float(X)
+    Y = tf.to_float(Y)
+    
+    tap_length = int(((k+1)*(k+3))/8)
+    tap = get_weights([tap_length], name='tap')
+    masks = get_complex_basis_masks(k)
+    new_masks = []
+    for i in xrange(tap_length):
+        new_masks.append(masks[i]*tap[i])
+    modulus = tf.add_n(new_masks, name='modulus')
+    
+    phase = wrap*atan2(Y, X) 
+    Rcos = tf.reshape(modulus*tf.cos(phase), [k,k,1,1])
+    Rsin = tf.reshape(modulus*tf.sin(phase), [k,k,1,1])
+    X0, Y0 = Rcos, Rsin
+    X1, Y1 = -Rsin, Rcos
+    X = tf.concat(3, [X0,X1])
+    Y = tf.concat(3, [Y0,Y1])
+    return (X,Y)
+
+def get_complex_basis_masks(k):
+    """Return tf cosine masks for custom tap learning (works with odd sizes)"""
+    tap_length = int(((k+1)*(k+3))/8)
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+    X, Y = np.meshgrid(lin, lin)
+    R = X**2 + Y**2
+    unique = np.unique(R)
+    
+    masks = []
+    for i in xrange(tap_length):
+        mask = (R == unique[i])
+        masks.append(to_constant_float(mask))
+    return masks
+
+def complex_GAP(Z, W):
+    """Take the average of a set of feature maps over the spatial dimensions
+    and return the real part of a fully-connected complex transformation"""
+    X, Y = Z
+    R, I = W
+    X = tf.reduce_mean(X, reduction_indices=[1,2])
+    Y = tf.reduce_mean(Y, reduction_indices=[1,2])
+    return tf.matmul(X, R) + tf.matmul(Y, I)
+
+def get_basis_matrices(k, order=1):
+    """Return tf cosine masks for custom tap learning (works with odd sizes).
+    k is filter size, order is rotation order"""
+    tap_length = int(((k+1)*(k+3))/8)
+    lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+    X, Y = np.meshgrid(lin, lin)
+    R = np.sqrt(X**2 + Y**2)
+    unique = np.unique(R)
+    theta = np.arctan2(-Y, X)
+
+    masks = []
+    for i in xrange(tap_length):
+        if order == 0:
+            mask = (R == unique[i])*1.
+            masks.append(to_constant_float(mask))
+        elif order > 0:
+            if unique[i] != 0.:
+                mask = (R == unique[i])*np.cos(order*theta)
+                masks.append(to_constant_float(mask))
+    masks = tf.pack(masks, axis=-1)
+    return tf.reshape(masks, [k,k,tap_length-(order>0)])
