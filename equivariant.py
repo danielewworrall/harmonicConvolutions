@@ -37,7 +37,7 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 	biases = {
 		'b1' : get_bias_dict(nf, 2, name='b1'),
 		'b2' : get_bias_dict(nf, 2, name='b2'),
-		'b3' : get_bias_dict(nf, 0, name='b3'),
+		'b3' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3'),
 		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='out0'),
 		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out1')
 	}
@@ -47,15 +47,16 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 	# Convolutional Layers
 	# LAYER 1
 	re1 = real_input_conv(x, weights['w1'], filter_size=5, padding='SAME')
-	re1 = complex_relu(re1, biases['b1'])
+	re1 = complex_nonlinearity(tf.nn.softplus, re1, biases['b1'])
 	# LAYER 2
 	re2 = complex_input_conv(re1, weights['w2'], filter_size=5,
 								 output_orders=[0,1], strides=(1,2,2,1),
 								 padding='SAME')
-	re2 = complex_relu(re2, biases['b2'])
+	re2 = complex_nonlinearity(tf.nn.softplus, re2, biases['b2'])
 	# LAYER 3
 	re3 = complex_input_conv(re2, weights['w3'], filter_size=5, padding='SAME')
-	re3 = complex_relu_of_sum(re3, biases['b3'])
+	re3 = sum_magnitudes(re3)
+	re3 = tf.nn.relu(tf.nn.bias_add(re3, biases['b3']))
 	re3 = maxpool2d(re3, k=2)
 
 	# Fully-connected layers

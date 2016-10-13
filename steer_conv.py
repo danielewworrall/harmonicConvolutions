@@ -89,7 +89,7 @@ def complex_input_conv(X, R, filter_size=3, output_orders=[0,],
     # feature map of rotation orders [A,B,...,C] to each feature map in this
     # layer of rotation orders [X,Y,...,Z]. At each map M in [X,Y,...,Z] we
     # sum the inputs from each F in [A,B,...,C].
-    return sum_complex_tensor_list(Z)
+    return sum_complex_tensor_dict(Z)
 
 def get_key_pairings(X, R, output_orders):
     """Finds combinations of all inputs and filters, such that
@@ -127,14 +127,16 @@ def mirror_filter_keys(R_keys):
             new_keys.append(-key)
     return sorted(new_keys)
 
-def sum_complex_tensor_list(Z):
-    """Z is a dict {order: [(real,im), (real,im), (real,im)]}. This function
-    sums all the real parts and all the imaginary parts for each order. I think
-    there is a better way to do this by representing each order as a single
-    feature stack.
+def sum_complex_tensor_dict(X):
+    """X is a dict of lists of tuples of complex numbers {order: [(real,im), \
+    (real,im), ...]}. This function sums all the real parts and all the
+    imaginary parts for each order. I think there is a better way to do this by
+    representing each order as a single feature stack.
+    
+    X: dict of lists of complex tuples {order: [(real,im), (real,im), ...]}
     """
     output = {}
-    for order, response_list in Z.iteritems():
+    for order, response_list in X.iteritems():
         reals = []
         ims = []
         for re, im in response_list:
@@ -144,12 +146,14 @@ def sum_complex_tensor_list(Z):
     return output
 
 ##### NONLINEARITIES #####
-def complex_relu(X, b, eps=1e-4):
-    """Apply a ReLU to the modulus of the complex feature map.
+def complex_nonlinearity(fnc, X, b, eps=1e-4):
+    """Apply the nonlinearity described by the function handle fnc: R -> R+ to
+    the magnitude of X. CAVEAT: fnc must map to the non-negative reals R+.
     
-    Output U + iV = ReLU(|Z| + b)*(A + iB)
+    Output U + iV = fnc(R+b) * (A+iB)
     where  A + iB = Z/|Z|
     
+    fnc: function handle for a nonlinearity. MUST map to non-negative reals R+.
     X: dict of channels {rotation order: (real, imaginary)}
     b: dict of biases {rotation order: real-valued bias}
     eps: regularization since grad |Z| is infinite at zero (default 1e-4)
@@ -158,24 +162,22 @@ def complex_relu(X, b, eps=1e-4):
     for m, r in X.iteritems():
         magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
         Rb = tf.nn.bias_add(magnitude, b[m])
-        c = tf.nn.relu(Rb)/magnitude
+        c = fnc(Rb)/magnitude
         R[m] = (r[0]*c, r[1]*c)
     return R
 
-def complex_relu_of_sum(Z, b, eps=1e-4):
-    """Apply a ReLU to the modulus of the sum of complex feature maps.
+def sum_magnitudes(X, eps=1e-4):
+    """Sum the magnitudes of each of the complex feature maps in X.
     
-    Output U = complex_relu(sum(Z))
+    Output U = sum_i |X_i|
     
     X: dict of channels {rotation order: (real, imaginary)}
-    b: dict of biases {rotation order: real-valued bias}
     eps: regularization since grad |Z| is infinite at zero (default 1e-4)
     """
     R = []
-    for m, r in Z.iteritems():
-        R_ = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-        R.append(tf.nn.bias_add(R_,b[m]))
-    return tf.nn.relu(tf.add_n(R))
+    for m, r in X.iteritems():
+        R.append(tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps))
+    return tf.add_n(R)
 
 ##### CREATING VARIABLES #####
 def to_constant_float(Q):
