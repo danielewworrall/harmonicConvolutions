@@ -29,15 +29,14 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 	weights = {
 		'w1' : get_weights_dict([[6,],[5,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
 		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
-		'w3' : get_weights_dict([[6,]], nf, nf, std_mult=std_mult, name='W3'),
+		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W3'),
+		'w4' : get_weights_dict([[6,]], nf, nf, std_mult=std_mult, name='W4'),
 		'out0' : get_weights([nf*7*7, 500], name='out0'),
 		'out1': get_weights([500, n_classes], name='out1')
 	}
 	
 	biases = {
-		'b1' : get_bias_dict(nf, 2, name='b1'),
-		'b2' : get_bias_dict(nf, 2, name='b2'),
-		'b3' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3'),
+		'b4' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3'),
 		'out0' : tf.Variable(tf.constant(1e-2, shape=[500]), name='out0'),
 		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out1')
 	}
@@ -46,21 +45,29 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 	
 	# Convolutional Layers
 	# LAYER 1
-	re1 = real_input_conv(x, weights['w1'], filter_size=5, padding='SAME')
-	re1 = complex_nonlinearity(tf.nn.softplus, re1, biases['b1'])
+	cv1 = real_input_conv(x, weights['w1'], filter_size=5, padding='SAME')
+	cv1 = complex_batch_norm(cv1, tf.nn.relu, phase_train)
+	
 	# LAYER 2
-	re2 = complex_input_conv(re1, weights['w2'], filter_size=5,
-								 output_orders=[0,1], strides=(1,2,2,1),
-								 padding='SAME')
-	re2 = complex_nonlinearity(tf.nn.softplus, re2, biases['b2'])
+	cv2 = complex_input_conv(cv1, weights['w2'], filter_size=5,
+							 output_orders=[0,1], padding='SAME')
+	cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train)
+	
+	# LAYER 3---for dim reduction do striding, max-pooling interferes with
+	# rotational equivariance, so is not supported.
+	cv3 = complex_input_conv(cv2, weights['w3'], filter_size=5,
+							 strides=(1,2,2,1), output_orders=[0,1],
+							 padding='SAME')
+	cv3 = complex_batch_norm(cv3, tf.nn.relu, phase_train)
+	
 	# LAYER 3
-	re3 = complex_input_conv(re2, weights['w3'], filter_size=5, padding='SAME')
-	re3 = sum_magnitudes(re3)
-	re3 = tf.nn.relu(tf.nn.bias_add(re3, biases['b3']))
-	re3 = maxpool2d(re3, k=2)
+	cv4 = complex_input_conv(cv3, weights['w4'], filter_size=5, padding='SAME')
+	cv4 = sum_magnitudes(cv4)
+	cv4 = tf.nn.relu(tf.nn.bias_add(cv4, biases['b4']))
+	cv4 = maxpool2d(cv4, k=2)
 
 	# Fully-connected layers
-	fc = tf.reshape(tf.nn.dropout(re3, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
+	fc = tf.reshape(tf.nn.dropout(cv4, drop_prob), [bs, weights['out0'].get_shape().as_list()[0]])
 	fc = tf.nn.bias_add(tf.matmul(fc, weights['out0']), biases['out0'])
 	fc = tf.nn.relu(fc)
 	fc = tf.nn.dropout(fc, drop_prob)

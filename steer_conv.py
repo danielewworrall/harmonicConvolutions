@@ -146,16 +146,16 @@ def sum_complex_tensor_dict(X):
     return output
 
 ##### NONLINEARITIES #####
-def complex_nonlinearity(fnc, X, b, eps=1e-4):
+def complex_nonlinearity(X, b, fnc, eps=1e-4):
     """Apply the nonlinearity described by the function handle fnc: R -> R+ to
     the magnitude of X. CAVEAT: fnc must map to the non-negative reals R+.
     
     Output U + iV = fnc(R+b) * (A+iB)
     where  A + iB = Z/|Z|
     
-    fnc: function handle for a nonlinearity. MUST map to non-negative reals R+.
     X: dict of channels {rotation order: (real, imaginary)}
     b: dict of biases {rotation order: real-valued bias}
+    fnc: function handle for a nonlinearity. MUST map to non-negative reals R+
     eps: regularization since grad |Z| is infinite at zero (default 1e-4)
     """
     R = {}
@@ -165,6 +165,56 @@ def complex_nonlinearity(fnc, X, b, eps=1e-4):
         c = fnc(Rb)/magnitude
         R[m] = (r[0]*c, r[1]*c)
     return R
+
+def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
+                       name='complexBatchNorm'):
+    """Batch normalization for the magnitudes of X
+    
+    X: dict of channels {rotation order: (real, imaginary)}
+    fnc: function handle for a nonlinearity. MUST map to non-negative reals R+
+    phase_train: boolean flag True: training mode, False: test mode
+    decay: decay rate: 0 is memory-less, 1 no updates (default 0.99)
+    eps: regularization since grad |Z| is infinite at zero (default 1e-4)
+    name: (default complexBatchNorm)
+    """
+    R = {}
+    for m, r in X.iteritems():
+        magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
+        Rb = batch_norm(magnitude, phase_train, decay=decay)
+        c = fnc(Rb)/magnitude
+        R[m] = (r[0]*c, r[1]*c)
+    return R
+
+def batch_norm(X, phase_train, decay=0.99, name='batchNorm'):
+    """Batch normalization module.
+    
+    X: tf tensor
+    phase_train: boolean flag True: training mode, False: test mode
+    decay: decay rate: 0 is memory-less, 1 no updates (default 0.99)
+    name: (default batchNorm)
+    
+    Source: bgshi @ http://stackoverflow.com/questions/33949786/how-could-i-use-
+    batch-normalization-in-tensorflow"""
+    n_out = X.get_shape().as_list()[-1]
+    
+    with tf.variable_scope(name) as scope:
+        beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
+                           name=scope.name+'beta', trainable=True)
+        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
+                            name=scope.name+'gamma', trainable=True)
+        batch_mean, batch_var = tf.nn.moments(X, [0,1,2],
+                                              name=scope.name+'moments')
+        ema = tf.train.ExponentialMovingAverage(decay=decay)
+
+        def mean_var_with_update():
+            ema_apply_op = ema.apply([batch_mean, batch_var])
+            with tf.control_dependencies([ema_apply_op]):
+                return tf.identity(batch_mean), tf.identity(batch_var)
+
+        mean, var = tf.cond(phase_train, mean_var_with_update,
+                    lambda: (ema.average(batch_mean), ema.average(batch_var)))
+        normed = tf.nn.batch_normalization(X, mean, var, beta, gamma, 1e-3)
+    return normed
 
 def sum_magnitudes(X, eps=1e-4):
     """Sum the magnitudes of each of the complex feature maps in X.
@@ -260,29 +310,6 @@ def get_complex_basis_matrices(filter_size, order=1):
     smasks = tf.pack(smasks, axis=-1)
     smasks = tf.reshape(smasks, [k,k,tap_length-(order>0)])
     return cmasks, smasks
-
-def batch_norm(x, n_out, phase_train, name='bn'):
-    """bgshi @ http://stackoverflow.com/questions/33949786/how-could-i-use-
-    batch-normalization-in-tensorflow"""
-    with tf.variable_scope(name) as scope:
-        beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
-                           name=scope.name+'beta', trainable=True)
-        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
-                            name=scope.name+'gamma', trainable=True)
-        batch_mean, batch_var = tf.nn.moments(x, [0,1,2],
-                                              name=scope.name+'moments')
-        ema = tf.train.ExponentialMovingAverage(decay=0.99)
-
-        def mean_var_with_update():
-            ema_apply_op = ema.apply([batch_mean, batch_var])
-            with tf.control_dependencies([ema_apply_op]):
-                return tf.identity(batch_mean), tf.identity(batch_var)
-
-        mean, var = tf.cond(phase_train, mean_var_with_update,
-                    lambda: (ema.average(batch_mean), ema.average(batch_var)))
-        normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
-    return normed
-
 
 
 
