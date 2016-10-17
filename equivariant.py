@@ -146,7 +146,7 @@ def conv_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 	
 	# LAYER 7
 	with tf.name_scope('block7') as scope:
-		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=5,
+		cv7 = complex_input_conv(cv4, weights['w7'], filter_size=5,
 								 strides=(1,2,2,1), padding='SAME',
 								 name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
@@ -263,7 +263,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	# Construct model
 	if model == 'conv_so2':
 		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
-	elif model == 'comv_complex_bias':
+	elif model == 'conv_complex_bias':
 		pred = conv_complex_bias(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
 	else:
 		print('Model unrecognized')
@@ -369,4 +369,4 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 if __name__ == '__main__':
 	run(model='conv_complex_bias', lr=1e-3, batch_size=100, n_epochs=500, std_mult=0.4,
-		n_filters=2, combine_train_val=False)
+		n_filters=5, combine_train_val=False)
