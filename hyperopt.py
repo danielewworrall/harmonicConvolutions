@@ -27,7 +27,7 @@ def random_independent(n_trials=3, fixedParams = True):
 	#number of filters to try
 	filters = [2, 4, 6, 8, 10, 12, 14]
 
-	for f in xrange(filters):
+	for f in filters:
 		print("Processsing for num Filters:", f)
 		for i in xrange(n_trials):
 			n_epochs = 500
@@ -164,5 +164,5 @@ def log_uniform_rand(min_, max_, size=1):
 
 
 if __name__ == '__main__':
-	random_independent(ntrials=24, fixedParams=True)
+	random_independent(n_trials=24, fixedParams=True)
 	#binary_thinning(64)
