@@ -368,5 +368,5 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='conv_so2', lr=1e-3, batch_size=100, n_epochs=500, std_mult=0.4,
+	run(model='conv_complex_bias', lr=1e-3, batch_size=100, n_epochs=500, std_mult=0.4,
 		n_filters=2, combine_train_val=False)
