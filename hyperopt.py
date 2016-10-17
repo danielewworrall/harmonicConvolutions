@@ -15,25 +15,32 @@ def random_independent(n_trials=3):
 		n_epochs = 500
 		n_filters = 10
 		
-		lr = log_uniform_rand(1e-2, 1e-4)
-		batch_size = int(log_uniform_rand(64,256))
-		std_mult = uniform_rand(0.05, 1.0)
+		lr = log_uniform_rand(5e-3, 1e-1)
+		lr_decay = log_uniform_rand(1e-3, 1e-1)
+		batch_size = int(log_uniform_rand(80,120))
+		std_mult = uniform_rand(0.05, 0.2)
 		print
 		print('Learning rate: %f' % (lr,))
+		print('Learning rate decay: %f' % (lr_decay,))
 		print('Batch size: %f' % (batch_size,))
 		print('Stddev multiplier: %f' % (std_mult,))
 		print
 		y = run(model='conv_so2',
 				lr=lr,
+				lr_decay=lr_decay,
 				batch_size=batch_size,
 				std_mult=std_mult,
 				n_epochs=n_epochs,
 				n_filters=n_filters,
 				trial_num=i,
 				combine_train_val=False)
+		save_name = './hyperopt_logs_nesterov/trial'+str(i)+'.npz'
+		np.savez(save_name, y=y, lr=lr, lr_decay=lr_decay,
+				 batch_size=batch_size, std_mult=std_mult)
 		if y > y_best:
 			y_best = y
 			best_params['lr'] = lr
+			best_params['lr_decay'] = lr_decay
 			best_params['batch_size'] = batch_size
 			best_params['std_mult'] = std_mult
 		
@@ -55,6 +62,7 @@ def random_independent(n_trials=3):
 	for i in xrange(5):
 		y.append(run(model='conv_so2',
 					 lr=best_params['lr'],
+					 lr_decay=best_params['lr_decay'],
 					 batch_size=best_params['batch_size'],
 					 std_mult=best_params['std_mult'],
 					 n_epochs=n_epochs,
@@ -72,55 +80,12 @@ def random_independent(n_trials=3):
 	# Compute statistics
 	print y
 	y = np.asarray(y)
+	save_name = './hyperopt_logs/test.npz'
+	np.savez(save_name, y=y)
+	
 	mean = np.mean(y)
 	print('Mean: %f' % (mean,))
 	print('Std: %f' % (np.std(y),))
-
-def binary_thinning(n_trials=256):
-	y_best = 0.
-	best_params = {}
-	n_rounds = int(np.log2(n_trials))
-	print n_rounds
-	
-	# Generate parameters
-	params = {}
-	for trial in xrange(n_trials):
-		params[trial] = {}
-		params[trial]['lr'] = log_uniform_rand(5e-2, 1e-4)
-		params[trial]['batch_size'] = int(uniform_rand(50, 500))
-		params[trial]['n_filters'] = int(uniform_rand(10,40))
-	
-	# For each trial in list, run experiment
-	results = np.zeros((n_trials,))
-	sorted_args = np.argsort(-results)
-	for j in xrange(n_rounds):
-		i = 0
-		for trial in sorted_args[:(n_trials/(2**j))]:
-			print params[trial]
-			params[trial]['y'] = run(model='deep_steer',
-									 lr=params[trial]['lr'],
-									 batch_size=params[trial]['batch_size'],
-									 n_epochs=10*(2**j),
-									 n_filters=params[trial]['n_filters'],
-									 trial_num=str(j)+'-'+str(i))
-			results[trial] = params[trial]['y']
-			if params[trial]['y'] > y_best:
-				y_best = params[trial]['y']
-				best_trial = trial
-			print
-			print
-			print('Best y so far')
-			print params[best_trial]
-			print
-			print
-			i += 1
-		
-		# Sort and reset running best
-		sorted_args = np.argsort(-results)
-		y_best = 0.
-	
-	print('Best y in this batch')
-	print params[best_trial]
 
 def uniform_rand(min_, max_):
 	gap = max_ - min_
@@ -139,4 +104,3 @@ def log_uniform_rand(min_, max_, size=1):
 
 if __name__ == '__main__':
 	random_independent(24)
-	#binary_thinning(64)

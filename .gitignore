@@ -5,3 +5,4 @@ checkpoints
 pics/
 data
 *.pyc
+hyperopt_logs
