@@ -92,6 +92,67 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
 
+def conv_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
+	"""The conv_so2 architecture, scatters first through an equi_real_conv
+	followed by phase-pooling then summation and a nonlinearity. Current
+	test time score is 92.97+/-0.06% for 3 layers deep, 15 filters"""
+	# Sure layers weight & bias
+	order = 3
+	nf = n_filters
+	
+	weights = {
+		'w1' : get_weights_dict([[6,],[5,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
+		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
+		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W3'),
+		'w4' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W4'),
+		'w7' : get_weights_dict([[6,],[5,],[5,]], nf, n_classes, std_mult=std_mult, name='W7'),
+	}
+	
+	biases = {
+		'b1' : get_complex_bias_dict(nf, 2, name='b1'),
+		'b2' : get_complex_bias_dict(nf, 2, name='b2'),
+		'b3' : get_complex_bias_dict(nf, 2, name='b3'),
+		'b4' : get_complex_bias_dict(nf, 2, name='b4'),
+		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7')
+	}
+	# Reshape input picture
+	x = tf.reshape(x, shape=[bs, 28, 28, 1])
+	
+	# Convolutional Layers
+	# LAYER 1
+	with tf.name_scope('block1') as scope:
+		cv1 = real_input_conv(x, weights['w1'], filter_size=5, padding='SAME',
+							  name='1')
+		cv1 = complex_nonlinearity_complex_bias(cv1, biases['b1'], tf.nn.relu)
+		
+		# LAYER 2
+		cv2 = complex_input_conv(cv1, weights['w2'], filter_size=5,
+								 output_orders=[0,1,2], padding='SAME',
+								 name='2')
+		cv2 = complex_nonlinearity_complex_bias(cv2, biases['b2'], tf.nn.relu)
+	
+	# LAYER 3
+	with tf.name_scope('block3') as scope:
+		cv3 = complex_input_conv(cv2, weights['w3'], filter_size=5,
+								 output_orders=[0,1,2], strides=(1,2,2,1),
+								 padding='SAME', name='3')
+		cv3 = complex_nonlinearity_complex_bias(cv3, biases['b3'], tf.nn.relu)
+		
+		# LAYER 4
+		cv4 = complex_input_conv(cv3, weights['w4'], filter_size=5,
+								 output_orders=[0,1,2], padding='SAME',
+								 name='4')
+		cv4 = complex_nonlinearity_complex_bias(cv4, biases['b4'], tf.nn.relu)
+	
+	# LAYER 7
+	with tf.name_scope('block7') as scope:
+		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=5,
+								 strides=(1,2,2,1), padding='SAME',
+								 name='7')
+		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
+		return tf.nn.bias_add(cv7, biases['b7'])
+
+
 ##### CUSTOM BLOCKS FOR MODEL #####
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
     """conv2d wrapper. Supply input X, weights V and optional bias"""
@@ -122,6 +183,16 @@ def get_bias_dict(n_filters, order, name='b'):
 		bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'_'+str(i))
 		bias_dict[i] = bias
 	return bias_dict
+
+def get_complex_bias_dict(n_filters, order, name='b'):
+	"""Return a dict of biases"""
+	bias_dict = {}
+	for i in xrange(order+1):
+		bias_x = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'x_'+str(i))
+		bias_y = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'y_'+str(i))
+		bias_dict[i] = (bias_x, bias_y)
+	return bias_dict
+
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
 def minibatcher(inputs, targets, batch_size, shuffle=False):
@@ -192,6 +263,8 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	# Construct model
 	if model == 'conv_so2':
 		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
+	elif model == 'comv_complex_bias':
+		pred = conv_complex_bias(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
 	else:
 		print('Model unrecognized')
 		sys.exit(1)

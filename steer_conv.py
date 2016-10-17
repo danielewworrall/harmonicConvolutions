@@ -169,6 +169,32 @@ def complex_nonlinearity(X, b, fnc, eps=1e-4):
         R[m] = (r[0]*c, r[1]*c)
     return R
 
+def complex_nonlinearity_complex_bias(X, b, fnc, eps=1e-4):
+    """Apply the nonlinearity described by the function handle fnc: R -> R+ to
+    the magnitude of X. The bias is also complex, stored as a+ic. CAVEAT: fnc 
+    must map to the non-negative reals R+.
+    
+    Output U + iV = fnc(R+|b|) * ((A+a)+i(B+c))
+    where  A + iB = Z/|Z|
+    
+    X: dict of channels {rotation order: (real, imaginary)}
+    b: dict of biases {rotation order: complex-valued bias}
+    fnc: function handle for a nonlinearity. MUST map to non-negative reals R+
+    eps: regularization since grad |Z| is infinite at zero (default 1e-4)
+    """
+    R = {}
+    for m, r in X.iteritems():
+        magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
+        bias = b[m]
+        bias_mag = tf.sqrt(bias[0]**2 + bias[1]**2 + eps)
+        bias_x, bias_y = bias[0]/bias_mag, bias[1]/bias_mag
+        Rb = tf.nn.bias_add(magnitude, bias_mag)
+        c = fnc(Rb)/magnitude
+        Xnew = bias_x*r[0] - bias_y*r[1]
+        Ynew = bias_y*r[1] + bias_x*r[0]
+        R[m] = (Xnew*c, Ynew*c)
+    return R
+
 def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
                        name='complexBatchNorm'):
     """Batch normalization for the magnitudes of X
