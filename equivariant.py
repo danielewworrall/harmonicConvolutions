@@ -179,7 +179,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
-	optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+	optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.95).minimize(cost)
 	
 	# Evaluate model
 	correct_pred = tf.equal(tf.argmax(pred, 1), y)

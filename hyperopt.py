@@ -8,63 +8,89 @@ import numpy as np
 
 from equivariant import run
 
-def random_independent(n_trials=3):
+def random_independent(n_trials=3, fixedParams = True):
 	y_best = 0.
 	best_params = {}
-	for i in xrange(n_trials):
-		n_epochs = 500
-		n_filters = 10
-		
-		lr = log_uniform_rand(1e-2, 1e-4)
-		batch_size = int(log_uniform_rand(64,256))
-		std_mult = uniform_rand(0.05, 1.0)
-		print
-		print('Learning rate: %f' % (lr,))
-		print('Batch size: %f' % (batch_size,))
-		print('Stddev multiplier: %f' % (std_mult,))
-		print
-		y = run(model='conv_so2',
-				lr=lr,
-				batch_size=batch_size,
-				std_mult=std_mult,
-				n_epochs=n_epochs,
-				n_filters=n_filters,
-				trial_num=i,
-				combine_train_val=False)
-		if y > y_best:
-			y_best = y
-			best_params['lr'] = lr
-			best_params['batch_size'] = batch_size
-			best_params['std_mult'] = std_mult
-		
-		print
-		print
-		print('Best y so far')
+	best_num_filters = 0
+	if fixedParams:
+		learning_rates = np.load("trialParams/learning_rates.npy")
+    	batch_sizes = np.load("trialParams/batch_sizes.npy")
+    	stddev_multipliers = np.load("trialParams/stddev_multipliers.npy")
+		#for debug
+		print("learning rates:", learning_rates)
+		print("batch sizes:", batch_sizes)
+		print("stddevs:", stddev_multipliers)
+		#make sure user parameters agree
+		if n_trials != learning_rates.shape[0]:
+			print("WARNING: Setting ntrials to loaded experiment files: ", learning_rates.shape[0])
+			ntrials = learning_rates.shape[0]
+	#number of filters to try
+	filters = [2, 4, 6, 8, 10, 12, 14]
+
+	for f in xrange(filters):
+		print("Processsing for num Filters:", f)
+		for i in xrange(n_trials):
+			n_epochs = 500
+			n_filters = [2, 4, 6, 8, 10, 12, 14]
+			
+			#switch here as well
+			if fixedParams:
+				lr = learning_rates[i]
+				batch_size = batch_sizes[i]
+				std_mult = stddev_multipliers[i]
+			else
+				lr = log_uniform_rand(1e-2, 1e-4)
+				batch_size = int(log_uniform_rand(64,256))
+				std_mult = uniform_rand(0.05, 1.0)
+			print
+			print('Learning rate: %f' % (lr,))
+			print('Batch size: %f' % (batch_size,))
+			print('Stddev multiplier: %f' % (std_mult,))
+			print
+			y = run(model='conv_so2',
+					lr=lr,
+					batch_size=batch_size,
+					std_mult=std_mult,
+					n_epochs=n_epochs,
+					n_filters=n_filters,
+					trial_num=i,
+					combine_train_val=False)
+			if y > y_best:
+				y_best = y
+				best_params['lr'] = lr
+				best_params['batch_size'] = batch_size
+				best_params['std_mult'] = std_mult
+				best_num_filters = f
+			
+			print
+			print
+			print('Best y so far')
+			print y_best
+			print('Best params so far')	
+			print best_params
+			print
+			print
+	
+		print('Best y overall')
 		print y_best
-		print('Best params so far')	
+		print('Best params overall')	
 		print best_params
-		print
-		print
-	
-	print('Best y overall')
-	print y_best
-	print('Best params overall')	
-	print best_params
-	
+		
 	y = []
 	for i in xrange(5):
 		y.append(run(model='conv_so2',
-					 lr=best_params['lr'],
-					 batch_size=best_params['batch_size'],
-					 std_mult=best_params['std_mult'],
-					 n_epochs=n_epochs,
-					 n_filters=n_filters,
-					 trial_num='T-'+str(i),
-					 combine_train_val=True))
+					lr=best_params['lr'],
+					batch_size=best_params['batch_size'],
+					std_mult=best_params['std_mult'],
+					n_epochs=n_epochs,
+					n_filters=best_num_filters,
+					trial_num='T-'+str(i),
+					combine_train_val=True))
 		print
 		print('Current y: %f' % (y[i],))
 		print
 	
+	print('Best num filters:', best_num_filters)
 	print('Best y overall')
 	print y_best
 	print('Best params overall')	
@@ -138,5 +164,5 @@ def log_uniform_rand(min_, max_, size=1):
 
 
 if __name__ == '__main__':
-	random_independent(24)
+	random_independent(ntrials=24, fixedParams=True)
 	#binary_thinning(64)
