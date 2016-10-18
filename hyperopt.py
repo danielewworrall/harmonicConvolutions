@@ -36,7 +36,7 @@ def random_independent(n_trials=3, fixedParams = True):
 			#switch here as well
 			if fixedParams:
 				lr = learning_rates[i]
-				batch_size = batch_sizes[i]
+				batch_size = int(batch_sizes[i])
 				std_mult = stddev_multipliers[i]
 			else:
 				lr = log_uniform_rand(1e-2, 1e-4)
@@ -52,7 +52,7 @@ def random_independent(n_trials=3, fixedParams = True):
 				batch_size=batch_size,
 				std_mult=std_mult,
 				n_epochs=n_epochs,
-				n_filters=n_filters,
+				n_filters=f,
 				trial_num=i,
 				combine_train_val=False)
 			if y > y_best:
