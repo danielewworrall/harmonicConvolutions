@@ -18,7 +18,7 @@ from matplotlib import pyplot as plt
 
 ##### MODELS #####
 	
-def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
+def conv_so2(x, drop_prob, n_filters, n_filters_input, num_rows, num_cols, n_classes, bs, phase_train, std_mult):
 	"""The conv_so2 architecture, scatters first through an equi_real_conv
 	followed by phase-pooling then summation and a nonlinearity. Current
 	test time score is 92.97+/-0.06% for 3 layers deep, 15 filters"""
@@ -27,7 +27,7 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 	nf = n_filters
 	
 	weights = {
-		'w1' : get_weights_dict([[6,],[5,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
+		'w1' : get_weights_dict([[6,],[5,],[5,]], n_filters_input, nf, std_mult=std_mult, name='W1'),
 		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
 		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W3'),
 		'w4' : get_weights_dict([[6,]], nf, nf, std_mult=std_mult, name='W4'),
@@ -42,7 +42,7 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 	}
 	# Reshape input picture
 	#print(x.shape)
-	x = tf.reshape(x, shape=[bs, 32, 32, 3])
+	x = tf.reshape(x, shape=[bs, num_rows, num_cols, n_filters_input])
 	
 	# Convolutional Layers
 	# LAYER 1
@@ -150,6 +150,12 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		trainx, trainy = train['x'], mnist_train['y']
 		validx, validy = valid['x'], mnist_valid['y']
 		testx, testy = test['x'], mnist_test['y']
+
+		n_rows = 28
+		n_cols = 28
+		n_channels = 1
+		n_input = n_rows * n_cols * n_channels
+		n_classes = 10 				# MNIST total classes (0-9 digits)
 	elif experimentIdx == 1: #CIFAR10
 		print("CIFAR10")
 		# Load dataset
@@ -162,6 +168,12 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		testx = np.load('/home/sgarbin/data/cifar_numpy/testX.npy')
 		testy = np.load('/home/sgarbin/data/cifar_numpy/testY.npy')
 
+		n_rows = 32
+		n_cols = 32
+		n_channels = 3
+		n_input = n_rows * n_cols * n_channels
+		n_classes = 10 
+
 	# Parameters
 	lr = lr
 	batch_size = batch_size
@@ -170,8 +182,6 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	model = model
 	
 	# Network Parameters
-	n_input = 32*32*3 				# MNIST data input (img shape: 28*28)
-	n_classes = 10 				# MNIST total classes (0-9 digits)
 	dropout = 0.75 				# Dropout, probability to keep units
 	n_filters = n_filters
 	dataset_size = 10000
@@ -186,7 +196,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		
 		# Construct model
 		if model == 'conv_so2':
-			pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
+			pred = conv_so2(x, keep_prob, n_filters, n_channels, n_rows, n_cols, n_classes, batch_size, phase_train, std_mult)
 		else:
 			print('Model unrecognized')
 			sys.exit(1)
