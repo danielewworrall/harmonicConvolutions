@@ -82,7 +82,10 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx):
 	print('Best params overall')	
 	print best_params
 	#save y_s
-	fileName = "results/yResultsMNIST.npy" 
+	if experimentIdx == 0:
+		fileName = "results/yResultsMNIST.npy" 
+	elif experimentIdx == 1:
+		fileName = "results/yResultsCIFAR.npy" 
 	np.save(fileName, np.asarray(y_s))
 
 	y = []
@@ -111,7 +114,10 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx):
 	print('Mean: %f' % (mean,))
 	print('Std: %f' % (np.std(y),))
 	#save y
-	fileName = "results/bestYResultsMNIST.npy" 
+	if experimentIdx == 0:
+		fileName = "results/bestYResultsMNIST.npy"
+	elif experimentIdx == 1:
+		fileName = "results/bestYResultsCIFAR.npy"
 	np.save(fileName, y)
 
 def binary_thinning(n_trials=256):

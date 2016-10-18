@@ -148,7 +148,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		trainx, trainy = train['x'], mnist_train['y']
 		validx, validy = valid['x'], mnist_valid['y']
 		testx, testy = test['x'], mnist_test['y']
-	if experimentIdx == 1: #CIFAR10
+	elif experimentIdx == 1: #CIFAR10
 		# Load dataset
 		trainx = np.load('/home/sgarbin/data/cifar_numpy/trainX.npz')
 		trainy = np.load('/home/sgarbin/data/cifar_numpy/trainY.npz')
