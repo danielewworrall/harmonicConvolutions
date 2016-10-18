@@ -41,7 +41,8 @@ def conv_so2(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
 		'out1': tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='out1')
 	}
 	# Reshape input picture
-	x = tf.reshape(x, shape=[bs, 28, 28, 1])
+	#print(x.shape)
+	x = tf.reshape(x, shape=[bs, 32, 32, 3])
 	
 	# Convolutional Layers
 	# LAYER 1
@@ -138,9 +139,10 @@ def rotate_feature_maps(X, n_angles):
 
 ##### MAIN SCRIPT #####
 def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
-		bn_config=[False, False], trial_num='N', combine_train_val=False, std_mult=0.4, tf_device='/gpu:0', experimentIdx):
+		bn_config=[False, False], trial_num='N', combine_train_val=False, std_mult=0.4, tf_device='/gpu:0', experimentIdx = 1):
 	tf.reset_default_graph()
 	if experimentIdx == 0: #MNIST
+		print("MNIST")
 		# Load dataset
 		train = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_train.npz')
 		valid = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_valid.npz')
@@ -149,15 +151,16 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		validx, validy = valid['x'], mnist_valid['y']
 		testx, testy = test['x'], mnist_test['y']
 	elif experimentIdx == 1: #CIFAR10
+		print("CIFAR10")
 		# Load dataset
-		trainx = np.load('/home/sgarbin/data/cifar_numpy/trainX.npz')
-		trainy = np.load('/home/sgarbin/data/cifar_numpy/trainY.npz')
+		trainx = np.load('/home/sgarbin/data/cifar_numpy/trainX.npy')
+		trainy = np.load('/home/sgarbin/data/cifar_numpy/trainY.npy')
 		
-		validx = np.load('/home/sgarbin/data/cifar_numpy/validX.npz')
-		validy = np.load('/home/sgarbin/data/cifar_numpy/validY.npz')
+		validx = np.load('/home/sgarbin/data/cifar_numpy/validX.npy')
+		validy = np.load('/home/sgarbin/data/cifar_numpy/validY.npy')
 
-		testx = np.load('/home/sgarbin/data/cifar_numpy/testX.npz')
-		testy = np.load('/home/sgarbin/data/cifar_numpy/testY.npz')
+		testx = np.load('/home/sgarbin/data/cifar_numpy/testX.npy')
+		testy = np.load('/home/sgarbin/data/cifar_numpy/testY.npy')
 
 	# Parameters
 	lr = lr
@@ -167,7 +170,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	model = model
 	
 	# Network Parameters
-	n_input = 784 				# MNIST data input (img shape: 28*28)
+	n_input = 32*32*3 				# MNIST data input (img shape: 28*28)
 	n_classes = 10 				# MNIST total classes (0-9 digits)
 	dropout = 0.75 				# Dropout, probability to keep units
 	n_filters = n_filters
@@ -221,7 +224,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	start = time.time()
 	# Keep training until reach max iterations
 	while epoch < n_epochs:
-		generator = minibatcher(mnist_trainx, mnist_trainy, batch_size, shuffle=True)
+		generator = minibatcher(trainx, trainy, batch_size, shuffle=True)
 		cost_total = 0.
 		acc_total = 0.
 		vacc_total = 0.
@@ -239,7 +242,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		acc_total /=(i+1.)
 		
 		if not combine_train_val:
-			val_generator = minibatcher(mnist_validx, mnist_validy, batch_size, shuffle=False)
+			val_generator = minibatcher(validx, validy, batch_size, shuffle=False)
 			for i, batch in enumerate(val_generator):
 				batch_x, batch_y = batch
 				# Calculate batch loss and accuracy
@@ -269,7 +272,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	
 	# Test accuracy
 	tacc_total = 0.
-	test_generator = minibatcher(mnist_testx, mnist_testy, batch_size, shuffle=False)
+	test_generator = minibatcher(testx, testy, batch_size, shuffle=False)
 	for i, batch in enumerate(test_generator):
 		batch_x, batch_y = batch
 		feed_dict={x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}

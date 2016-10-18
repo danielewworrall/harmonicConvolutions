@@ -8,7 +8,7 @@ import numpy as np
 
 from equivariant import run
 
-def random_independent(n_trials=3, fixedParams = True, experimentIdx):
+def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0):
 	y_best = 0.
 	best_params = {}
 	best_num_filters = 0
