@@ -8,7 +8,7 @@ import numpy as np
 
 from equivariant import run
 
-def random_independent(n_trials=3, fixedParams = True):
+def random_independent(n_trials=3, fixedParams = True, experimentIdx):
 	y_best = 0.
 	best_params = {}
 	best_num_filters = 0
@@ -56,7 +56,8 @@ def random_independent(n_trials=3, fixedParams = True):
 				n_epochs=n_epochs,
 				n_filters=f,
 				trial_num=i,
-				combine_train_val=False)
+				combine_train_val=False,
+				experimentIdx = experimentIdx) #CIFAR
 			local_y_s.append(y)
 			if y > y_best:
 				y_best = y
@@ -175,5 +176,5 @@ def log_uniform_rand(min_, max_, size=1):
 
 
 if __name__ == '__main__':
-	random_independent(n_trials=24, fixedParams=True)
+	random_independent(n_trials=24, fixedParams=True, experimentIdx=1) #SWITCH MNIST/CIFAR
 	#binary_thinning(64)

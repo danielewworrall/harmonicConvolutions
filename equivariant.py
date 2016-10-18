@@ -138,15 +138,26 @@ def rotate_feature_maps(X, n_angles):
 
 ##### MAIN SCRIPT #####
 def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
-		bn_config=[False, False], trial_num='N', combine_train_val=False, std_mult=0.4, tf_device='/gpu:0'):
+		bn_config=[False, False], trial_num='N', combine_train_val=False, std_mult=0.4, tf_device='/gpu:0', experimentIdx):
 	tf.reset_default_graph()
-	# Load dataset
-	mnist_train = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_train.npz')
-	mnist_valid = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_valid.npz')
-	mnist_test = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_test.npz')
-	mnist_trainx, mnist_trainy = mnist_train['x'], mnist_train['y']
-	mnist_validx, mnist_validy = mnist_valid['x'], mnist_valid['y']
-	mnist_testx, mnist_testy = mnist_test['x'], mnist_test['y']
+	if experimentIdx == 0: #MNIST
+		# Load dataset
+		train = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_train.npz')
+		valid = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_valid.npz')
+		test = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_test.npz')
+		trainx, trainy = train['x'], mnist_train['y']
+		validx, validy = valid['x'], mnist_valid['y']
+		testx, testy = test['x'], mnist_test['y']
+	if experimentIdx == 1: #CIFAR10
+		# Load dataset
+		trainx = np.load('/home/sgarbin/data/cifar_numpy/trainX.npz')
+		trainy = np.load('/home/sgarbin/data/cifar_numpy/trainY.npz')
+		
+		validx = np.load('/home/sgarbin/data/cifar_numpy/validX.npz')
+		validy = np.load('/home/sgarbin/data/cifar_numpy/validY.npz')
+
+		testx = np.load('/home/sgarbin/data/cifar_numpy/testX.npz')
+		testy = np.load('/home/sgarbin/data/cifar_numpy/testY.npz')
 
 	# Parameters
 	lr = lr
