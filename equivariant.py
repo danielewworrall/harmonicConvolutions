@@ -18,7 +18,7 @@ from matplotlib import pyplot as plt
 
 ##### MODELS #####
 	
-def conv_so2(x, drop_prob, n_filters, n_filters_input, num_rows, size_after_conv, num_cols, n_classes, bs, phase_train, std_mult):
+def conv_so2(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, bs, phase_train, std_mult):
 	"""The conv_so2 architecture, scatters first through an equi_real_conv
 	followed by phase-pooling then summation and a nonlinearity. Current
 	test time score is 92.97+/-0.06% for 3 layers deep, 15 filters"""
@@ -27,7 +27,7 @@ def conv_so2(x, drop_prob, n_filters, n_filters_input, num_rows, size_after_conv
 	nf = n_filters
 	n_params_into_fc = nf * size_after_conv
 	weights = {
-		'w1' : get_weights_dict([[6,],[5,],[5,]], n_filters_input, nf, std_mult=std_mult, name='W1'),
+		'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1'),
 		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
 		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W3'),
 		'w4' : get_weights_dict([[6,]], nf, nf, std_mult=std_mult, name='W4'),
@@ -42,7 +42,7 @@ def conv_so2(x, drop_prob, n_filters, n_filters_input, num_rows, size_after_conv
 	}
 	# Reshape input picture
 	#print(x.shape)
-	x = tf.reshape(x, shape=[bs, num_rows, num_cols, n_filters_input])
+	x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
 	
 	# Convolutional Layers
 	# LAYER 1
@@ -198,7 +198,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		
 		# Construct model
 		if model == 'conv_so2':
-			pred = conv_so2(x, keep_prob, n_filters, n_channels, n_rows, n_cols, size_after_con, n_classes, batch_size, phase_train, std_mult)
+			pred = conv_so2(x, keep_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, batch_size, phase_train, std_mult)
 		else:
 			print('Model unrecognized')
 			sys.exit(1)
@@ -242,6 +242,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		vacc_total = 0.
 		for i, batch in enumerate(generator):
 			batch_x, batch_y = batch
+			batch_x = np.reshape(batch_x, (-1, n_input)) 
 			lr_current = lr/np.sqrt(1.+epoch*(float(batch_size) / dataset_size))
 			
 			# Optimize
@@ -257,6 +258,8 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 			val_generator = minibatcher(validx, validy, batch_size, shuffle=False)
 			for i, batch in enumerate(val_generator):
 				batch_x, batch_y = batch
+				batch_x = np.reshape(batch_x, (-1, n_input))
+
 				# Calculate batch loss and accuracy
 				feed_dict = {x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
 				vacc_ = sess.run(accuracy, feed_dict=feed_dict)
