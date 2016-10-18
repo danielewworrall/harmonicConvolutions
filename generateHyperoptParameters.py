@@ -43,4 +43,4 @@ def random_independent(n_trials=3):
     np.save("trialParams/batch_sizes.npy", batch_sizes)
     np.save("trialParams/stddev_multipliers.npy", stddev_multipliers)
 
-random_independent(30)
+random_independent(20)

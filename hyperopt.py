@@ -12,6 +12,7 @@ def random_independent(n_trials=3, fixedParams = True):
 	y_best = 0.
 	best_params = {}
 	best_num_filters = 0
+	y_s = [] #all results
 	if fixedParams:
 		learning_rates = np.load("trialParams/learning_rates.npy")
 		batch_sizes = np.load("trialParams/batch_sizes.npy")
@@ -28,6 +29,7 @@ def random_independent(n_trials=3, fixedParams = True):
 	filters = [2, 4, 6, 8, 10, 12, 14]
 
 	for f in filters:
+		local_y_s = []
 		print("Processsing for num Filters:", f)
 		for i in xrange(n_trials):
 			n_epochs = 500
@@ -55,12 +57,15 @@ def random_independent(n_trials=3, fixedParams = True):
 				n_filters=f,
 				trial_num=i,
 				combine_train_val=False)
+			local_y_s.append(y)
 			if y > y_best:
 				y_best = y
 				best_params['lr'] = lr
 				best_params['batch_size'] = batch_size
 				best_params['std_mult'] = std_mult
 				best_num_filters = f
+		#remember all ys 
+		y_s.append(local_y_s)
 
 		print
 		print
@@ -75,6 +80,9 @@ def random_independent(n_trials=3, fixedParams = True):
 	print y_best
 	print('Best params overall')	
 	print best_params
+	#save y_s
+	fileName = "results/yResultsMNIST.npy" 
+	np.save(fileName, np.asarray(y_s))
 
 	y = []
 	for i in xrange(5):
@@ -101,6 +109,9 @@ def random_independent(n_trials=3, fixedParams = True):
 	mean = np.mean(y)
 	print('Mean: %f' % (mean,))
 	print('Std: %f' % (np.std(y),))
+	#save y
+	fileName = "results/bestYResultsMNIST.npy" 
+	np.save(fileName, y)
 
 def binary_thinning(n_trials=256):
 	y_best = 0.
