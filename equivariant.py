@@ -138,7 +138,7 @@ def rotate_feature_maps(X, n_angles):
 
 ##### MAIN SCRIPT #####
 def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
-		bn_config=[False, False], trial_num='N', combine_train_val=False, std_mult=0.4):
+		bn_config=[False, False], trial_num='N', combine_train_val=False, std_mult=0.4, tf_device='/gpu:0'):
 	tf.reset_default_graph()
 	# Load dataset
 	mnist_train = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_train.npz')
@@ -163,35 +163,36 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	dataset_size = 10000
 	
 	# tf Graph input
-	x = tf.placeholder(tf.float32, [batch_size, n_input])
-	y = tf.placeholder(tf.int64, [batch_size])
-	learning_rate = tf.placeholder(tf.float32)
-	keep_prob = tf.placeholder(tf.float32)
-	phase_train = tf.placeholder(tf.bool)
-	
-	# Construct model
-	if model == 'conv_so2':
-		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
-	else:
-		print('Model unrecognized')
-		sys.exit(1)
-	print('Using model: %s' % (model,))
+	with tf.device(tf_device):
+		x = tf.placeholder(tf.float32, [batch_size, n_input])
+		y = tf.placeholder(tf.int64, [batch_size])
+		learning_rate = tf.placeholder(tf.float32)
+		keep_prob = tf.placeholder(tf.float32)
+		phase_train = tf.placeholder(tf.bool)
+		
+		# Construct model
+		if model == 'conv_so2':
+			pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
+		else:
+			print('Model unrecognized')
+			sys.exit(1)
+		print('Using model: %s' % (model,))
 
-	# Define loss and optimizer
-	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
-	optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.95).minimize(cost)
-	
-	# Evaluate model
-	correct_pred = tf.equal(tf.argmax(pred, 1), y)
-	accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-			
-	# Initializing the variables
-	init = tf.initialize_all_variables()
-	
+		# Define loss and optimizer
+		cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
+		optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.95).minimize(cost)
+		
+		# Evaluate model
+		correct_pred = tf.equal(tf.argmax(pred, 1), y)
+		accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+				
+		# Initializing the variables
+		init = tf.initialize_all_variables()
+		
 	if combine_train_val:
 		mnist_trainx = np.vstack([mnist_trainx, mnist_validx])
 		mnist_trainy = np.hstack([mnist_trainy, mnist_validy])
-	
+
 	# Summary writers
 	acc_ph = tf.placeholder(tf.float32, [], name='acc_')
 	acc_op = tf.scalar_summary("Validation Accuracy", acc_ph)
