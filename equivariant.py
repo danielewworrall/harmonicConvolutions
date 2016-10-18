@@ -18,20 +18,20 @@ from matplotlib import pyplot as plt
 
 ##### MODELS #####
 	
-def conv_so2(x, drop_prob, n_filters, n_filters_input, num_rows, num_cols, n_classes, bs, phase_train, std_mult):
+def conv_so2(x, drop_prob, n_filters, n_filters_input, num_rows, size_after_conv, num_cols, n_classes, bs, phase_train, std_mult):
 	"""The conv_so2 architecture, scatters first through an equi_real_conv
 	followed by phase-pooling then summation and a nonlinearity. Current
 	test time score is 92.97+/-0.06% for 3 layers deep, 15 filters"""
 	# Sure layers weight & bias
 	order = 3
 	nf = n_filters
-	
+	n_params_into_fc = nf * size_after_conv
 	weights = {
 		'w1' : get_weights_dict([[6,],[5,],[5,]], n_filters_input, nf, std_mult=std_mult, name='W1'),
 		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
 		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W3'),
 		'w4' : get_weights_dict([[6,]], nf, nf, std_mult=std_mult, name='W4'),
-		'out0' : get_weights([nf*7*7, 500], name='out0'),
+		'out0' : get_weights([n_params_into_fc, 500], name='out0'),
 		'out1': get_weights([500, n_classes], name='out1')
 	}
 	
@@ -156,6 +156,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		n_channels = 1
 		n_input = n_rows * n_cols * n_channels
 		n_classes = 10 				# MNIST total classes (0-9 digits)
+		size_after_conv = 7 * 7
 	elif experimentIdx == 1: #CIFAR10
 		print("CIFAR10")
 		# Load dataset
@@ -173,6 +174,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		n_channels = 3
 		n_input = n_rows * n_cols * n_channels
 		n_classes = 10 
+		size_after_conv = 8 * 8
 
 	# Parameters
 	lr = lr
@@ -196,7 +198,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		
 		# Construct model
 		if model == 'conv_so2':
-			pred = conv_so2(x, keep_prob, n_filters, n_channels, n_rows, n_cols, n_classes, batch_size, phase_train, std_mult)
+			pred = conv_so2(x, keep_prob, n_filters, n_channels, n_rows, n_cols, size_after_con, n_classes, batch_size, phase_train, std_mult)
 		else:
 			print('Model unrecognized')
 			sys.exit(1)
