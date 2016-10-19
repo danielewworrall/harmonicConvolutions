@@ -183,7 +183,7 @@ def log_uniform_rand(min_, max_, size=1):
 
 
 if __name__ == '__main__':
-	print("experimentIdx: ", sys.argv[1])
+	print("experimentIdx: ", int(sys.argv[1]))
 	print("deviceIdx : ", sys.argv[2])
-	random_independent(n_trials=24, fixedParams=True, experimentIdx=sys.argv[1], tf_device=sys.argv[2]) #SWITCH MNIST/CIFAR
+	random_independent(n_trials=24, fixedParams=True, experimentIdx=int(sys.argv[1]), tf_device=sys.argv[2]) #SWITCH MNIST/CIFAR
 	#binary_thinning(64)

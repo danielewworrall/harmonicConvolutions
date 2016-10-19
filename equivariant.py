@@ -147,9 +147,9 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		train = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_train.npz')
 		valid = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_valid.npz')
 		test = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_test.npz')
-		trainx, trainy = train['x'], mnist_train['y']
-		validx, validy = valid['x'], mnist_valid['y']
-		testx, testy = test['x'], mnist_test['y']
+		trainx, trainy = train['x'], train['y']
+		validx, validy = valid['x'], valid['y']
+		testx, testy = test['x'], test['y']
 
 		n_rows = 28
 		n_cols = 28
