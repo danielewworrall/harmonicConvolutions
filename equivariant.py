@@ -226,7 +226,10 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	cost_op = tf.scalar_summary("Training Cost", cost_ph)
 	lr_ph = tf.placeholder(tf.float32, [], name='lr_')
 	lr_op = tf.scalar_summary("Learning Rate", lr_ph)
-	sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
+	config = tf.ConfigProto()
+	config.gpu_options.allow_growth = True
+	config.log_device_placement = False
+	sess = tf.Session(config=config)
 	summary = tf.train.SummaryWriter('logs/', sess.graph)
 	
 	# Launch the graph
