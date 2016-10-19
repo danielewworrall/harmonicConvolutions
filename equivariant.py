@@ -290,6 +290,8 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	test_generator = minibatcher(testx, testy, batch_size, shuffle=False)
 	for i, batch in enumerate(test_generator):
 		batch_x, batch_y = batch
+		batch_x = np.reshape(batch_x, (-1, n_input))
+
 		feed_dict={x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
 		tacc = sess.run(accuracy, feed_dict=feed_dict)
 		tacc_total += tacc
