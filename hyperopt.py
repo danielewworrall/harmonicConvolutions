@@ -12,6 +12,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 	y_best = 0.
 	best_params = {}
 	best_num_filters = 0
+	actual_n_trials = n_trials
 	y_s = [] #all results
 	if fixedParams:
 		learning_rates = np.load("trialParams/learning_rates.npy")
@@ -24,16 +25,15 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 		#make sure user parameters agree
 		if n_trials != learning_rates.shape[0]:
 			print("WARNING: Setting ntrials to loaded experiment files: ", learning_rates.shape[0])
-			ntrials = learning_rates.shape[0]
+			actual_n_trials = learning_rates.shape[0]
 	#number of filters to try
-	filters = [2, 4, 6, 8, 10, 12, 14]
-
+	filters = [2, 4, 6, 8, 10]
+	print("Num trials per filter", n_trials)
 	for f in filters:
 		local_y_s = []
 		print("Processsing for num Filters:", f)
-		for i in xrange(n_trials):
+		for i in xrange(actual_n_trials):
 			n_epochs = 500
-			n_filters = [2, 4, 6, 8, 10, 12, 14]
 
 			#switch here as well
 			if fixedParams:
@@ -68,7 +68,14 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 				best_num_filters = f
 		#remember all ys 
 		y_s.append(local_y_s)
-
+		y_s_a = np.asarray(y_s)
+        	#save temp
+        	if experimentIdx == 0:
+                	fileName = "results/bestYResultsMNIST_temp_" + str(f) + ".npy"
+        	elif experimentIdx == 1:
+                	fileName = "results/bestYResultsCIFAR_temp_" + str(f) + ".npy"
+        	np.save(fileName, y_s_a)
+		
 		print
 		print
 		print('Best y so far')
@@ -98,7 +105,9 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 			n_epochs=n_epochs,
 			n_filters=best_num_filters,
 			trial_num='T-'+str(i),
-			combine_train_val=True))
+			combine_train_val=True,
+			experimentIdx = experimentIdx,
+			tf_device = tf_device))		
 		print
 		print('Current y: %f' % (y[i],))
 		print

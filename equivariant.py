@@ -139,7 +139,7 @@ def rotate_feature_maps(X, n_angles):
 
 ##### MAIN SCRIPT #####
 def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
-		bn_config=[False, False], trial_num='N', combine_train_val=False, std_mult=0.4, tf_device='/gpu:0', experimentIdx = 1):
+		bn_config=[False, False], trial_num='N', combine_train_val=False, std_mult=0.4, tf_device='/gpu:0', experimentIdx = 0):
 	tf.reset_default_graph()
 	if experimentIdx == 0: #MNIST
 		print("MNIST")
@@ -216,8 +216,8 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		init = tf.initialize_all_variables()
 		
 	if combine_train_val:
-		mnist_trainx = np.vstack([mnist_trainx, mnist_validx])
-		mnist_trainy = np.hstack([mnist_trainy, mnist_validy])
+		trainx = np.vstack([trainx, validx])
+		trainy = np.hstack([trainy, validy])
 
 	# Summary writers
 	acc_ph = tf.placeholder(tf.float32, [], name='acc_')
