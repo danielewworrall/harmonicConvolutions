@@ -101,23 +101,23 @@ def conv_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 	nf = n_filters
 	
 	weights = {
-		'w1' : get_weights_dict([[6,],[5,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
-		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
-		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W3'),
-		'w4' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W4'),
-		'w7' : get_weights_dict([[6,],[5,],[5,]], nf, n_classes, std_mult=std_mult, name='W7'),
+		'w1' : get_weights_dict([[6,],[5,]], 1, nf, std_mult=std_mult, name='W1', scope='block1'),
+		'w2' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=std_mult, name='W2', scope='block1'),
+		'w3' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=std_mult, name='W3', scope='block3'),
+		'w4' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=std_mult, name='W4', scope='block3'),
+		'w7' : get_weights_dict([[6,],[5,]], nf, n_classes, std_mult=std_mult, name='W7', scope='block7'),
 	}
 	
 	biases = {
-		'b1' : get_bias_dict(nf, 2, name='b1'),
-		'psi1' : get_bias_dict(nf, 2, name='psi1'),
-		'b2' : get_bias_dict(nf, 2, name='b2'),
-		'psi2' : get_bias_dict(nf, 2, name='psi2'),
-		'b3' : get_bias_dict(nf, 2, name='b3'),
-		'psi3' : get_bias_dict(nf, 2, name='psi3'),
-		'b4' : get_bias_dict(nf, 2, name='b4'),
-		'psi4' : get_bias_dict(nf, 2, name='psi4'),
-		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7')
+		'b1' : get_bias_dict(nf, 1, name='b1', scope='block1'),
+		'psi1' : get_bias_dict(nf, 1, name='psi1', scope='block1'),
+		'b2' : get_bias_dict(nf, 1, name='b2', scope='block1'),
+		'psi2' : get_bias_dict(nf, 1, name='psi2', scope='block1'),
+		'b3' : get_bias_dict(nf, 1, name='b3', scope='block3'),
+		'psi3' : get_bias_dict(nf, 1, name='psi3', scope='block3'),
+		'b4' : get_bias_dict(nf, 1, name='b4', scope='block3'),
+		'psi4' : get_bias_dict(nf, 1, name='psi4', scope='block3'),
+		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7', scope='block7')
 	}
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
@@ -165,16 +165,17 @@ def maxpool2d(X, k=2):
     """Tied max pool. k is the stride and pool size"""
     return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1], padding='VALID')
 
-def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
+def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W', scope_name='scope'):
 	"""Return a dict of weights for use with real_input_equi_conv. comp_shape is
 	a list of the number of elements per Fourier base. For 3x3 weights use
 	[3,2,2,2]. I currently assume order increasing from 0.
 	"""
-	weights_dict = {}
-	for i, cs in enumerate(comp_shape):
-		shape = cs + [in_shape,out_shape]
-		weights_dict[i] = get_weights(shape, std_mult=std_mult, name=name+'_'+str(i))
-	return weights_dict
+	with tf.name_scope(scope_name) as scope:
+		weights_dict = {}
+		for i, cs in enumerate(comp_shape):
+			shape = cs + [in_shape,out_shape]
+			weights_dict[i] = get_weights(shape, std_mult=std_mult, name=name+'_'+str(i))
+		return weights_dict
 
 def get_bias_dict(n_filters, order, name='b'):
 	"""Return a dict of biases"""
@@ -274,11 +275,17 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
-	optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+	opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
+	grads_and_vars = opt.compute_gradients(cost)
+	optimizer = opt.apply_gradients(grads_and_vars)
 	#optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, 
 	#									   momentum=momentum, 
 	#									   use_nesterov=nesterov).minimize(cost)
-
+	grad_summaries_op = []
+	for g, v in grads_and_vars:
+		if 'psi' in v.name:
+			grad_summaries_op.append(tf.histogram_summary(v.name, g))
+	
 	# Evaluate model
 	correct_pred = tf.equal(tf.argmax(pred, 1), y)
 	accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
@@ -305,6 +312,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	saver = tf.train.Saver()
 	epoch = 0
 	start = time.time()
+	step = 0.
 	# Keep training until reach max iterations
 	while epoch < n_epochs:
 		generator = minibatcher(mnist_trainx, mnist_trainy, batch_size, shuffle=True)
@@ -318,9 +326,13 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 			# Optimize
 			feed_dict = {x: batch_x, y: batch_y, keep_prob: dropout,
 						 learning_rate : lr_current, phase_train : True}
-			__, cost_, acc_ = sess.run([optimizer, cost, accuracy], feed_dict=feed_dict)
+			__, cost_, acc_, gso = sess.run([optimizer, cost, accuracy,
+										grad_summaries_op], feed_dict=feed_dict)
 			cost_total += cost_
 			acc_total += acc_
+			for summ in gso:
+				summary.add_summary(summ, step)
+			step += 1
 		cost_total /=(i+1.)
 		acc_total /=(i+1.)
 		
@@ -336,9 +348,8 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		
 		feed_dict={cost_ph : cost_total, acc_ph : vacc_total, lr_ph : lr_current}
 		summaries = sess.run([cost_op, acc_op, lr_op], feed_dict=feed_dict)
-		summary.add_summary(summaries[0], epoch)
-		summary.add_summary(summaries[1], epoch)
-		summary.add_summary(summaries[2], epoch)
+		for summ in summaries:
+			summary.add_summary(summ, step)
 
 		print "[" + str(trial_num),str(epoch) + \
 			"], Minibatch Loss: " + \
