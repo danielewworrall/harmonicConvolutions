@@ -109,42 +109,42 @@ def conv_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 	}
 	
 	biases = {
-		'b1' : get_complex_bias_dict(nf, 2, name='b1'),
-		'b2' : get_complex_bias_dict(nf, 2, name='b2'),
-		'b3' : get_complex_bias_dict(nf, 2, name='b3'),
-		'b4' : get_complex_bias_dict(nf, 2, name='b4'),
+		'b1' : get_bias_dict(nf, 2, name='b1'),
+		'psi1' : get_bias_dict(nf, 2, name='psi1'),
+		'b2' : get_bias_dict(nf, 2, name='b2'),
+		'psi2' : get_bias_dict(nf, 2, name='psi2'),
+		'b3' : get_bias_dict(nf, 2, name='b3'),
+		'psi3' : get_bias_dict(nf, 2, name='psi3'),
+		'b4' : get_bias_dict(nf, 2, name='b4'),
+		'psi4' : get_bias_dict(nf, 2, name='psi4'),
 		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7')
 	}
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
 	
 	# Convolutional Layers
-	# LAYER 1
 	with tf.name_scope('block1') as scope:
-		cv1 = real_input_conv(x, weights['w1'], filter_size=5, padding='SAME',
-							  name='1')
-		cv1 = complex_nonlinearity_complex_bias(cv1, biases['b1'], tf.nn.relu)
+		cv1 = real_input_rotated_conv(x, weights['w1'], biases['psi1'], filter_size=5, 
+										padding='SAME', name='1')
+		cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
 		
 		# LAYER 2
-		cv2 = complex_input_conv(cv1, weights['w2'], filter_size=5,
-								 output_orders=[0,1,2], padding='SAME',
-								 name='2')
-		cv2 = complex_nonlinearity_complex_bias(cv2, biases['b2'], tf.nn.relu)
+		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'], filter_size=5,
+								 output_orders=[0,1], padding='SAME', name='2')
+		cv2 = complex_nonlinearity(cv2, biases['b2'], tf.nn.relu)
 	
-	# LAYER 3
 	with tf.name_scope('block3') as scope:
-		cv3 = complex_input_conv(cv2, weights['w3'], filter_size=5,
-								 output_orders=[0,1,2], strides=(1,2,2,1),
-								 padding='SAME', name='3')
-		cv3 = complex_nonlinearity_complex_bias(cv3, biases['b3'], tf.nn.relu)
-		
+		# LAYER 3
+		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'], filter_size=5,
+								 output_orders=[0,1], padding='SAME', strides=(1,2,2,1), name='3')
+		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
+
 		# LAYER 4
-		cv4 = complex_input_conv(cv3, weights['w4'], filter_size=5,
-								 output_orders=[0,1,2], padding='SAME',
-								 name='4')
-		cv4 = complex_nonlinearity_complex_bias(cv4, biases['b4'], tf.nn.relu)
+		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'], filter_size=5,
+								 output_orders=[0,1], padding='SAME', name='4')
+		cv4 = complex_nonlinearity(cv4, biases['b4'], tf.nn.relu)
 	
-	# LAYER 7
+# LAYER 7
 	with tf.name_scope('block7') as scope:
 		cv7 = complex_input_conv(cv4, weights['w7'], filter_size=5,
 								 strides=(1,2,2,1), padding='SAME',
@@ -265,6 +265,8 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
 	elif model == 'conv_complex_bias':
 		pred = conv_complex_bias(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
+	elif model == 'conv_real_bias':	
+		pred = conv_real_bias(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
@@ -272,10 +274,10 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
-	#optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
-	optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, 
-										   momentum=momentum, 
-										   use_nesterov=nesterov).minimize(cost)
+	optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+	#optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, 
+	#									   momentum=momentum, 
+	#									   use_nesterov=nesterov).minimize(cost)
 
 	# Evaluate model
 	correct_pred = tf.equal(tf.argmax(pred, 1), y)
@@ -296,7 +298,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	lr_ph = tf.placeholder(tf.float32, [], name='lr_')
 	lr_op = tf.scalar_summary("Learning Rate", lr_ph)
 	sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
-	summary = tf.train.SummaryWriter('logs/', sess.graph)
+	summary = tf.train.SummaryWriter('hist_logs/', sess.graph)
 	
 	# Launch the graph
 	sess.run(init)
@@ -368,5 +370,5 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='conv_complex_bias', lr=1e-3, batch_size=100, n_epochs=500, std_mult=0.4,
-		n_filters=5, combine_train_val=False)
+	run(model='conv_complex_bias', lr=1e-2, batch_size=80, n_epochs=500, std_mult=0.3,
+		n_filters=8, combine_train_val=False)
