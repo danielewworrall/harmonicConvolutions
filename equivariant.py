@@ -305,6 +305,11 @@ def save_model(saver, saveDir, sess):
 	save_path = saver.save(sess, saveDir + "checkpoints/model.ckpt")
 	print("Model saved in file: %s" % save_path)
 
+def restore_model(saver, saveDir, sess):
+	"""Save a model checkpoint"""
+	save_path = saver.restore(sess, saveDir + "checkpoints/model.ckpt")
+	print("Model restored from file: %s" % save_path)
+
 def rotate_feature_maps(X, n_angles):
 	"""Rotate feature maps"""
 	X = np.reshape(X, [28,28])
