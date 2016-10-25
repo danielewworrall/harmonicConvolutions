@@ -149,16 +149,17 @@ def maxpool2d(X, k=2):
     """Tied max pool. k is the stride and pool size"""
     return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1], padding='VALID')
 
-def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
+def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W', scope_name='scope'):
 	"""Return a dict of weights for use with real_input_equi_conv. comp_shape is
 	a list of the number of elements per Fourier base. For 3x3 weights use
 	[3,2,2,2]. I currently assume order increasing from 0.
 	"""
-	weights_dict = {}
-	for i, cs in enumerate(comp_shape):
-		shape = cs + [in_shape,out_shape]
-		weights_dict[i] = get_weights(shape, std_mult=std_mult, name=name+'_'+str(i))
-	return weights_dict
+	with tf.name_scope(scope_name) as scope:
+		weights_dict = {}
+		for i, cs in enumerate(comp_shape):
+			shape = cs + [in_shape,out_shape]
+			weights_dict[i] = get_weights(shape, std_mult=std_mult, name=name+'_'+str(i))
+		return weights_dict
 
 def get_bias_dict(n_filters, order, name='b'):
 	"""Return a dict of biases"""
@@ -167,6 +168,16 @@ def get_bias_dict(n_filters, order, name='b'):
 		bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'_'+str(i))
 		bias_dict[i] = bias
 	return bias_dict
+
+def get_complex_bias_dict(n_filters, order, name='b'):
+	"""Return a dict of biases"""
+	bias_dict = {}
+	for i in xrange(order+1):
+		bias_x = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'x_'+str(i))
+		bias_y = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'y_'+str(i))
+		bias_dict[i] = (bias_x, bias_y)
+	return bias_dict
+
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
 def minibatcher(inputs, targets, batch_size, shuffle=False):
@@ -269,7 +280,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 		# Define loss and optimizer
 		cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
-		optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.95).minimize(cost)
+		optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.90).minimize(cost)
 		
 		# Evaluate model
 		correct_pred = tf.equal(tf.argmax(pred, 1), y)
