@@ -102,7 +102,7 @@ def conv_complex_bias(x, drop_prob, n_filters,  n_rows, n_cols, n_channels, size
 		'psi3' : get_bias_dict(nf, 1, name='psi3', scope='block3'),
 		'b4' : get_bias_dict(nf, 1, name='b4', scope='block3'),
 		'psi4' : get_bias_dict(nf, 1, name='psi4', scope='block3'),
-		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7', scope='block7')
+		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7')
 	}
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
