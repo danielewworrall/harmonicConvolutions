@@ -161,12 +161,13 @@ def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W', sc
 			weights_dict[i] = get_weights(shape, std_mult=std_mult, name=name+'_'+str(i))
 		return weights_dict
 
-def get_bias_dict(n_filters, order, name='b'):
+def get_bias_dict(n_filters, order, name='b', scope='scope'):
 	"""Return a dict of biases"""
 	bias_dict = {}
-	for i in xrange(order+1):
-		bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'_'+str(i))
-		bias_dict[i] = bias
+	with tf.name_scope(scope) as scope:
+		for i in xrange(order+1):
+			bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'_'+str(i))
+			bias_dict[i] = bias
 	return bias_dict
 
 def get_complex_bias_dict(n_filters, order, name='b'):
