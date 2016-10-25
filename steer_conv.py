@@ -100,6 +100,7 @@ def real_input_rotated_conv(X, R, psi, filter_size=3, strides=(1,1,1,1),
     
     X: tf tensor
     R: dict of filter coefficients {rotation order: (real, imaginary)}
+    psi: dict of filter phases {rotation order: phase}
     filter_size: int of filter height/width (default 3) CAVEAT: ODD supported
     strides: as per tf convention (default (1,1,1,1))
     padding: as per tf convention (default VALID)
@@ -124,6 +125,7 @@ def complex_input_rotated_conv(X, R, psi, filter_size=3, output_orders=[0,],
     
     X: dict of channels {rotation order: (real, imaginary)}
     R: dict of filter coefficients {rotation order: (real, imaginary)}
+    psi: dict of filter phases {rotation order: phase}
     filter_size: int of filter height/width (default 3) CAVEAT: ODD supported
     output_orders: list of rotation orders to output (default [0,])  
     strides: as per tf convention (default (1,1,1,1))
@@ -156,6 +158,7 @@ def complex_input_rotated_conv(X, R, psi, filter_size=3, output_orders=[0,],
         # layer of rotation orders [X,Y,...,Z]. At each map M in [X,Y,...,Z] we
         # sum the inputs from each F in [A,B,...,C].
         return sum_complex_tensor_dict(Z)
+
 def get_key_pairings(X, R, output_orders):
     """Finds combinations of all inputs and filters, such that
     input_order + filter_order = output_order
@@ -229,32 +232,6 @@ def complex_nonlinearity(X, b, fnc, eps=1e-4):
         Rb = tf.nn.bias_add(magnitude, b[m])
         c = fnc(Rb)/magnitude
         R[m] = (r[0]*c, r[1]*c)
-    return R
-
-def complex_nonlinearity_complex_bias(X, b, fnc, eps=1e-4):
-    """Apply the nonlinearity described by the function handle fnc: R -> R+ to
-    the magnitude of X. The bias is also complex, stored as a+ic. CAVEAT: fnc 
-    must map to the non-negative reals R+.
-    
-    Output U + iV = fnc(R+|b|) * ((A+a)+i(B+c))
-    where  A + iB = Z/|Z|
-    
-    X: dict of channels {rotation order: (real, imaginary)}
-    b: dict of biases {rotation order: complex-valued bias}
-    fnc: function handle for a nonlinearity. MUST map to non-negative reals R+
-    eps: regularization since grad |Z| is infinite at zero (default 1e-4)
-    """
-    R = {}
-    for m, r in X.iteritems():
-        magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-        bias = b[m]
-        bias_mag = tf.sqrt(bias[0]**2 + bias[1]**2 + eps)
-        bias_x, bias_y = bias[0]/bias_mag, bias[1]/bias_mag
-        Rb = tf.nn.bias_add(magnitude, bias_mag)
-        c = fnc(Rb)/magnitude
-        Xnew = bias_x*r[0] - bias_y*r[1]
-        Ynew = bias_y*r[1] + bias_x*r[0]
-        R[m] = (Xnew*c, Ynew*c)
     return R
 
 def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
