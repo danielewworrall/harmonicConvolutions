@@ -149,12 +149,12 @@ def maxpool2d(X, k=2):
     """Tied max pool. k is the stride and pool size"""
     return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1], padding='VALID')
 
-def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W', scope_name='scope'):
+def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W', scope='scope'):
 	"""Return a dict of weights for use with real_input_equi_conv. comp_shape is
 	a list of the number of elements per Fourier base. For 3x3 weights use
 	[3,2,2,2]. I currently assume order increasing from 0.
 	"""
-	with tf.name_scope(scope_name) as scope:
+	with tf.name_scope(scope) as scope:
 		weights_dict = {}
 		for i, cs in enumerate(comp_shape):
 			shape = cs + [in_shape,out_shape]
