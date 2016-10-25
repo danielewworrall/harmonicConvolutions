@@ -49,7 +49,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 			print('Batch size: %f' % (batch_size,))
 			print('Stddev multiplier: %f' % (std_mult,))
 			print
-			y = run(model='conv_so2',
+			y = run(model='conv_complex_bias',
 				lr=lr,
 				batch_size=batch_size,
 				std_mult=std_mult,
@@ -98,7 +98,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 
 	y = []
 	for i in xrange(5):
-		y.append(run(model='conv_so2',
+		y.append(run(model='conv_complex_bias',
 			lr=best_params['lr'],
 			batch_size=best_params['batch_size'],
 			std_mult=best_params['std_mult'],
