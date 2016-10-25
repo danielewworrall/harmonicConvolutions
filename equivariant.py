@@ -359,7 +359,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		elif model == 'conv_complex_bias':
 			pred = conv_complex_bias(x, keep_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, batch_size, phase_train, std_mult)
 		elif model == 'deep_complex_bias':
-			pred = deep_complex_bias(x, keep_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, batch_size, phase_train, std_mul)
+			pred = deep_complex_bias(x, keep_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, batch_size, phase_train, std_mult)
 		else:
 			print('Model unrecognized')
 			sys.exit(1)
