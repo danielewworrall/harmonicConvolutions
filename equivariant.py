@@ -233,25 +233,28 @@ def maxpool2d(X, k=2):
     """Tied max pool. k is the stride and pool size"""
     return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1], padding='VALID')
 
-def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W', scope='scope'):
+def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
 	"""Return a dict of weights for use with real_input_equi_conv. comp_shape is
 	a list of the number of elements per Fourier base. For 3x3 weights use
 	[3,2,2,2]. I currently assume order increasing from 0.
 	"""
-	with tf.name_scope(scope) as scope:
-		weights_dict = {}
-		for i, cs in enumerate(comp_shape):
-			shape = cs + [in_shape,out_shape]
-			weights_dict[i] = get_weights(shape, std_mult=std_mult, name=name+'_'+str(i))
-		return weights_dict
+	weights_dict = {}
+	for i, cs in enumerate(comp_shape):
+		shape = cs + [in_shape,out_shape]
+		weights_dict[i] = get_weights(shape, std_mult=std_mult,
+									  name=name+'_'+str(i))
+	return weights_dict
 
-def get_bias_dict(n_filters, order, name='b', scope='scope'):
+def get_bias_dict(n_filters, order, rand_init=False, name='b'):
 	"""Return a dict of biases"""
 	bias_dict = {}
-	with tf.name_scope(scope) as scope:
-		for i in xrange(order+1):
-			bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'_'+str(i))
-			bias_dict[i] = bias
+	for i in xrange(order+1):
+		init = 1e-2
+		if rand_init:
+			init = np.random.rand() * 2. *np.pi
+		bias = tf.Variable(tf.constant(init, shape=[n_filters]),
+						   name=name+'_'+str(i))
+		bias_dict[i] = bias
 	return bias_dict
 
 def get_complex_bias_dict(n_filters, order, name='b'):
