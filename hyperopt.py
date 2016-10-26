@@ -27,7 +27,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 			print("WARNING: Setting ntrials to loaded experiment files: ", learning_rates.shape[0])
 			actual_n_trials = learning_rates.shape[0]
 	#number of filters to try
-	filters = [2, 4, 6, 8, 10]
+	filters = [2, 8]
 	print("Num trials per filter", n_trials)
 	for f in filters:
 		local_y_s = []
@@ -49,7 +49,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 			print('Batch size: %f' % (batch_size,))
 			print('Stddev multiplier: %f' % (std_mult,))
 			print
-			y = run(model='deep_complex_bias',
+			y = run(model='deep_complex_bias_NoFC',
 				lr=lr,
 				batch_size=batch_size,
 				std_mult=std_mult,
@@ -98,7 +98,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 
 	y = []
 	for i in xrange(5):
-		y.append(run(model='deep_complex_bias',
+		y.append(run(model='deep_complex_bias_NoFC',
 			lr=best_params['lr'],
 			batch_size=best_params['batch_size'],
 			std_mult=best_params['std_mult'],

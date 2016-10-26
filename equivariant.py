@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-import cv2
+#import cv2
 import numpy as np
 import scipy.linalg as scilin
 import scipy.ndimage.interpolation as sciint
@@ -325,16 +325,29 @@ def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
 	weights_dict = {}
 	for i, cs in enumerate(comp_shape):
 		shape = cs + [in_shape,out_shape]
-		weights_dict[i] = get_weights(shape, std_mult=std_mult, name=name+'_'+str(i))
+		weights_dict[i] = get_weights(shape, std_mult=std_mult,
+									  name=name+'_'+str(i))
 	return weights_dict
 
 def get_bias_dict(n_filters, order, name='b'):
 	"""Return a dict of biases"""
 	bias_dict = {}
 	for i in xrange(order+1):
-		bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'_'+str(i))
+		bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]),
+						   name=name+'_'+str(i))
 		bias_dict[i] = bias
 	return bias_dict
+
+def get_phase_dict(n_in, n_out, order, name='b'):
+	"""Return a dict of phase offsets"""
+	phase_dict = {}
+	for i in xrange(order+1):
+		init = np.random.rand(1,1,n_in,n_out) * 2. *np.pi
+		init = np.float32(init)
+		phase = tf.Variable(tf.constant(init, shape=[1,1,n_in,n_out]),
+						   name=name+'_'+str(i))
+		phase_dict[i] = phase
+	return phase_dict
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
 def minibatcher(inputs, targets, batch_size, shuffle=False):
