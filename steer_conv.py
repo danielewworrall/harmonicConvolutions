@@ -303,7 +303,7 @@ def to_constant_float(Q):
     
     Q: numpy tensor
     """
-    Q = tf.Variable(Q, trainable=False)
+    #Q = tf.Variable(Q, trainable=False)###########################################
     return tf.to_float(Q)
 
 def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W'):
@@ -357,6 +357,7 @@ def get_complex_rotated_filters(R, psi, filter_size):
         r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
         ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
         usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
+        print ucos.get_shape(), psi[m].get_shape()
         # Rotate basis matrices
         cosine = tf.cos(psi[m])*ucos + tf.sin(psi[m])*usin
         sine = -tf.sin(psi[m])*ucos + tf.cos(psi[m])*usin
@@ -399,5 +400,3 @@ def get_complex_basis_matrices(filter_size, order=1):
     smasks = tf.pack(smasks, axis=-1)
     smasks = tf.reshape(smasks, [k,k,tap_length-(order>0)])
     return cmasks, smasks
-
-
