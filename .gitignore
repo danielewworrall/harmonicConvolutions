@@ -5,6 +5,3 @@ checkpoints
 pics/
 data
 *.pyc
-hyperopt_logs
-hist_logs
-hyperopt_logs_nesterov

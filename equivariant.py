@@ -277,8 +277,9 @@ def get_phase_dict(n_in, n_out, order, name='b'):
 	"""Return a dict of phase offsets"""
 	phase_dict = {}
 	for i in xrange(order+1):
-		init = np.random.rand(n_in, n_out) * 2. *np.pi
-		phase = tf.Variable(tf.constant(init, shape=[n_in, n_out]),
+		init = np.random.rand(1,1,1,n_out) * 2. *np.pi
+		init = np.float32(init)
+		phase = tf.Variable(tf.constant(init, shape=[1,1,1,n_out]),
 						   name=name+'_'+str(i))
 		phase_dict[i] = phase
 	return phase_dict
@@ -366,11 +367,14 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
-	print('Using model: %s' % (model,))
+	print('  Using model: %s' % (model,))
 
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
-	opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
+	opt = tf.train.MomentumOptimizer(learning_rate=learning_rate,
+									 momentum=momentum, use_nesterov=nesterov)
+	print('  Constructed loss')
+	
 	grads_and_vars = opt.compute_gradients(cost)
 	modified_gvs = []
 	for g, v in grads_and_vars:
@@ -378,6 +382,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 			g = psi_preconditioner*g
 		modified_gvs.append((g, v))
 	optimizer = opt.apply_gradients(modified_gvs)
+	print('  Optimizer built')
 	
 	grad_summaries_op = []
 	for g, v in grads_and_vars:
@@ -387,9 +392,11 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	# Evaluate model
 	correct_pred = tf.equal(tf.argmax(pred, 1), y)
 	accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+	print('  Evaluation metric constructed')
 			
 	# Initializing the variables
 	init = tf.initialize_all_variables()
+	print('  Variables initialized')
 	
 	if combine_train_val:
 		mnist_trainx = np.vstack([mnist_trainx, mnist_validx])
@@ -403,7 +410,8 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	lr_ph = tf.placeholder(tf.float32, [], name='lr_')
 	lr_op = tf.scalar_summary("Learning Rate", lr_ph)
 	sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
-	summary = tf.train.SummaryWriter('hist_logs/', sess.graph)
+	summary = tf.train.SummaryWriter('./logs/current', sess.graph)
+	print('  Summaries constructed')
 	
 	# Launch the graph
 	sess.run(init)
@@ -411,6 +419,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	epoch = 0
 	start = time.time()
 	step = 0.
+	print('  Begin training')
 	# Keep training until reach max iterations
 	while epoch < n_epochs:
 		generator = minibatcher(mnist_trainx, mnist_trainy, batch_size, shuffle=True)
@@ -479,5 +488,5 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='deep_complex_bias', lr=2e-2, batch_size=80, n_epochs=500,
+	run(model='deep_complex_bias', lr=1e-3, batch_size=80, n_epochs=500,
 		std_mult=0.3, n_filters=5, combine_train_val=False)
