@@ -325,31 +325,16 @@ def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
 	weights_dict = {}
 	for i, cs in enumerate(comp_shape):
 		shape = cs + [in_shape,out_shape]
-		weights_dict[i] = get_weights(shape, std_mult=std_mult,
-									  name=name+'_'+str(i))
+		weights_dict[i] = get_weights(shape, std_mult=std_mult, name=name+'_'+str(i))
 	return weights_dict
 
-def get_bias_dict(n_filters, order, rand_init=False, name='b'):
+def get_bias_dict(n_filters, order, name='b'):
 	"""Return a dict of biases"""
 	bias_dict = {}
 	for i in xrange(order+1):
-		init = 1e-2
-		if rand_init:
-			init = np.random.rand() * 2. *np.pi
-		bias = tf.Variable(tf.constant(init, shape=[n_filters]),
-						   name=name+'_'+str(i))
+		bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'_'+str(i))
 		bias_dict[i] = bias
 	return bias_dict
-
-def get_complex_bias_dict(n_filters, order, name='b'):
-	"""Return a dict of biases"""
-	bias_dict = {}
-	for i in xrange(order+1):
-		bias_x = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'x_'+str(i))
-		bias_y = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'y_'+str(i))
-		bias_dict[i] = (bias_x, bias_y)
-	return bias_dict
-
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
 def minibatcher(inputs, targets, batch_size, shuffle=False):
