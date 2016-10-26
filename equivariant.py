@@ -157,9 +157,9 @@ def conv_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 		return tf.nn.bias_add(cv7, biases['b7'])
 
 def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
-	"""The conv_so2 architecture, scatters first through an equi_real_conv
-	followed by phase-pooling then summation and a nonlinearity. Current
-	test time score is 92.97+/-0.06% for 3 layers deep, 15 filters"""
+	"""The deep_complex_bias architecture. Current test time score is 94.7% for 7 layers 
+    deep, 5 filters
+    """
 	# Sure layers weight & bias
 	order = 3
 	nf = n_filters
@@ -202,7 +202,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
-		cv2 = complex_nonlinearity(cv2, biases['b2'], tf.nn.relu)
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train)
 	
 	with tf.name_scope('block3') as scope:
 		# LAYER 3
@@ -216,7 +216,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv4 = complex_nonlinearity(cv4, biases['b4'], tf.nn.relu)
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train)
 	
 	with tf.name_scope('block3') as scope:
 		# LAYER 5
@@ -230,7 +230,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv6 = complex_nonlinearity(cv6, biases['b6'], tf.nn.relu)
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train)
 
 	# LAYER 7
 	with tf.name_scope('block7') as scope:
@@ -277,9 +277,9 @@ def get_phase_dict(n_in, n_out, order, name='b'):
 	"""Return a dict of phase offsets"""
 	phase_dict = {}
 	for i in xrange(order+1):
-		init = np.random.rand(1,1,1,n_out) * 2. *np.pi
+		init = np.random.rand(1,1,n_in,n_out) * 2. *np.pi
 		init = np.float32(init)
-		phase = tf.Variable(tf.constant(init, shape=[1,1,1,n_out]),
+		phase = tf.Variable(tf.constant(init, shape=[1,1,n_in,n_out]),
 						   name=name+'_'+str(i))
 		phase_dict[i] = phase
 	return phase_dict
@@ -319,11 +319,24 @@ def rotate_feature_maps(X, n_angles):
 	X_ = np.reshape(X_, [-1,784])
 	return X_
 
+def get_learning_rate(current, best, counter, learning_rate, delay=15):
+    """If have not seen accuracy improvement in delay epochs, then divide 
+    learning rate by 10
+    """
+    if current > best:
+        best = current
+        counter = 0
+    elif counter > delay:
+        learning_rate = learning_rate / 10.
+        counter = 0
+    else:
+        counter += 1
+    return (best, counter, learning_rate)
 
 ##### MAIN SCRIPT #####
 def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		bn_config=[False, False], trial_num='N', combine_train_val=False,
-		std_mult=0.4, lr_decay=0.05):
+		std_mult=0.4, lr_decay=0.5):
 	tf.reset_default_graph()
 	# Load dataset
 	mnist_train = np.load('./data/mnist_rotation_new/rotated_train.npz')
@@ -419,6 +432,9 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	epoch = 0
 	start = time.time()
 	step = 0.
+	lr_current = lr
+	counter = 0
+	best = 0.
 	print('  Begin training')
 	# Keep training until reach max iterations
 	while epoch < n_epochs:
@@ -428,7 +444,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		vacc_total = 0.
 		for i, batch in enumerate(generator):
 			batch_x, batch_y = batch
-			lr_current = lr/np.sqrt(1.+lr_decay*epoch)
+			#lr_current = lr/np.sqrt(1.+lr_decay*epoch)
 			
 			# Optimize
 			feed_dict = {x: batch_x, y: batch_y, keep_prob: dropout,
@@ -458,15 +474,18 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		for summ in summaries:
 			summary.add_summary(summ, step)
 
+		best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=10)
+		
 		print "[" + str(trial_num),str(epoch) + \
 			"], Minibatch Loss: " + \
 			"{:.6f}".format(cost_total) + ", Train Acc: " + \
 			"{:.5f}".format(acc_total) + ", Time: " + \
-			"{:.5f}".format(time.time()-start) + ", Val acc: " + \
+			"{:.5f}".format(time.time()-start) + ", Counter: " + \
+			"{:2d}".format(counter) + ", Val acc: " + \
 			"{:.5f}".format(vacc_total)
 		epoch += 1
-		
-		if (epoch) % 50 == 0:
+				
+        if (epoch) % 50 == 0:
 			save_model(saver, './', sess)
 	
 	print "Testing"
@@ -488,5 +507,5 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='deep_complex_bias', lr=1e-3, batch_size=80, n_epochs=500,
-		std_mult=0.3, n_filters=5, combine_train_val=False)
+	run(model='deep_complex_bias', lr=1e-2, batch_size=80, n_epochs=500,
+		std_mult=0.3, n_filters=8, combine_train_val=False)

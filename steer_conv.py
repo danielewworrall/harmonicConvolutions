@@ -317,6 +317,7 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W'):
     if W_init == None:
         stddev = std_mult*np.sqrt(2.0 / np.prod(filter_shape[:2]))
         W_init = tf.random_normal(filter_shape, stddev=stddev)
+        #W_init = tf.random_uniform(filter_shape, maxval=np.sqrt(12.)*stddev/4.)
     return tf.Variable(W_init, name=name)
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####
