@@ -176,18 +176,18 @@ def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 	
 	biases = {
 		'b1' : get_bias_dict(nf, 2, name='b1'),
-		'psi1' : get_bias_dict(nf, 2, rand_init=True, name='psi1'),
 		'b2' : get_bias_dict(nf, 2, name='b2'),
-		'psi2' : get_bias_dict(nf, 2, rand_init=True, name='psi2'),
 		'b3' : get_bias_dict(2*nf, 2, name='b3'),
-		'psi3' : get_bias_dict(2*nf, 2, rand_init=True, name='psi3'),
 		'b4' : get_bias_dict(2*nf, 2, name='b4'),
-		'psi4' : get_bias_dict(2*nf, 2, rand_init=True, name='psi4'),
 		'b5' : get_bias_dict(4*nf, 2, name='b5'),
-		'psi5' : get_bias_dict(4*nf, 2, rand_init=True, name='psi5'),
 		'b6' : get_bias_dict(4*nf, 2, name='b6'),
-		'psi6' : get_bias_dict(4*nf, 2, rand_init=True, name='psi6'),
-		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7')
+		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7'),
+		'psi1' : get_phase_dict(1, nf, 2, name='psi1'),
+		'psi2' : get_phase_dict(nf, nf, 2, name='psi2'),
+		'psi3' : get_phase_dict(nf, 2*nf, 2, name='psi3'),
+		'psi4' : get_phase_dict(2*nf, 2*nf, 2, name='psi4'),
+		'psi5' : get_phase_dict(2*nf, 4*nf, 2, name='psi5'),
+		'psi6' : get_phase_dict(4*nf, 4*nf, 2, name='psi6')
 	}
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
@@ -264,26 +264,24 @@ def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
 									  name=name+'_'+str(i))
 	return weights_dict
 
-def get_bias_dict(n_filters, order, rand_init=False, name='b'):
+def get_bias_dict(n_filters, order, name='b'):
 	"""Return a dict of biases"""
 	bias_dict = {}
 	for i in xrange(order+1):
-		init = 1e-2
-		if rand_init:
-			init = np.random.rand() * 2. *np.pi
-		bias = tf.Variable(tf.constant(init, shape=[n_filters]),
+		bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]),
 						   name=name+'_'+str(i))
 		bias_dict[i] = bias
 	return bias_dict
 
-def get_complex_bias_dict(n_filters, order, name='b'):
-	"""Return a dict of biases"""
-	bias_dict = {}
+def get_phase_dict(n_in, n_out, order, name='b'):
+	"""Return a dict of phase offsets"""
+	phase_dict = {}
 	for i in xrange(order+1):
-		bias_x = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'x_'+str(i))
-		bias_y = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'y_'+str(i))
-		bias_dict[i] = (bias_x, bias_y)
-	return bias_dict
+		init = np.random.rand(n_in, n_out) * 2. *np.pi
+		phase = tf.Variable(tf.constant(init, shape=[n_in, n_out]),
+						   name=name+'_'+str(i))
+		phase_dict[i] = phase
+	return phase_dict
 
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####

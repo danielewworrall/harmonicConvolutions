@@ -108,7 +108,7 @@ def deep_complex_bias(x, n_filters, n_classes, bs, std_mult):
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		cv7 = tf.nn.bias_add(cv7, biases['b7'])
 		features.append(cv7)
-		return features
+		return features, weights, biases
 	
 ##### CUSTOM BLOCKS FOR MODEL #####
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
@@ -219,7 +219,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	y = tf.placeholder(tf.int64, [batch_size])
 	
 	# Construct model
-	features = deep_complex_bias(x, n_filters, n_classes, batch_size, std_mult)
+	features, __, __ = deep_complex_bias(x, n_filters, n_classes, batch_size, std_mult)
 	pred = features[-1]
 
 	# Evaluate model
@@ -244,10 +244,13 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		input_ = np.reshape(input_, (1,784))
 		output = sess.run(features[0], feed_dict={x : input_})
 		
+		plt.ion()
+		plt.show()
 		for k, v in output.iteritems():
-			plt.figure(1)
-			plt.imshow(v[0][0,:,:,0], cmap='gray', interpolation='nearest')
-			plt.show()
+			for i in xrange(v[0].shape[-1]):
+				plt.imshow(v[0][0,:,:,i], cmap='gray', interpolation='nearest')
+				plt.draw()
+				raw_input(i)
 			
 		'''
 		for i, batch in enumerate(test_generator):
@@ -261,10 +264,81 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		print('Test accuracy: %f' % (tacc_total,))
 		'''
 
+def view_filters(n_filters=5, std_mult=0.3):
+	tf.reset_default_graph()	
+	# Network Parameters
+	n_input = 784 				# MNIST data input (img shape: 28*28)
+	n_classes = 10 				# MNIST total classes (0-9 digits)
+	n_filters = n_filters
+	dataset_size = 10000
+	batch_size = 1
+	
+	# tf Graph input
+	x = tf.placeholder(tf.float32, [batch_size, n_input])
+	
+	# Construct model
+	features, weights, biases = deep_complex_bias(x, n_filters, n_classes, batch_size, std_mult)
+	
+	with tf.Session() as sess:
+		# Launch the graph
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
+		
+		saver = tf.train.Saver()
+		restore_model(saver, './', sess)
+				
+		# Visualize weights
+		plt.ion()
+		plt.show()
+		for i in xrange(6):
+			weight_name = 'w' + str(i+1)
+			bias_name = 'psi' + str(i+1)
+			r = weights[weight_name]
+			psi = biases[bias_name]
+			q = get_complex_rotated_filters(r, psi, filter_size=5)
+			Q = sess.run(q)
+			print('%s: ' % (weight_name,)),
+			for k, (order, pair) in enumerate(Q.iteritems()):
+				for j in xrange(pair[0].shape[-1]):
+					psh = pair[0].shape[-1]
+					offset = k*psh
+					
+					# Plot real part
+					plt.subplot(6, psh, j+1+2*k*psh)
+					plt.imshow(pair[0][:,:,0,j], cmap='gray', interpolation='nearest')
+					plt.axis('off')
+					
+					# Plot imaginary part
+					plt.subplot(6, psh, j+1+(2*k+1)*psh)
+					plt.imshow(pair[1][:,:,0,j], cmap='gray', interpolation='nearest')
+					plt.axis('off')	
+			plt.draw()
+			raw_input()
 
 
 
 if __name__ == '__main__':
-	run(model='deep_complex_bias', lr=2e-2, batch_size=200, n_epochs=500,
-		std_mult=0.3, n_filters=5, combine_train_val=False)
- 
+	#run(model='deep_complex_bias', lr=2e-2, batch_size=200, n_epochs=500,
+	#	std_mult=0.3, n_filters=5, combine_train_val=False)
+	view_filters()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
