@@ -156,38 +156,41 @@ def conv_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
 
-def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_mult):
+def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train,
+					  std_mult, filter_gain):
 	"""The deep_complex_bias architecture. Current test time score is 94.7% for 7 layers 
-    deep, 5 filters
-    """
+	deep, 5 filters
+	"""
 	# Sure layers weight & bias
 	order = 3
 	nf = n_filters
+	nf2 = int(n_filters*filter_gain)
+	nf3 = int(n_filters*(filter_gain**2.))
 	
 	weights = {
 		'w1' : get_weights_dict([[6,],[5,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
 		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
-		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, 2*nf, std_mult=std_mult, name='W3'),
-		'w4' : get_weights_dict([[6,],[5,],[5,]], 2*nf, 2*nf, std_mult=std_mult, name='W4'),
-		'w5' : get_weights_dict([[6,],[5,],[5,]], 2*nf, 4*nf, std_mult=std_mult, name='W5'),
-		'w6' : get_weights_dict([[6,],[5,],[5,]], 4*nf, 4*nf, std_mult=std_mult, name='W6'),
-		'w7' : get_weights_dict([[6,],[5,],[5,]], 4*nf, n_classes, std_mult=std_mult, name='W7'),
+		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf2, std_mult=std_mult, name='W3'),
+		'w4' : get_weights_dict([[6,],[5,],[5,]], nf2, nf2, std_mult=std_mult, name='W4'),
+		'w5' : get_weights_dict([[6,],[5,],[5,]], nf2, nf3, std_mult=std_mult, name='W5'),
+		'w6' : get_weights_dict([[6,],[5,],[5,]], nf3, nf3, std_mult=std_mult, name='W6'),
+		'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, n_classes, std_mult=std_mult, name='W7'),
 	}
 	
 	biases = {
 		'b1' : get_bias_dict(nf, 2, name='b1'),
 		'b2' : get_bias_dict(nf, 2, name='b2'),
-		'b3' : get_bias_dict(2*nf, 2, name='b3'),
-		'b4' : get_bias_dict(2*nf, 2, name='b4'),
-		'b5' : get_bias_dict(4*nf, 2, name='b5'),
-		'b6' : get_bias_dict(4*nf, 2, name='b6'),
+		'b3' : get_bias_dict(nf2, 2, name='b3'),
+		'b4' : get_bias_dict(nf2, 2, name='b4'),
+		'b5' : get_bias_dict(nf3, 2, name='b5'),
+		'b6' : get_bias_dict(nf3, 2, name='b6'),
 		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7'),
 		'psi1' : get_phase_dict(1, nf, 2, name='psi1'),
 		'psi2' : get_phase_dict(nf, nf, 2, name='psi2'),
-		'psi3' : get_phase_dict(nf, 2*nf, 2, name='psi3'),
-		'psi4' : get_phase_dict(2*nf, 2*nf, 2, name='psi4'),
-		'psi5' : get_phase_dict(2*nf, 4*nf, 2, name='psi5'),
-		'psi6' : get_phase_dict(4*nf, 4*nf, 2, name='psi6')
+		'psi3' : get_phase_dict(nf, nf2, 2, name='psi3'),
+		'psi4' : get_phase_dict(nf2, nf2, 2, name='psi4'),
+		'psi5' : get_phase_dict(nf2, nf3, 2, name='psi5'),
+		'psi6' : get_phase_dict(nf3, nf3, 2, name='psi6')
 	}
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
@@ -239,8 +242,100 @@ def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 								 name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
+
+def deep_residual(x, n_filters, n_classes, bs, phase_train, std_mult):
+	"""The deep_complex_bias architecture. Current test time score is 94.7% for 7 layers 
+	deep, 5 filters
+	"""
+	# Sure layers weight & bias
+	order = 3
+	nf = n_filters
+	
+	weights = {
+		'w1' : get_weights_dict([[6,],[5,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
+		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
+		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W3'),
+		'w4' : get_weights_dict([[6,],[5,],[5,]], nf, 2*nf, std_mult=std_mult, name='W4'),
+		'w5' : get_weights_dict([[6,],[5,],[5,]], 2*nf, 2*nf, std_mult=std_mult, name='W5'),
+		'w6' : get_weights_dict([[6,],[5,],[5,]], 2*nf, 4*nf, std_mult=std_mult, name='W6'),
+		'w7' : get_weights_dict([[6,],[5,],[5,]], 4*nf, 4*nf, std_mult=std_mult, name='W7'),
+		'w8' : get_weights_dict([[6,],[5,],[5,]], 4*nf, n_classes, std_mult=std_mult, name='W8'),
+	}
+	
+	biases = {
+		'b1' : get_bias_dict(nf, 2, name='b1'),
+		'b2' : get_bias_dict(nf, 2, name='b1'),
+		'b4' : get_bias_dict(2*nf, 2, name='b3'),
+		'b6' : get_bias_dict(4*nf, 2, name='b5'),
+		'b8' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7'),
+		'psi1' : get_phase_dict(1, nf, 2, name='psi1'),
+		'psi2' : get_phase_dict(nf, nf, 2, name='psi2'),
+		'psi3' : get_phase_dict(nf, nf, 2, name='psi3'),
+		'psi4' : get_phase_dict(nf, 2*nf, 2, name='psi4'),
+		'psi5' : get_phase_dict(2*nf, 2*nf, 2, name='psi5'),
+		'psi6' : get_phase_dict(2*nf, 4*nf, 2, name='psi6'),
+		'psi7' : get_phase_dict(4*nf, 4*nf, 2, name='psi7')
+	}
+	# Reshape input picture
+	x = tf.reshape(x, shape=[bs, 28, 28, 1])
+	cv1 = real_input_rotated_conv(x, weights['w1'], biases['psi1'],
+									  filter_size=5, padding='SAME', name='1')
+	cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
+	
+	# Convolutional Layers
+	re2 = res_block(cv1, weights['w2'], weights['w3'], biases['psi2'],
+					biases['psi3'], biases['b2'], phase_train,
+					filter_size=5, strides=(1,1,1,1), name='2')
+	
+	re3 = res_block(re2, weights['w4'], weights['w5'], biases['psi4'],
+					biases['psi5'], biases['b4'], phase_train,
+					filter_size=5, strides=(1,2,2,1), name='3')
+	
+	re4 = res_block(re3, weights['w6'], weights['w7'], biases['psi6'],
+					biases['psi7'], biases['b6'], phase_train,
+					filter_size=5, strides=(1,2,2,1), name='4')
+
+	# LAYER 7
+	with tf.name_scope('block4') as scope:
+		cv5 = complex_input_conv(re4, weights['w8'], filter_size=5,
+								 strides=(1,2,2,1), padding='SAME',
+								 name='5')
+		cv6 = tf.reduce_mean(sum_magnitudes(cv5), reduction_indices=[1,2])
+		return tf.nn.bias_add(cv6, biases['b8'])
 	
 ##### CUSTOM BLOCKS FOR MODEL #####
+def res_block(x, w1, w2, psi1, psi2, b, phase_train, filter_size=5,
+			  strides=(1,2,2,1), name='1'):
+	"""Residual block"""
+		
+	with tf.name_scope('block'+name) as scope:
+		cv1 = complex_input_rotated_conv(x, w1, psi1, filter_size=filter_size,
+									  output_orders=[0,1,2], padding='SAME',
+									  strides=strides, name='1')
+		cv1 = complex_nonlinearity(cv1, b, tf.nn.relu)
+		
+		# LAYER 2
+		cv2 = complex_input_rotated_conv(cv1, w2, psi2, filter_size=filter_size,
+										 output_orders=[0,1,2], padding='SAME',
+										 name='2')
+		cv2 = complex_batch_norm(cv2, lambda x:x, phase_train)
+		
+		# Shortcut across equal rotation order complex feature maps
+		for order, val in x.iteritems():
+			s0 = tf.nn.avg_pool(val[0], (1,strides[1],strides[2],1), strides,
+								padding='VALID', name='s'+str(order)+'_0')
+			p = tf.maximum(cv2[order][0].get_shape()[3]-s0.get_shape()[3],0)
+			s0 = tf.pad(s0,[[0,0],[0,0],[0,0],[0,p]])
+			
+			s1 = tf.nn.avg_pool(val[0], (1,strides[1],strides[2],1), strides,
+								padding='VALID', name='s'+str(order)+'_1')
+			s1 = tf.pad(s1,[[0,0],[0,0],[0,0],[0,p]])
+			
+			cv2[order] = (cv2[order][0]+s0, cv2[order][1]+s1)
+			
+		return cv2
+		
+
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
     """conv2d wrapper. Supply input X, weights V and optional bias"""
     VX = tf.nn.conv2d(X, V, strides=strides, padding=padding, name=name+'_')
@@ -336,7 +431,7 @@ def get_learning_rate(current, best, counter, learning_rate, delay=15):
 ##### MAIN SCRIPT #####
 def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		bn_config=[False, False], trial_num='N', combine_train_val=False,
-		std_mult=0.4, lr_decay=0.5):
+		std_mult=0.4, lr_decay=0.5, filter_gain=2.):
 	tf.reset_default_graph()
 	# Load dataset
 	mnist_train = np.load('./data/mnist_rotation_new/rotated_train.npz')
@@ -372,11 +467,17 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	
 	# Construct model
 	if model == 'conv_so2':
-		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
+		pred = conv_so2(x, keep_prob, n_filters, n_classes, batch_size,
+						phase_train, std_mult)
 	elif model == 'conv_complex_bias':
-		pred = conv_complex_bias(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
+		pred = conv_complex_bias(x, keep_prob, n_filters, n_classes, batch_size,
+								 phase_train, std_mult)
 	elif model == 'deep_complex_bias':	
-		pred = deep_complex_bias(x, keep_prob, n_filters, n_classes, batch_size, phase_train, std_mult)
+		pred = deep_complex_bias(x, keep_prob, n_filters, n_classes, batch_size,
+								 phase_train, std_mult, filter_gain)
+	elif model == 'deep_residual':	
+		pred = deep_residual(x, n_filters, n_classes, batch_size, phase_train,
+							 std_mult)
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
@@ -485,7 +586,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 			"{:.5f}".format(vacc_total)
 		epoch += 1
 				
-        if (epoch) % 50 == 0:
+		if (epoch) % 50 == 0:
 			save_model(saver, './', sess)
 	
 	print "Testing"
@@ -507,5 +608,5 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 
 
 if __name__ == '__main__':
-	run(model='deep_complex_bias', lr=1e-2, batch_size=80, n_epochs=500,
+	run(model='deep_residual', lr=1e-2, batch_size=80, n_epochs=500,
 		std_mult=0.3, n_filters=8, combine_train_val=False)
