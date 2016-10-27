@@ -7,8 +7,13 @@ import time
 import numpy as np
 
 from equivariant import run
+##### HELPERS #####
+def checkFolder(dir):
+	if not os.path.exists(dir):
+		os.makedirs(dir)
 
-def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_device='/gpu:0'):
+
+def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_device='/gpu:0', model=''):
 	y_best = 0.
 	best_params = {}
 	best_num_filters = 0
@@ -27,13 +32,13 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 			print("WARNING: Setting ntrials to loaded experiment files: ", learning_rates.shape[0])
 			actual_n_trials = learning_rates.shape[0]
 	#number of filters to try
-	filters = [2, 8]
-	print("Num trials per filter", n_trials)
+	filters = [8]
+	print("Num trials per filter", actual_n_trials)
 	for f in filters:
 		local_y_s = []
 		print("Processsing for num Filters:", f)
 		for i in xrange(actual_n_trials):
-			n_epochs = 500
+			n_epochs = 2
 
 			#switch here as well
 			if fixedParams:
@@ -49,7 +54,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 			print('Batch size: %f' % (batch_size,))
 			print('Stddev multiplier: %f' % (std_mult,))
 			print
-			y = run(model='deep_complex_bias_NoFC',
+			y = run(model=model,
 				lr=lr,
 				batch_size=batch_size,
 				std_mult=std_mult,
@@ -58,7 +63,8 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 				trial_num=i,
 				combine_train_val=False,
 				experimentIdx = experimentIdx,
-				tf_device = tf_device)
+				tf_device = tf_device,
+				use_batchNorm = True)
 			local_y_s.append(y)
 			if y > y_best:
 				y_best = y
@@ -69,12 +75,17 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 		#remember all ys 
 		y_s.append(local_y_s)
 		y_s_a = np.asarray(y_s)
-        	#save temp
-        	if experimentIdx == 0:
-                	fileName = "results/bestYResultsMNIST_temp_" + str(f) + ".npy"
-        	elif experimentIdx == 1:
-                	fileName = "results/bestYResultsCIFAR_temp_" + str(f) + ".npy"
-        	np.save(fileName, y_s_a)
+		#save temp
+		if experimentIdx == 0:
+				fileName = "results/MNIST/bestYResultsMNIST_temp_" + str(f) + ".npy"
+		elif experimentIdx == 1:
+				fileName = "results/CIFAR/bestYResultsCIFAR_temp_" + str(f) + ".npy"
+		elif experimentIdx == 2:
+				fileName = "results/PLANKTON/bestYResultsPLANKTON_temp_" + str(f) + ".npy"
+		elif experimentIdx == 3:
+				fileName = "results/GALAXIES/bestYResultsGALAXIES_temp_" + str(f) + ".npy"
+		checkFolder(os.path.dirname(fileName))
+		np.save(fileName, y_s_a)
 		
 		print
 		print
@@ -98,7 +109,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 
 	y = []
 	for i in xrange(5):
-		y.append(run(model='deep_complex_bias_NoFC',
+		y.append(run(model=model,
 			lr=best_params['lr'],
 			batch_size=best_params['batch_size'],
 			std_mult=best_params['std_mult'],
@@ -107,15 +118,16 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 			trial_num='T-'+str(i),
 			combine_train_val=True,
 			experimentIdx = experimentIdx,
-			tf_device = tf_device))		
+			tf_device = tf_device,
+			use_batchNorm = True))		
 		print
 		print('Current y: %f' % (y[i],))
 		print
 
 	print('Best num filters:', best_num_filters)
-	print('Best y overall')
+	print('Best y overall:')
 	print y_best
-	print('Best params overall')	
+	print('Best params overall:')	
 	print best_params
 	# Compute statistics
 	print y
@@ -125,56 +137,14 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 	print('Std: %f' % (np.std(y),))
 	#save y
 	if experimentIdx == 0:
-		fileName = "results/bestYResultsMNIST.npy"
+			fileName = "results/MNIST/bestYResultsMNIST.npy"
 	elif experimentIdx == 1:
-		fileName = "results/bestYResultsCIFAR.npy"
+			fileName = "results/CIFAR/bestYResultsCIFAR.npy"
+	elif experimentIdx == 2:
+			fileName = "results/PLANKTON/bestYResultsPLANKTON.npy"
+	elif experimentIdx == 3:
+			fileName = "results/GALAXIES/bestYResultsGALAXIES_temp.npy"
 	np.save(fileName, y)
-
-def binary_thinning(n_trials=256):
-	y_best = 0.
-	best_params = {}
-	n_rounds = int(np.log2(n_trials))
-	print n_rounds
-	
-	# Generate parameters
-	params = {}
-	for trial in xrange(n_trials):
-		params[trial] = {}
-		params[trial]['lr'] = log_uniform_rand(5e-2, 1e-4)
-		params[trial]['batch_size'] = int(uniform_rand(50, 500))
-		params[trial]['n_filters'] = int(uniform_rand(10,40))
-	
-	# For each trial in list, run experiment
-	results = np.zeros((n_trials,))
-	sorted_args = np.argsort(-results)
-	for j in xrange(n_rounds):
-		i = 0
-		for trial in sorted_args[:(n_trials/(2**j))]:
-			print params[trial]
-			params[trial]['y'] = run(model='deep_steer',
-									 lr=params[trial]['lr'],
-									 batch_size=params[trial]['batch_size'],
-									 n_epochs=10*(2**j),
-									 n_filters=params[trial]['n_filters'],
-									 trial_num=str(j)+'-'+str(i))
-			results[trial] = params[trial]['y']
-			if params[trial]['y'] > y_best:
-				y_best = params[trial]['y']
-				best_trial = trial
-			print
-			print
-			print('Best y so far')
-			print params[best_trial]
-			print
-			print
-			i += 1
-		
-		# Sort and reset running best
-		sorted_args = np.argsort(-results)
-		y_best = 0.
-	
-	print('Best y in this batch')
-	print params[best_trial]
 
 def uniform_rand(min_, max_):
 	gap = max_ - min_
@@ -190,9 +160,10 @@ def log_uniform_rand(min_, max_, size=1):
 	return output
 
 
-
+#ENTRY POINT:
 if __name__ == '__main__':
 	print("experimentIdx: ", int(sys.argv[1]))
 	print("deviceIdx : ", sys.argv[2])
-	random_independent(n_trials=24, fixedParams=True, experimentIdx=int(sys.argv[1]), tf_device=sys.argv[2]) #SWITCH MNIST/CIFAR
-	#binary_thinning(64)
+	print("NetworkModel : ", sys.argv[3])
+	random_independent(n_trials=24, fixedParams=True, experimentIdx=int(sys.argv[1]), tf_device=sys.argv[2], model=sys.argv[3]) #SWITCH MNIST/CIFAR
+	print("ALL FINISHED! :)")
