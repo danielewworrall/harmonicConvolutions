@@ -32,13 +32,13 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 			print("WARNING: Setting ntrials to loaded experiment files: ", learning_rates.shape[0])
 			actual_n_trials = learning_rates.shape[0]
 	#number of filters to try
-	filters = [8]
+	filters = [8, 9]
 	print("Num trials per filter", actual_n_trials)
 	for f in filters:
 		local_y_s = []
 		print("Processsing for num Filters:", f)
 		for i in xrange(actual_n_trials):
-			n_epochs = 2
+			n_epochs = 500
 
 			#switch here as well
 			if fixedParams:
