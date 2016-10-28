@@ -349,6 +349,7 @@ def get_complex_rotated_filters(R, psi, filter_size):
     k = filter_size
     for m, r in R.iteritems():
         rsh = r.get_shape().as_list()
+        print rsh
         # Get the basis matrices
         cmasks, smasks = get_complex_basis_matrices(filter_size, order=m)
         # Reshape and project taps on to basis
@@ -372,12 +373,12 @@ def get_complex_basis_matrices(filter_size, order=1):
     order: rotation order (default 1)
     """
     k = filter_size
-    tap_length = int(((k+1)*(k+3))/8)
     lin = np.linspace((1.-k)/2., (k-1.)/2., k)
     X, Y = np.meshgrid(lin, lin)
     R = np.sqrt(X**2 + Y**2)
     unique = np.unique(R)
     theta = np.arctan2(-Y, X)
+    tap_length = unique.shape[0]
     
     # There will be a cosine and quadrature sine mask
     cmasks = []

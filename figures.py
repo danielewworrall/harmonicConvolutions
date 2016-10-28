@@ -88,14 +88,17 @@ def radial_profile(order=1, n=5):
     psi = {order : 0.}
     W = get_complex_rotated_filters(R, psi, filter_size=n)
 
-    plt.figure(1)
-    plt.imshow(W[order][0][:,:,0,0], cmap='gray', interpolation='nearest')
-    plt.axis('off')
+    #plt.figure(1)
+    #plt.imshow(W[order][0][:,:,0,0], cmap='gray', interpolation='nearest')
+    #plt.axis('off')
+    '''
     plt.figure(2)
     plt.imshow(W[order][1][:,:,0,0], cmap='gray', interpolation='nearest')
     plt.axis('off')
     plt.figure(3)
     R = np.hstack((1., np.squeeze(R[order])))
+    print len(sns.color_palette("muted"))
+    '''
     print R
     plt.scatter(unique, R)
     plt.xlim([0,np.amax(unique)])
@@ -109,7 +112,91 @@ def radial_profile(order=1, n=5):
         plt.plot(x,y)
     plt.show()
 
-
+def radial_color(order=1, n=5):
+    """Plot a radial profile of size nxn for an rotation order
+    order filter
+    """
+    lin = np.linspace((1.-n)/2., (n-1.)/2., n)
+    X, Y = np.meshgrid(lin, lin)
+    R = np.sqrt(X**2 + Y**2)
+    unique = np.unique(R)
+    triang = unique.shape[0] - (order>0)
+    theta = np.arctan2(-Y, X)
+    
+    palette = sns.color_palette("muted")
+    weights = np.zeros((5,5,3))
+    for i, u in enumerate(unique):
+        mask = np.reshape((R == u)*1., (5,5,1))
+        pal = np.reshape(np.asarray(palette[i]), (1,1,3))
+        weights += mask*pal
+    '''
+    plt.figure(1)
+    plt.imshow(weights[:,:,1], cmap='gray', interpolation='nearest')
+    # Plot circle
+    palette = sns.color_palette("Paired")
+    t = np.linspace(0,2*np.pi,num=100)
+    for k, u in enumerate(unique):
+        x = (n/2.-0.5)+u*np.cos(t)
+        y = (n/2.-0.5)+u*np.sin(t)
+        plt.plot(x,y,color=palette[k])
+        i, j = np.nonzero((R==u))
+        plt.scatter(i, j, color=palette[k], s=60)
+        plt.axis('off')
+    '''
+    '''
+    plt.figure(1)
+    palette = sns.color_palette("Paired")
+    palette = np.reshape(np.asarray(palette), [6,1,3])
+    plt.imshow(palette, interpolation='nearest')
+    plt.axis('off')
+    plt.show()
+    '''
+    
+    for i, u in enumerate(unique):
+        plt.figure(i+2)
+        sns.set_style("white")
+        mask = (R == u)*1.*np.cos(theta)
+        #mask += 2*(1-mask)
+        plt.imshow(mask, cmap='gray', interpolation='nearest')
+        plt.xticks([])
+        plt.yticks([])
+        plt.xlim([-0.5,4.5])
+        plt.ylim([-0.5,4.5])
+    plt.show()
+    '''
+    masks = np.zeros((5,5,6))
+    for i, u in enumerate(unique):
+        mask = (R == u)*1.
+        masks[:,:,i] = mask*np.cos(theta) + 2*(1-mask)
+    mask = np.reshape(masks, [25,6])
+    sns.set_style("white")
+    plt.imshow(mask.T, cmap='gray', interpolation='nearest')
+    plt.xticks([])
+    plt.yticks([])
+    #plt.xlim([-0.5,24.5])
+    #plt.ylim([-0.5,4.5])
+    plt.show()
+    '''
 
 if __name__ == '__main__':
-    radial_profile(1,5)   
+    #radial_profile(1,5)
+    radial_color()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
