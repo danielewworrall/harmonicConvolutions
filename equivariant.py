@@ -208,11 +208,11 @@ def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train,
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train)
 	
 	with tf.name_scope('block3') as scope:
+		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 3
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
 										 filter_size=5, output_orders=[0,1,2],
-										 padding='SAME', strides=(1,2,2,1),
-										 name='3')
+										 padding='SAME', name='3')
 		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
 
 		# LAYER 4
@@ -222,11 +222,11 @@ def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train,
 		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train)
 	
 	with tf.name_scope('block3') as scope:
+		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 5
 		cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
 										 filter_size=5, output_orders=[0,1,2],
-										 padding='SAME', strides=(1,2,2,1),
-										 name='5')
+										 padding='SAME', name='5')
 		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
 
 		# LAYER 6
@@ -237,9 +237,9 @@ def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train,
 
 	# LAYER 7
 	with tf.name_scope('block7') as scope:
+		cv6 = mean_pooling(cv6, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=5,
-								 strides=(1,2,2,1), padding='SAME',
-								 name='7')
+								 padding='SAME', name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
 
@@ -523,7 +523,13 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	cost_op = tf.scalar_summary("Training Cost", cost_ph)
 	lr_ph = tf.placeholder(tf.float32, [], name='lr_')
 	lr_op = tf.scalar_summary("Learning Rate", lr_ph)
-	sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
+	
+	config = tf.ConfigProto()
+	config.gpu_options.allow_growth = True
+	config.log_device_placement = False
+	config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
+	sess = tf.Session(config=config)
+	#sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
 	summary = tf.train.SummaryWriter('./logs/current', sess.graph)
 	print('  Summaries constructed')
 	
