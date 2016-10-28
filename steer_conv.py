@@ -403,5 +403,14 @@ def get_complex_basis_matrices(filter_size, order=1):
     smasks = tf.reshape(smasks, [k,k,tap_length-(order>0)])
     return cmasks, smasks
 
-
-
+##### SPECIAL FUNCTIONS #####
+def mean_pooling(X, ksize=(1,1,1,1), strides=(1,1,1,1)):
+    """Implement mean pooling on complex-valued feature maps"""
+    Y = {}
+    for k, v in X.iteritems():
+        y0 = tf.nn.avg_pool(v[0], ksize=ksize, strides=strides,
+                            padding='VALID', name='mean_pooling')
+        y1 = tf.nn.avg_pool(v[1], ksize=ksize, strides=strides,
+                            padding='VALID', name='mean_pooling')
+        Y[k] = (y0,y1)
+    return Y

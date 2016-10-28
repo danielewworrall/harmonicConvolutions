@@ -69,14 +69,15 @@ def deep_complex_bias(x, n_filters, n_classes, bs, std_mult):
 		features.append(cv2)
 	
 	with tf.name_scope('block3') as scope:
+		# Mean-pooling
+		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 3
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
 										 filter_size=5, output_orders=[0,1,2],
-										 padding='SAME', strides=(1,1,1,1),
-										 name='3')
+										 padding='SAME', name='3')
 		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
 		features.append(cv3)
-	'''
+
 		# LAYER 4
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
 										 filter_size=5, output_orders=[0,1,2],
@@ -85,11 +86,12 @@ def deep_complex_bias(x, n_filters, n_classes, bs, std_mult):
 		features.append(cv4)
 	
 	with tf.name_scope('block5') as scope:
+		# Mean-pooling
+		cv4 = mean_pooling(cv4, strides=(1,1,1,1))
 		# LAYER 5
 		cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
 										 filter_size=5, output_orders=[0,1,2],
-										 padding='SAME', strides=(1,2,2,1),
-										 name='5')
+										 padding='SAME', name='5')
 		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
 		features.append(cv5)
 
@@ -108,8 +110,8 @@ def deep_complex_bias(x, n_filters, n_classes, bs, std_mult):
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		cv7 = tf.nn.bias_add(cv7, biases['b7'])
 		features.append(cv7)
-	'''
-	return features, weights, biases
+
+		return features, weights, biases
 	
 ##### CUSTOM BLOCKS FOR MODEL #####
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
@@ -462,7 +464,7 @@ def equivariance_test(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
 
 	# Parameters
 	batch_size = 4
-	layer = 2
+	layer = 5
 	
 	# Network Parameters
 	n_input = 784 				# MNIST data input (img shape: 28*28)
