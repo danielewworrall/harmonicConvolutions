@@ -16,6 +16,10 @@ from steer_conv import *
 
 from matplotlib import pyplot as plt
 
+import scipy as sp
+from scipy import ndimage
+from scipy import misc
+
 ##### HELPERS #####
 def checkFolder(dir):
 	if not os.path.exists(dir):
@@ -23,7 +27,7 @@ def checkFolder(dir):
 
 
 ##### MODELS #####
-def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, bs, phase_train, std_mult, filter_gain=1.6, use_batchNorm=True):
+def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, bs, phase_train, std_mult, filter_gain=2.0, use_batchNorm=True):
 	"""The deep_complex_bias architecture. Current test time score is 94.7% for 7 layers 
 	deep, 5 filters
 	"""
@@ -50,7 +54,8 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 		'b4' : get_bias_dict(nf2, 2, name='b4'),
 		'b5' : get_bias_dict(nf3, 2, name='b5'),
 		'b6' : get_bias_dict(nf3, 2, name='b6'),
-		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7'),
+		'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
+			initializer=tf.constant_initializer(1e-2)),
 		'psi1' : get_phase_dict(1, nf, 2, name='psi1'),
 		'psi2' : get_phase_dict(nf, nf, 2, name='psi2'),
 		'psi3' : get_phase_dict(nf, nf2, 2, name='psi3'),
@@ -72,9 +77,9 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
 		if use_batchNorm:
-			cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train)
+			cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, outerScope=scope)
 	
-	with tf.name_scope('block3') as scope:
+	with tf.name_scope('block2') as scope:
 		# LAYER 3
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
 										 filter_size=5, output_orders=[0,1,2],
@@ -87,7 +92,7 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
 		if use_batchNorm:
-			cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train)
+			cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, outerScope=scope)
 	
 	with tf.name_scope('block3') as scope:
 		# LAYER 5
@@ -102,10 +107,10 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
 		if use_batchNorm:
-			cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train)
+			cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, outerScope=scope)
 
 	# LAYER 7
-	with tf.name_scope('block7') as scope:
+	with tf.name_scope('block4') as scope:
 		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=5,
 								 strides=(1,2,2,1), padding='SAME',
 								 name='7')
@@ -146,7 +151,8 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 		'b8' : get_bias_dict(60, 2, name='b8'),
 		'b9' : get_bias_dict(60, 2, name='b9'),
 		'b10' : get_bias_dict(60, 2, name='b10'),
-		'b11' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b11'),
+		'b11' : tf.get_variable('b11', dtype=tf.float32, shape=[n_classes],
+			initializer=tf.constant_initializer(1e-2)),
 		'psi1' : get_phase_dict(n_channels, 10, 2, name='psi1'),
 		'psi2' : get_phase_dict(10, 10, 2, name='psi2'),
 		'psi3' : get_phase_dict(10, 20, 2, name='psi3'),
@@ -308,8 +314,8 @@ def get_bias_dict(n_filters, order, name='b'):
 	"""Return a dict of biases"""
 	bias_dict = {}
 	for i in xrange(order+1):
-		bias = tf.Variable(tf.constant(1e-2, shape=[n_filters]),
-						   name=name+'_'+str(i))
+		bias = tf.get_variable(name+'_'+str(i), dtype=tf.float32, shape=[n_filters],
+			initializer=tf.constant_initializer(1e-2))
 		bias_dict[i] = bias
 	return bias_dict
 
@@ -319,8 +325,8 @@ def get_phase_dict(n_in, n_out, order, name='b'):
 	for i in xrange(order+1):
 		init = np.random.rand(1,1,n_in,n_out) * 2. *np.pi
 		init = np.float32(init)
-		phase = tf.Variable(tf.constant(init, shape=[1,1,n_in,n_out]),
-						   name=name+'_'+str(i))
+		phase = tf.get_variable(name+'_'+str(i), dtype=tf.float32, shape=[1,1,n_in,n_out],
+			initializer=tf.constant_initializer(init))
 		phase_dict[i] = phase
 	return phase_dict
 
@@ -588,6 +594,10 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 		vacc_total = 0.
 		for i, batch in enumerate(generator):
 			batch_x, batch_y = batch
+			'''print('Test saving...')
+			for bi in xrange(batch_size):
+					fileName = str(batch_y[bi]) + '_' + str(bi) + '.png'
+					sp.misc.imsave(fileName, np.reshape(batch_x[bi, :], (32, 32, 3)))'''
 			#lr_current = lr/np.sqrt(1.+lr_decay*epoch)
 			
 			# Optimize
@@ -607,7 +617,10 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 			val_generator = minibatcher(validx, validy, batch_size, shuffle=False)
 			for i, batch in enumerate(val_generator):
 				batch_x, batch_y = batch
-				
+				'''print('Test saving...')
+				for bi in xrange(batch_size):
+					fileName = str(batch_y[bi]) + '_' + str(bi) + '.png'
+					sp.misc.imsave(fileName, np.reshape(batch_x[bi, :], (32, 32, 3)))'''
 				# Calculate batch loss and accuracy
 				feed_dict = {x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
 				vacc_ = sess.run(accuracy, feed_dict=feed_dict)

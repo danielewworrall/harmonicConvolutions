@@ -8,7 +8,6 @@ import numpy as np
 import scipy.linalg as scilin
 import tensorflow as tf
 
-
 def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
     """Convolve a complex valued input X and complex-valued filter Q. Output is
     computed as (Xr + iXi)*(Qr + iQi) = (Xr*Qr - Xi*Qi) + i(Xr*Qi + Xi*Qr),
@@ -235,7 +234,7 @@ def complex_nonlinearity(X, b, fnc, eps=1e-4):
     return R
 
 def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
-                       name='complexBatchNorm'):
+                       name='complexBatchNorm', outerScope='complexBatchNormOuter'):
     """Batch normalization for the magnitudes of X
     
     X: dict of channels {rotation order: (real, imaginary)}
@@ -245,13 +244,16 @@ def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
     eps: regularization since grad |Z| is infinite at zero (default 1e-4)
     name: (default complexBatchNorm)
     """
-    R = {}
-    for m, r in X.iteritems():
-        magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-        Rb = batch_norm(magnitude, phase_train, decay=decay)
-        c = fnc(Rb)/magnitude
-        R[m] = (r[0]*c, r[1]*c)
-    return R
+    with tf.variable_scope(outerScope) as scope:
+        R = {}
+        idx = 0
+        for m, r in X.iteritems():
+            magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
+            Rb = batch_norm(magnitude, phase_train, decay=decay, name="batchNorm"+str(idx))
+            c = fnc(Rb)/magnitude
+            R[m] = (r[0]*c, r[1]*c)
+            idx += 1
+        return R
 
 def batch_norm(X, phase_train, decay=0.99, name='batchNorm'):
     """Batch normalization module.
@@ -266,10 +268,10 @@ def batch_norm(X, phase_train, decay=0.99, name='batchNorm'):
     n_out = X.get_shape().as_list()[-1]
     
     with tf.variable_scope(name) as scope:
-        beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
-                           name=scope.name+'beta', trainable=True)
-        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
-                            name=scope.name+'gamma', trainable=True)
+        beta = tf.get_variable(scope.name+'beta', dtype=tf.float32, shape=[n_out],
+			initializer=tf.constant_initializer(0.0))
+        gamma = tf.get_variable(scope.name+'gamma', dtype=tf.float32, shape=[n_out],
+			initializer=tf.constant_initializer(1.0))
         batch_mean, batch_var = tf.nn.moments(X, [0,1,2],
                                               name=scope.name+'moments')
         ema = tf.train.ExponentialMovingAverage(decay=decay)
@@ -316,9 +318,10 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W'):
     """
     if W_init == None:
         stddev = std_mult*np.sqrt(2.0 / np.prod(filter_shape[:2]))
-        W_init = tf.random_normal(filter_shape, stddev=stddev)
+        #W_init = tf.random_normal(filter_shape, stddev=stddev)
         #W_init = tf.random_uniform(filter_shape, maxval=np.sqrt(12.)*stddev/4.)
-    return tf.Variable(W_init, name=name)
+    return tf.get_variable(name, dtype=tf.float32, shape=filter_shape,
+			initializer=tf.random_normal_initializer(stddev=stddev))
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####
 def get_complex_filters(R, filter_size):
