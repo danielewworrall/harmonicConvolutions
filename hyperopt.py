@@ -32,7 +32,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 			print("WARNING: Setting ntrials to loaded experiment files: ", learning_rates.shape[0])
 			actual_n_trials = learning_rates.shape[0]
 	#number of filters to try
-	filters = [8, 9]
+	filters = [8]
 	print("Num trials per filter", actual_n_trials)
 	for f in filters:
 		local_y_s = []

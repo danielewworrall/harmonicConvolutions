@@ -171,10 +171,10 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
-		cv2 = complex_nonlinearity(cv2, biases['b2'], tf.nn.relu)
-
 		if use_batchNorm:
 			cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train)
+		else:
+			cv2 = complex_nonlinearity(cv2, biases['b2'], tf.nn.relu)
 	
 	with tf.name_scope('block2') as scope:
 		# LAYER 3
@@ -188,10 +188,10 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv4 = complex_nonlinearity(cv4, biases['b4'], tf.nn.relu)
-
 		if use_batchNorm:
 			cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train)
+		else:
+			cv4 = complex_nonlinearity(cv4, biases['b4'], tf.nn.relu)
 	
 	with tf.name_scope('block3') as scope:
 		# LAYER 5
@@ -211,10 +211,10 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 		cv7 = complex_input_rotated_conv(cv6, weights['w7'], biases['psi7'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv7 = complex_nonlinearity(cv6, biases['b7'], tf.nn.relu)
-
 		if use_batchNorm:
 			cv7 = complex_batch_norm(cv7, tf.nn.relu, phase_train)
+		else:
+			cv7 = complex_nonlinearity(cv7, biases['b7'], tf.nn.relu)
 
 	with tf.name_scope('block4') as scope:
 		# LAYER 8
@@ -222,22 +222,23 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', strides=(1,2,2,1),
 										 name='5')
-		cv8 = complex_nonlinearity(cv5, biases['b8'], tf.nn.relu)
+		cv8 = complex_nonlinearity(cv8, biases['b8'], tf.nn.relu)
 
 		# LAYER 9
 		cv9 = complex_input_rotated_conv(cv8, weights['w9'], biases['psi9'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv9 = complex_nonlinearity(cv6, biases['b9'], tf.nn.relu)
+		cv9 = complex_nonlinearity(cv9, biases['b9'], tf.nn.relu)
 
 		# LAYER 10
 		cv10 = complex_input_rotated_conv(cv9, weights['w10'], biases['psi10'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv10 = complex_nonlinearity(cv6, biases['b10'], tf.nn.relu)
 
 		if use_batchNorm:
 			cv10 = complex_batch_norm(cv10, tf.nn.relu, phase_train)
+		else:
+			cv10 = complex_nonlinearity(cv10, biases['b10'], tf.nn.relu)
 
 	# LAYER 11
 	with tf.name_scope('block5') as scope:
@@ -512,7 +513,7 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 		if isClassification:
 			cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
 		else:
-			cost = tf.reduce_mean(tf.pow(pred - y, 2))
+			cost = tf.reduce_sum(tf.pow(y - pred, 2)) / (2 * 37)
 		
 		if use_batchNorm:
 			momentum=0.9
@@ -563,6 +564,7 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 	config = tf.ConfigProto()
 	config.gpu_options.allow_growth = True
 	config.log_device_placement = False
+	config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
 	sess = tf.Session(config=config)
 	summary = tf.train.SummaryWriter('./logs/current', sess.graph)
 	print('  Summaries constructed')
@@ -586,7 +588,6 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 		vacc_total = 0.
 		for i, batch in enumerate(generator):
 			batch_x, batch_y = batch
-			batch_x = np.reshape(batch_x, (-1, n_input))
 			#lr_current = lr/np.sqrt(1.+lr_decay*epoch)
 			
 			# Optimize
@@ -606,7 +607,6 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 			val_generator = minibatcher(validx, validy, batch_size, shuffle=False)
 			for i, batch in enumerate(val_generator):
 				batch_x, batch_y = batch
-				batch_x = np.reshape(batch_x, (-1, n_input))
 				
 				# Calculate batch loss and accuracy
 				feed_dict = {x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
