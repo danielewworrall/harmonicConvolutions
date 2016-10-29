@@ -237,7 +237,6 @@ def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train,
 
 	# LAYER 7
 	with tf.name_scope('block7') as scope:
-		cv6 = mean_pooling(cv6, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=5,
 								 padding='SAME', name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
@@ -394,9 +393,9 @@ def minibatcher(inputs, targets, batch_size, shuffle=False):
 			excerpt = slice(start_idx, start_idx + batch_size)
 		yield inputs[excerpt], targets[excerpt]
 
-def save_model(saver, saveDir, sess):
+def save_model(saver, saveDir, sess, saveSubDir=''):
 	"""Save a model checkpoint"""
-	save_path = saver.save(sess, saveDir + "checkpoints/model.ckpt")
+	save_path = saver.save(sess, saveDir + "checkpoints/" + saveSubDir + "/model.ckpt")
 	print("Model saved in file: %s" % save_path)
 
 def restore_model(saver, saveDir, sess):
@@ -530,7 +529,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
 	sess = tf.Session(config=config)
 	#sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
-	summary = tf.train.SummaryWriter('./logs/current', sess.graph)
+	summary = tf.train.SummaryWriter('./logs/mean_pooling', sess.graph)
 	print('  Summaries constructed')
 	
 	# Launch the graph
@@ -593,7 +592,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		epoch += 1
 				
 		if (epoch) % 50 == 0:
-			save_model(saver, './', sess)
+			save_model(saver, './', sess, saveSubDir='mean_pooling')
 	
 	print "Testing"
 	
@@ -607,12 +606,11 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		tacc_total += tacc
 	tacc_total = tacc_total/(i+1.)
 	print('Test accuracy: %f' % (tacc_total,))
-	save_model(saver, './', sess)
+	save_model(saver, './', sess, saveSubDir='mean_pooling')
 	sess.close()
 	return tacc_total
 
 
-
 if __name__ == '__main__':
-	run(model='deep_residual', lr=1e-2, batch_size=80, n_epochs=500,
-		std_mult=0.3, n_filters=8, combine_train_val=False)
+	run(model='deep_complex_bias', lr=1e-2, batch_size=80, n_epochs=150,
+		std_mult=0.15, n_filters=8, combine_train_val=False, filter_gain=3.)
