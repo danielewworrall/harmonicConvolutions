@@ -250,46 +250,25 @@ def average_gradients(tower_grads):
         print("GRAD VARS SET")
         # Note that each grad_and_vars looks like the following:
         #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
-        #print(grad_and_vars)
         grads = []
-        #print('looping over grads and vars')
         for g, v in grad_and_vars:
-            if g == None: #where does this come from?
-                print('ERROR: NONE Shape')
-                print(v)
+            if g == None: #if no gradient, don't average'
                 continue
-            print(g)
-            # Add 0 dimension to the gradients to represent the tower.
-            #print('-expanding')
-            #print(g)
             expanded_g = tf.expand_dims(g, 0)
-            #expanded_g = g
-            # Append on a 'tower' dimension which we will average over below.
-            #print('-appending')
             grads.append(expanded_g)
 
-        print('Concat over tower dimension...')
-        print(grads)
+        #concat only if we have any entries
         if len(grads) == 0:
-            print("0 LIST, no averaging...")
             continue
         # Average over the 'tower' dimension.
-        #grad = grads
-        #if len(grads) > 1:
         grad = tf.concat(0, grads)
         grad = tf.reduce_mean(grad, 0)
-        #else:
-        #    grad = grads
-        #print('Return first tower copies')
         # Keep in mind that the Variables are redundant because they are shared
         # across towers. So .. we will just return the first tower's pointer to
         # the Variable.
         v = grad_and_vars[0][1]
         grad_and_var = (grad, v)
-        #print('appending')
         average_grads.append(grad_and_var)
-        #print('for loop end')
-    print('return average')
     return average_grads
 
 def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
@@ -408,10 +387,9 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
 
     # Configure tensorflow session
     config = tf.ConfigProto()
-    config.gpu_options.allow_growth = False
+    config.gpu_options.allow_growth = True
     config.log_device_placement = False
-    #config.session_inter_op_thread_pool = 1 #prevent inter-session threads?
-    config.inter_op_parallelism_threads = 1
+    config.inter_op_parallelism_threads = 1 #we shouldn't need this, but stalls otherwise
     sess = tf.Session(config=config)
     summary = tf.train.SummaryWriter('./logs/current', sess.graph)
     print('Summaries constructed')
