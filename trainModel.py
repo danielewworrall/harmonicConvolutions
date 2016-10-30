@@ -345,7 +345,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                 prediction = modelFunc(xs[linearGPUIdx], keep_prob, n_filters, n_rows, n_cols, n_channels,\
                     size_after_conv, n_classes, batch_size, phase_train, std_mult, use_batchNorm)
                 #define loss
-                if True:
+                if True: #ALRIGHT
                 #if isClassification:
                     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(prediction, ys[linearGPUIdx]))
                 #else:

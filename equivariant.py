@@ -40,28 +40,16 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 	weights = {
 		'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1'),
 		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
-		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf2, std_mult=std_mult, name='W3'),
-		'w4' : get_weights_dict([[6,],[5,],[5,]], nf2, nf2, std_mult=std_mult, name='W4'),
-		'w5' : get_weights_dict([[6,],[5,],[5,]], nf2, nf3, std_mult=std_mult, name='W5'),
-		'w6' : get_weights_dict([[6,],[5,],[5,]], nf3, nf3, std_mult=std_mult, name='W6'),
-		'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, n_classes, std_mult=std_mult, name='W7'),
+		'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, n_classes, std_mult=std_mult, name='w7'),
 	}
 	
 	biases = {
 		'b1' : get_bias_dict(nf, 2, name='b1'),
 		'b2' : get_bias_dict(nf, 2, name='b2'),
-		'b3' : get_bias_dict(nf2, 2, name='b3'),
-		'b4' : get_bias_dict(nf2, 2, name='b4'),
-		'b5' : get_bias_dict(nf3, 2, name='b5'),
-		'b6' : get_bias_dict(nf3, 2, name='b6'),
 		'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
 			initializer=tf.constant_initializer(1e-2)),
 		'psi1' : get_phase_dict(1, nf, 2, name='psi1'),
-		'psi2' : get_phase_dict(nf, nf, 2, name='psi2'),
-		'psi3' : get_phase_dict(nf, nf2, 2, name='psi3'),
-		'psi4' : get_phase_dict(nf2, nf2, 2, name='psi4'),
-		'psi5' : get_phase_dict(nf2, nf3, 2, name='psi5'),
-		'psi6' : get_phase_dict(nf3, nf3, 2, name='psi6')
+		'psi2' : get_phase_dict(nf, nf, 2, name='psi2')
 	}
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
@@ -78,40 +66,10 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 										 padding='SAME', name='2')
 		if use_batchNorm:
 			cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, outerScope=scope, name='batchNorm1')
-	
-	with tf.name_scope('block2') as scope:
-		# LAYER 3
-		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
-										 filter_size=5, output_orders=[0,1,2],
-										 padding='SAME', strides=(1,2,2,1),
-										 name='3')
-		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
-
-		# LAYER 4
-		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
-										 filter_size=5, output_orders=[0,1,2],
-										 padding='SAME', name='4')
-		if use_batchNorm:
-			cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, outerScope=scope, name='batchNorm2')
-	
-	with tf.name_scope('block3') as scope:
-		# LAYER 5
-		cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
-										 filter_size=5, output_orders=[0,1,2],
-										 padding='SAME', strides=(1,2,2,1),
-										 name='5')
-		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
-
-		# LAYER 6
-		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
-										 filter_size=5, output_orders=[0,1,2],
-										 padding='SAME', name='4')
-		if use_batchNorm:
-			cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, outerScope=scope, name='batchNorm3')
 
 	# LAYER 7
 	with tf.name_scope('block4') as scope:
-		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=5,
+		cv7 = complex_input_conv(cv2, weights['w7'], filter_size=5,
 								 strides=(1,2,2,1), padding='SAME',
 								 name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
@@ -129,6 +87,7 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 	weights = {
 		'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, 10, std_mult=std_mult, name='W1'),
 		'w2' : get_weights_dict([[6,],[5,],[5,]], 10, 10, std_mult=std_mult, name='W2'),
+		'''
 		'w3' : get_weights_dict([[6,],[5,],[5,]], 10, 20, std_mult=std_mult, name='W3'),
 		'w4' : get_weights_dict([[6,],[5,],[5,]], 20, 20, std_mult=std_mult, name='W4'),
 		'w5' : get_weights_dict([[6,],[5,],[5,]], 20, 40, std_mult=std_mult, name='W5'),
@@ -137,12 +96,14 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 		'w8' : get_weights_dict([[6,],[5,],[5,]], 40, 60, std_mult=std_mult, name='W8'),
 		'w9' : get_weights_dict([[6,],[5,],[5,]], 60, 60, std_mult=std_mult, name='W9'),
 		'w10' : get_weights_dict([[6,],[5,],[5,]], 60, 60, std_mult=std_mult, name='W10'),
+		'''
 		'w11' : get_weights_dict([[6,],[5,],[5,]], 60, n_classes, std_mult=std_mult, name='W11'),
 	}
 	
 	biases = {
 		'b1' : get_bias_dict(10, 2, name='b1'),
 		'b2' : get_bias_dict(10, 2, name='b2'),
+		'''
 		'b3' : get_bias_dict(20, 2, name='b3'),
 		'b4' : get_bias_dict(20, 2, name='b4'),
 		'b5' : get_bias_dict(40, 2, name='b5'),
@@ -151,10 +112,12 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 		'b8' : get_bias_dict(60, 2, name='b8'),
 		'b9' : get_bias_dict(60, 2, name='b9'),
 		'b10' : get_bias_dict(60, 2, name='b10'),
+		'''
 		'b11' : tf.get_variable('b11', dtype=tf.float32, shape=[n_classes],
 			initializer=tf.constant_initializer(1e-2)),
 		'psi1' : get_phase_dict(n_channels, 10, 2, name='psi1'),
 		'psi2' : get_phase_dict(10, 10, 2, name='psi2'),
+		'''
 		'psi3' : get_phase_dict(10, 20, 2, name='psi3'),
 		'psi4' : get_phase_dict(20, 20, 2, name='psi4'),
 		'psi5' : get_phase_dict(20, 40, 2, name='psi5'),
@@ -162,6 +125,7 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 		'psi7' : get_phase_dict(40, 40, 2, name='psi7'),
 		'psi8' : get_phase_dict(40, 60, 2, name='psi8'),
 		'psi9' : get_phase_dict(60, 60, 2, name='psi9'),
+		'''
 		'psi10' : get_phase_dict(60, 60, 2, name='psi10')
 	}
 	# Reshape input picture
@@ -181,7 +145,7 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 			cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='batchNorm1')
 		else:
 			cv2 = complex_nonlinearity(cv2, biases['b2'], tf.nn.relu)
-	
+	'''
 	with tf.name_scope('block2') as scope:
 		# LAYER 3
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
@@ -240,15 +204,15 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 		cv10 = complex_input_rotated_conv(cv9, weights['w10'], biases['psi10'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-
+		
 		if use_batchNorm:
 			cv10 = complex_batch_norm(cv10, tf.nn.relu, phase_train, name='batchNorm4')
 		else:
 			cv10 = complex_nonlinearity(cv10, biases['b10'], tf.nn.relu)
-
+	'''
 	# LAYER 11
 	with tf.name_scope('block5') as scope:
-		cv11 = complex_input_conv(cv10, weights['w11'], filter_size=5,
+		cv11 = complex_input_conv(cv2, weights['w11'], filter_size=5,
 								 strides=(1,2,2,1), padding='SAME',
 								 name='11')
 		cv11 = tf.reduce_mean(sum_magnitudes(cv11), reduction_indices=[1,2])
