@@ -254,11 +254,12 @@ def average_gradients(tower_grads):
         #print('looping over grads and vars')
         for g, _ in grad_and_vars:
             if g == None: #where does this come from?
+                print('ERROR: NONE Shape')
                 continue
            # print(g)
             # Add 0 dimension to the gradients to represent the tower.
             #print('-expanding')
-            print(g)
+            #print(g)
             expanded_g = tf.expand_dims(g, 0)
             #expanded_g = g
             # Append on a 'tower' dimension which we will average over below.
@@ -268,11 +269,11 @@ def average_gradients(tower_grads):
         #print('Averaging over tower dimension...')
         # Average over the 'tower' dimension.
         #grad = grads
-        if len(grads) > 1:
-            grad = tf.concat(0, grads)
-            grad = tf.reduce_mean(grad, 0)
-        else:
-            grad = grads
+        #if len(grads) > 1:
+        grad = tf.concat(0, grads)
+        grad = tf.reduce_mean(grad, 0)
+        #else:
+        #    grad = grads
         #print('Return first tower copies')
         # Keep in mind that the Variables are redundant because they are shared
         # across towers. So .. we will just return the first tower's pointer to
@@ -337,7 +338,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
         with tf.device('/gpu:%d' % g):
             print('Building Model on GPU: %d' % g)
             if True:
-            #with tf.name_scope('%s_%d' % (model, 0)) as scope:
+            with tf.name_scope('%s_%d' % (model, 0)) as scope:
                 #print(scope)
                 #build model 
                 prediction = modelFunc(xs[linearGPUIdx], keep_prob, n_filters, n_rows, n_cols, n_channels,\
