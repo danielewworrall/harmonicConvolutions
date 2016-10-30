@@ -77,7 +77,7 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
 		if use_batchNorm:
-			cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, outerScope=scope)
+			cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, outerScope=scope, name='batchNorm1')
 	
 	with tf.name_scope('block2') as scope:
 		# LAYER 3
@@ -92,7 +92,7 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
 		if use_batchNorm:
-			cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, outerScope=scope)
+			cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, outerScope=scope, name='batchNorm2')
 	
 	with tf.name_scope('block3') as scope:
 		# LAYER 5
@@ -107,7 +107,7 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
 		if use_batchNorm:
-			cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, outerScope=scope)
+			cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, outerScope=scope, name='batchNorm3')
 
 	# LAYER 7
 	with tf.name_scope('block4') as scope:
@@ -178,7 +178,7 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
 		if use_batchNorm:
-			cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train)
+			cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='batchNorm1')
 		else:
 			cv2 = complex_nonlinearity(cv2, biases['b2'], tf.nn.relu)
 	
@@ -195,7 +195,7 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
 		if use_batchNorm:
-			cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train)
+			cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='batchNorm2')
 		else:
 			cv4 = complex_nonlinearity(cv4, biases['b4'], tf.nn.relu)
 	
@@ -218,7 +218,7 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
 		if use_batchNorm:
-			cv7 = complex_batch_norm(cv7, tf.nn.relu, phase_train)
+			cv7 = complex_batch_norm(cv7, tf.nn.relu, phase_train, name='batchNorm3')
 		else:
 			cv7 = complex_nonlinearity(cv7, biases['b7'], tf.nn.relu)
 
@@ -242,7 +242,7 @@ def fullyConvolutional_Dieleman(x, drop_prob, n_filters, n_rows, n_cols, n_chann
 										 padding='SAME', name='4')
 
 		if use_batchNorm:
-			cv10 = complex_batch_norm(cv10, tf.nn.relu, phase_train)
+			cv10 = complex_batch_norm(cv10, tf.nn.relu, phase_train, name='batchNorm4')
 		else:
 			cv10 = complex_nonlinearity(cv10, biases['b10'], tf.nn.relu)
 

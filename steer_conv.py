@@ -244,16 +244,16 @@ def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
     eps: regularization since grad |Z| is infinite at zero (default 1e-4)
     name: (default complexBatchNorm)
     """
-    with tf.variable_scope(outerScope) as scope:
-        R = {}
-        idx = 0
-        for m, r in X.iteritems():
-            magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-            Rb = batch_norm(magnitude, phase_train, decay=decay, name="batchNorm"+str(idx))
-            c = fnc(Rb)/magnitude
-            R[m] = (r[0]*c, r[1]*c)
-            idx += 1
-        return R
+    #with tf.variable_scope(outerScope) as scope:
+    R = {}
+    idx = 0
+    for m, r in X.iteritems():
+        magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
+        Rb = batch_norm(magnitude, phase_train, decay=decay, name=name+'_'+str(idx))
+        c = fnc(Rb)/magnitude
+        R[m] = (r[0]*c, r[1]*c)
+        idx += 1
+    return R
 
 def batch_norm(X, phase_train, decay=0.99, name='batchNorm'):
     """Batch normalization module.
@@ -267,13 +267,14 @@ def batch_norm(X, phase_train, decay=0.99, name='batchNorm'):
     batch-normalization-in-tensorflow"""
     n_out = X.get_shape().as_list()[-1]
     
-    with tf.variable_scope(name) as scope:
-        beta = tf.get_variable(scope.name+'beta', dtype=tf.float32, shape=[n_out],
+    if True:
+    #with tf.variable_scope(name) as scope:
+        beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=[n_out],
 			initializer=tf.constant_initializer(0.0))
-        gamma = tf.get_variable(scope.name+'gamma', dtype=tf.float32, shape=[n_out],
+        gamma = tf.get_variable(name+'_gamma', dtype=tf.float32, shape=[n_out],
 			initializer=tf.constant_initializer(1.0))
         batch_mean, batch_var = tf.nn.moments(X, [0,1,2],
-                                              name=scope.name+'moments')
+                                              name=name + 'moments')
         ema = tf.train.ExponentialMovingAverage(decay=decay)
 
         def mean_var_with_update():
