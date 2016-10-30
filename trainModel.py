@@ -384,6 +384,8 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     train_op = tf.group(apply_gradient_op)
 
     #avg losses
+    print(lossesPerGPU)
+    print(accuracyPerGPU)
     avg_loss = tf.reduce_mean(tf.concat(0, lossesPerGPU))
     avg_accuracy = tf.reduce_mean(tf.concat(0, accuracyPerGPU))
     
