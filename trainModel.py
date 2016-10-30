@@ -247,6 +247,7 @@ def average_gradients(tower_grads):
         return tower_grads[0]
     average_grads = []
     for grad_and_vars in zip(*tower_grads): #for each grad, vars set
+        print("GRAD VARS SET")
         # Note that each grad_and_vars looks like the following:
         #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
         #print(grad_and_vars)
@@ -267,7 +268,8 @@ def average_gradients(tower_grads):
             #print('-appending')
             grads.append(expanded_g)
 
-        #print('Averaging over tower dimension...')
+        print('Concat over tower dimension...')
+        print(grads)
         # Average over the 'tower' dimension.
         #grad = grads
         #if len(grads) > 1:
