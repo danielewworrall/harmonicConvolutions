@@ -270,6 +270,9 @@ def average_gradients(tower_grads):
 
         print('Concat over tower dimension...')
         print(grads)
+        if len(grads) == 0:
+            print("0 LIST, no averaging...")
+            continue
         # Average over the 'tower' dimension.
         #grad = grads
         #if len(grads) > 1:
