@@ -408,9 +408,10 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
 
     # Configure tensorflow session
     config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
+    config.gpu_options.allow_growth = False
     config.log_device_placement = False
     config.session_inter_op_thread_pool = 1 #prevent inter-session threads?
+    config.inter_op_parallelism_threads = 1
     sess = tf.Session(config=config)
     summary = tf.train.SummaryWriter('./logs/current', sess.graph)
     print('Summaries constructed')
