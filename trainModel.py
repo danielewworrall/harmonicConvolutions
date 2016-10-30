@@ -252,11 +252,12 @@ def average_gradients(tower_grads):
         #print(grad_and_vars)
         grads = []
         #print('looping over grads and vars')
-        for g, _ in grad_and_vars:
+        for g, v in grad_and_vars:
             if g == None: #where does this come from?
                 print('ERROR: NONE Shape')
+                print(v)
                 continue
-           # print(g)
+            print(g)
             # Add 0 dimension to the gradients to represent the tower.
             #print('-expanding')
             #print(g)
