@@ -386,8 +386,8 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     #avg losses
     print(lossesPerGPU)
     print(accuracyPerGPU)
-    avg_loss = tf.reduce_mean(tf.concat(0, lossesPerGPU))
-    avg_accuracy = tf.reduce_mean(tf.concat(0, accuracyPerGPU))
+    avg_loss = tf.reduce_mean(tf.pack(lossesPerGPU))
+    avg_accuracy = tf.reduce_mean(tf.pack(accuracyPerGPU))
     
     #init all variables
     init = tf.initialize_all_variables()
