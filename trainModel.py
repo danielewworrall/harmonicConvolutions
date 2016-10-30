@@ -456,8 +456,8 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                 batches_x = []
                 batches_y = []
 
-        cost_total /=(i+1.)
-        acc_total /=(i+1.)
+        cost_total /=((i/numGPUs)+1.)
+        acc_total /=((i/numGPUs)+1.)
 
         '''
         if not combine_train_val:
