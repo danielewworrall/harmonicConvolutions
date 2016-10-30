@@ -337,7 +337,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     for g in gpuIdxs:
         with tf.device('/gpu:%d' % g):
             print('Building Model on GPU: %d' % g)
-            if True:
+            #if True:
             with tf.name_scope('%s_%d' % (model, 0)) as scope:
                 #print(scope)
                 #build model 
