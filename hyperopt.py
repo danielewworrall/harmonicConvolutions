@@ -6,14 +6,14 @@ import time
 
 import numpy as np
 
-from equivariant import run
+from trainModel import run
 ##### HELPERS #####
 def checkFolder(dir):
 	if not os.path.exists(dir):
 		os.makedirs(dir)
 
 
-def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_device='/gpu:0', model=''):
+def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, deviceIdxs=[0], model=''):
 	y_best = 0.
 	best_params = {}
 	best_num_filters = 0
@@ -63,7 +63,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 				trial_num=i,
 				combine_train_val=False,
 				experimentIdx = experimentIdx,
-				tf_device = tf_device,
+				deviceIdxs = deviceIdxs,
 				use_batchNorm = True)
 			local_y_s.append(y)
 			if y > y_best:
@@ -118,7 +118,7 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, tf_dev
 			trial_num='T-'+str(i),
 			combine_train_val=True,
 			experimentIdx = experimentIdx,
-			tf_device = tf_device,
+			deviceIdxs = deviceIdxs,
 			use_batchNorm = True))		
 		print
 		print('Current y: %f' % (y[i],))
@@ -163,7 +163,8 @@ def log_uniform_rand(min_, max_, size=1):
 #ENTRY POINT:
 if __name__ == '__main__':
 	print("experimentIdx: ", int(sys.argv[1]))
-	print("deviceIdx : ", sys.argv[2])
+	deviceIdxs = [int(x.strip()) for x in sys.argv[2].split(',')]
+	print("deviceIdxs : ", deviceIdxs)
 	print("NetworkModel : ", sys.argv[3])
-	random_independent(n_trials=24, fixedParams=True, experimentIdx=int(sys.argv[1]), tf_device=sys.argv[2], model=sys.argv[3]) #SWITCH MNIST/CIFAR
+	random_independent(n_trials=24, fixedParams=True, experimentIdx=int(sys.argv[1]), deviceIdxs=deviceIdxs, model=sys.argv[3]) #SWITCH MNIST/CIFAR
 	print("ALL FINISHED! :)")
