@@ -410,7 +410,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     config.log_device_placement = False
-    #config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
+    config.session_inter_op_thread_pool = 1 #prevent inter-session threads?
     sess = tf.Session(config=config)
     summary = tf.train.SummaryWriter('./logs/current', sess.graph)
     print('Summaries constructed')
