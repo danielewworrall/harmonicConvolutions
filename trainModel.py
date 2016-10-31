@@ -584,7 +584,7 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 		print('PLANKTON: 2')
 		print('GALAXIES: 3')
 		sys.exit(1)
-	return trainSingleGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm, trial_num, combine_train_val, std_mult, deviceIdxs[0], isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv, trainx, trainy, validx, validy, testx, testy)
+	return trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm, trial_num, combine_train_val, std_mult, deviceIdxs, isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv, trainx, trainy, validx, validy, testx, testy)
 #ENTRY POINT------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
 	run(model='fullyConvolutional', lr=1e-3, batch_size=100, n_epochs=10, std_mult=0.4,
