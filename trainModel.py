@@ -420,14 +420,13 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
         vacc_total = 0.
         # accumulate batches until we have enough
         for i, batch in enumerate(generator): # batch loop
-            #print("Waiting for batch")
             batch_x, batch_y = batch
             #construct the feed_dictionary
             feed_dict = {keep_prob: dropout,
                     learning_rate : lr_current, phase_train : True}
             for g in xrange(numGPUs):
-                feed_dict[xs[g]] = np.copy(batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:])
-                feed_dict[ys[g]] = np.copy(batch_y[g*sizePerGPU:(g+1)*sizePerGPU])
+                feed_dict[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
+                feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
             # Optimize
             __, cost_, acc_ = sess.run([train_op, avg_loss, avg_accuracy], feed_dict=feed_dict)
             cost_total += cost_
@@ -438,25 +437,29 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
         cost_total /=((i)+1.)
         acc_total /=((i)+1.)
 
-        '''
         if not combine_train_val:
-        val_generator = minibatcher(validx, validy, batch_size, shuffle=False)
-        for i, batch in enumerate(val_generator):
-        batch_x, batch_y = batch
-        # Calculate batch loss and accuracy
-        feed_dict = {x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
-        vacc_ = sess.run(accuracy, feed_dict=feed_dict)
-        vacc_total += vacc_
-        vacc_total = vacc_total/(i+1.)
+            val_generator = minibatcher(validx, validy, batch_size, shuffle=False)
+            for i, batch in enumerate(val_generator):
+                batch_x, batch_y = batch
+                #construct the feed_dictionary
+                feed_dict = {keep_prob: dropout,
+                        learning_rate : lr_current, phase_train : True}
+                for g in xrange(numGPUs):
+                    feed_dict[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
+                    feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
+                #run session
+                vacc_ = sess.run(avg_accuracy, feed_dict=feed_dict)
+                vacc_total += vacc_
+                vacc_total = vacc_total/(i+1.)
 
         feed_dict={cost_ph : cost_total, acc_ph : vacc_total, lr_ph : lr_current}
         summaries = sess.run([cost_op, acc_op, lr_op], feed_dict=feed_dict)
         for summ in summaries:
-        summary.add_summary(summ, step)
+            summary.add_summary(summ, step)
 
         if use_batchNorm: #only change learning rate when NOT using Adam
-        best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=10)
-        '''
+            best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=10)
+
         print "[" + str(trial_num),str(epoch) + \
         "], Epoch Loss: " + \
         "{:.6f}".format(cost_total) + ", Train Acc: " + \
