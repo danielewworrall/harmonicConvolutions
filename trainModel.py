@@ -221,12 +221,12 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs
 		best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=10)
 		
 		print "[" + str(trial_num),str(epoch) + \
-			"], Minibatch Loss: " + \
-			"{:.6f}".format(cost_total) + ", Train Acc: " + \
-			"{:.5f}".format(acc_total) + ", Time: " + \
-			"{:.5f}".format(time.time()-start) + ", Counter: " + \
-			"{:2d}".format(counter) + ", Val acc: " + \
-			"{:.5f}".format(vacc_total)
+		"], EPOCH | Time: " + \
+		"{:.3f}".format(time.time()-start) + ", Counter: " + \
+		"{:.5f}".format(counter) + ", Loss: " + \
+		"{:.6f}".format(cost_total) + ", Train Acc: " + \
+		"{:.3f}".format(acc_total) + ", Val acc: " + \
+		"{:.5f}".format(vacc_total)
 		epoch += 1
 		validationAccuracy = vacc_total
 				
