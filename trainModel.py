@@ -265,7 +265,7 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 	print('Using Multi-GPU Model with %d devices.' % numGPUs)
 	#select the correct function to build the model
 	if model == 'deep_complex_bias':
-		modelFunc = fullyConvolutional
+		modelFunc = deep_complex_bias
 	elif model == 'fullyConvolutional_Dieleman':
 		modelFunc = fullyConvolutional_Dieleman
 	else:
