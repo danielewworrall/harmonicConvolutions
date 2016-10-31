@@ -37,21 +37,22 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 	nf2 = int(n_filters*filter_gain)
 	nf3 = int(n_filters*(filter_gain**2.))
 	
-	weights = {
-		'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1'),
-		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
-		'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, n_classes, std_mult=std_mult, name='w7'),
-	}
-	
-	biases = {
-		'b1' : get_bias_dict(nf, 2, name='b1'),
-		'b2' : get_bias_dict(nf, 2, name='b2'),
-		'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
-			initializer=tf.constant_initializer(1e-2)),
-		'psi1' : get_phase_dict(1, nf, 2, name='psi1'),
-		'psi2' : get_phase_dict(nf, nf, 2, name='psi2')
-	}
-	# Reshape input picture
+	with tf.device('/cpu:0'):
+		weights = {
+			'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1'),
+			'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
+			'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, n_classes, std_mult=std_mult, name='w7'),
+		}
+		
+		biases = {
+			'b1' : get_bias_dict(nf, 2, name='b1'),
+			'b2' : get_bias_dict(nf, 2, name='b2'),
+			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
+				initializer=tf.constant_initializer(1e-2)),
+			'psi1' : get_phase_dict(1, nf, 2, name='psi1'),
+			'psi2' : get_phase_dict(nf, nf, 2, name='psi2')
+		}
+		# Reshape input picture
 	x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
 	
 	# Convolutional Layers
@@ -133,22 +134,24 @@ def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
 
 def get_bias_dict(n_filters, order, name='b'):
 	"""Return a dict of biases"""
-	bias_dict = {}
-	for i in xrange(order+1):
-		bias = tf.get_variable(name+'_'+str(i), dtype=tf.float32, shape=[n_filters],
-			initializer=tf.constant_initializer(1e-2))
-		bias_dict[i] = bias
+	with tf.device('/cpu:0'):
+		bias_dict = {}
+		for i in xrange(order+1):
+			bias = tf.get_variable(name+'_'+str(i), dtype=tf.float32, shape=[n_filters],
+				initializer=tf.constant_initializer(1e-2))
+			bias_dict[i] = bias
 	return bias_dict
 
 def get_phase_dict(n_in, n_out, order, name='b'):
 	"""Return a dict of phase offsets"""
-	phase_dict = {}
-	for i in xrange(order+1):
-		init = np.random.rand(1,1,n_in,n_out) * 2. *np.pi
-		init = np.float32(init)
-		phase = tf.get_variable(name+'_'+str(i), dtype=tf.float32, shape=[1,1,n_in,n_out],
-			initializer=tf.constant_initializer(init))
-		phase_dict[i] = phase
+	with tf.device('/cpu:0'):
+		phase_dict = {}
+		for i in xrange(order+1):
+			init = np.random.rand(1,1,n_in,n_out) * 2. *np.pi
+			init = np.float32(init)
+			phase = tf.get_variable(name+'_'+str(i), dtype=tf.float32, shape=[1,1,n_in,n_out],
+				initializer=tf.constant_initializer(init))
+			phase_dict[i] = phase
 	return phase_dict
 
 
