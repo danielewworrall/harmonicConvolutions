@@ -255,7 +255,7 @@ def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
 		idx += 1
 	return R
 
-def batch_norm(X, phase_train, decay=0.99, name='batchNorm'):
+def batch_norm(X, phase_train, decay=0.99, name='batchNorm', device='/cpu:0'):
 	"""Batch normalization module.
 	
 	X: tf tensor
@@ -267,7 +267,7 @@ def batch_norm(X, phase_train, decay=0.99, name='batchNorm'):
 	batch-normalization-in-tensorflow"""
 	n_out = X.get_shape().as_list()[-1]
 	
-	with tf.device('/cpu:0'):
+	with tf.device(device):
 	#if True:
 	#with tf.variable_scope(name) as scope:
 		beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=[n_out],
@@ -310,7 +310,7 @@ def to_constant_float(Q):
 	#Q = tf.Variable(Q, trainable=False)###########################################
 	return tf.to_float(Q)
 
-def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W'):
+def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:0'):
 	"""Initialize weights variable with He method
 	
 	filter_shape: list of filter dimensions
@@ -318,7 +318,7 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W'):
 	std_mult: multiplier for weight standard deviation (default 0.4)
 	name: (default W)
 	"""
-	with tf.device('/cpu:0'):
+	with tf.device(device):
 		if W_init == None:
 			stddev = std_mult*np.sqrt(2.0 / np.prod(filter_shape[:2]))
 			#W_init = tf.random_normal(filter_shape, stddev=stddev)

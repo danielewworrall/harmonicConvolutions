@@ -27,7 +27,8 @@ def checkFolder(dir):
 
 
 ##### MODELS #####
-def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, bs, phase_train, std_mult, filter_gain=2.0):
+def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes,
+ bs, phase_train, std_mult, filter_gain=2.0, device='/cpu:0'):
 	"""The deep_complex_bias architecture. Current test time score is 94.7% for 7 layers 
 	deep, 5 filters
 	"""
@@ -36,31 +37,31 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 	nf = n_filters
 	nf2 = int(n_filters*filter_gain)
 	nf3 = int(n_filters*(filter_gain**2.))
-	with tf.device('/cpu:0'):
+	with tf.device(device):
 		weights = {
-			'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1'),
-			'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
-			'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf2, std_mult=std_mult, name='W3'),
-			'w4' : get_weights_dict([[6,],[5,],[5,]], nf2, nf2, std_mult=std_mult, name='W4'),
-			'w5' : get_weights_dict([[6,],[5,],[5,]], nf2, nf3, std_mult=std_mult, name='W5'),
-			'w6' : get_weights_dict([[6,],[5,],[5,]], nf3, nf3, std_mult=std_mult, name='W6'),
-			'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, n_classes, std_mult=std_mult, name='W7'),
+			'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1', device=device),
+			'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2', device=device),
+			'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf2, std_mult=std_mult, name='W3', device=device),
+			'w4' : get_weights_dict([[6,],[5,],[5,]], nf2, nf2, std_mult=std_mult, name='W4', device=device),
+			'w5' : get_weights_dict([[6,],[5,],[5,]], nf2, nf3, std_mult=std_mult, name='W5', device=device),
+			'w6' : get_weights_dict([[6,],[5,],[5,]], nf3, nf3, std_mult=std_mult, name='W6', device=device),
+			'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, n_classes, std_mult=std_mult, name='W7', device=device),
 		}
 		
 		biases = {
-			'b1' : get_bias_dict(nf, 2, name='b1'),
-			'b2' : get_bias_dict(nf, 2, name='b2'),
-			'b3' : get_bias_dict(nf2, 2, name='b3'),
-			'b4' : get_bias_dict(nf2, 2, name='b4'),
-			'b5' : get_bias_dict(nf3, 2, name='b5'),
-			'b6' : get_bias_dict(nf3, 2, name='b6'),
+			'b1' : get_bias_dict(nf, 2, name='b1', device=device),
+			'b2' : get_bias_dict(nf, 2, name='b2', device=device),
+			'b3' : get_bias_dict(nf2, 2, name='b3', device=device),
+			'b4' : get_bias_dict(nf2, 2, name='b4', device=device),
+			'b5' : get_bias_dict(nf3, 2, name='b5', device=device),
+			'b6' : get_bias_dict(nf3, 2, name='b6', device=device),
 			'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7'),
-			'psi1' : get_phase_dict(1, nf, 2, name='psi1'),
-			'psi2' : get_phase_dict(nf, nf, 2, name='psi2'),
-			'psi3' : get_phase_dict(nf, nf2, 2, name='psi3'),
-			'psi4' : get_phase_dict(nf2, nf2, 2, name='psi4'),
-			'psi5' : get_phase_dict(nf2, nf3, 2, name='psi5'),
-			'psi6' : get_phase_dict(nf3, nf3, 2, name='psi6')
+			'psi1' : get_phase_dict(1, nf, 2, name='psi1', device=device),
+			'psi2' : get_phase_dict(nf, nf, 2, name='psi2', device=device),
+			'psi3' : get_phase_dict(nf, nf2, 2, name='psi3', device=device),
+			'psi4' : get_phase_dict(nf2, nf2, 2, name='psi4', device=device),
+			'psi5' : get_phase_dict(nf2, nf3, 2, name='psi5', device=device),
+			'psi6' : get_phase_dict(nf3, nf3, 2, name='psi6', device=device)
 		}
 		# Reshape input picture
 		x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
@@ -75,7 +76,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
-		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='batchNorm1')
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='batchNorm1', device=device)
 	
 	with tf.name_scope('block2') as scope:
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
@@ -89,7 +90,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='batchNorm2')
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='batchNorm2', device=device)
 	
 	with tf.name_scope('block3') as scope:
 		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
@@ -103,7 +104,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, name='batchNorm3')
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, name='batchNorm3', device=device)
 
 	# LAYER 7
 	with tf.name_scope('block4') as scope:
@@ -127,7 +128,7 @@ def res_block(x, w1, w2, psi1, psi2, b, phase_train, filter_size=5,
 		cv2 = complex_input_rotated_conv(cv1, w2, psi2, filter_size=filter_size,
 										 output_orders=[0,1,2], padding='SAME',
 										 name='2')
-		cv2 = complex_batch_norm(cv2, lambda x:x, phase_train)
+		cv2 = complex_batch_norm(cv2, lambda x:x, phase_train, device=device)
 		
 		# Shortcut across equal rotation order complex feature maps
 		for order, val in x.iteritems():
@@ -156,7 +157,7 @@ def maxpool2d(X, k=2):
 	"""Tied max pool. k is the stride and pool size"""
 	return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1], padding='VALID')
 
-def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
+def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W', device='/cpu:0'):
 	"""Return a dict of weights for use with real_input_equi_conv. comp_shape is
 	a list of the number of elements per Fourier base. For 3x3 weights use
 	[3,2,2,2]. I currently assume order increasing from 0.
@@ -165,12 +166,12 @@ def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W'):
 	for i, cs in enumerate(comp_shape):
 		shape = cs + [in_shape,out_shape]
 		weights_dict[i] = get_weights(shape, std_mult=std_mult,
-									  name=name+'_'+str(i))
+									  name=name+'_'+str(i), device=device)
 	return weights_dict
 
-def get_bias_dict(n_filters, order, name='b'):
+def get_bias_dict(n_filters, order, name='b', device='/cpu:0'):
 	"""Return a dict of biases"""
-	with tf.device('/cpu:0'):
+	with tf.device(device):
 		bias_dict = {}
 		for i in xrange(order+1):
 			bias = tf.get_variable(name+'_'+str(i), dtype=tf.float32, shape=[n_filters],
@@ -178,9 +179,9 @@ def get_bias_dict(n_filters, order, name='b'):
 			bias_dict[i] = bias
 	return bias_dict
 
-def get_phase_dict(n_in, n_out, order, name='b'):
+def get_phase_dict(n_in, n_out, order, name='b',device='/cpu:0'):
 	"""Return a dict of phase offsets"""
-	with tf.device('/cpu:0'):
+	with tf.device(device):
 		phase_dict = {}
 		for i in xrange(order+1):
 			init = np.random.rand(1,1,n_in,n_out) * 2. *np.pi

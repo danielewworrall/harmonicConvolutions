@@ -303,10 +303,9 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 			print('Building Model on GPU: %d' % g)
 			#if True:
 			with tf.name_scope('%s_%d' % (model, 0)) as scope:
-				#print(scope)
 				#build model 
 				prediction = modelFunc(xs[linearGPUIdx], keep_prob, n_filters, n_rows, n_cols, n_channels,\
-					size_after_conv, n_classes, int(batch_size / numGPUs), phase_train, std_mult, filter_gain)
+					size_after_conv, n_classes, int(batch_size / numGPUs), phase_train, std_mult, filter_gain, device='/gpu:'+str(gpuIdxs[0]))
 				#define loss
 				if isClassification:
 					loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(prediction, ys[linearGPUIdx]))
