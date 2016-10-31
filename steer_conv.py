@@ -297,6 +297,19 @@ def sum_magnitudes(X, eps=1e-4):
         R.append(tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps))
     return tf.add_n(R)
 
+def stack_magnitudes(X, eps=1e-4):
+    """Stack the magnitudes of each of the complex feature maps in X.
+    
+    Output U = tf.concat(|X_0|, |X_1|, ...)
+    
+    X: dict of channels {rotation order: (real, imaginary)}
+    eps: regularization since grad |Z| is infinite at zero (default 1e-4)
+    """
+    R = []
+    for m, r in X.iteritems():
+        R.append(tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps))
+    return tf.concat(3, R, name='concat')
+
 ##### CREATING VARIABLES #####
 def to_constant_float(Q):
     """Converts a numpy tensor to a tf constant float
