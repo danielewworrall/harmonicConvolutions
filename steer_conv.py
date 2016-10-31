@@ -268,9 +268,9 @@ def batch_norm(X, phase_train, decay=0.99, name='batchNorm', device='/cpu:0'):
 	n_out = X.get_shape().as_list()[-1]
 	
 	with tf.device(device):
-		beta = tf.	(name+'_beta', dtype=tf.float32, shape=[n_out],
+		beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=[n_out],
 			initializer=tf.constant_initializer(0.0))
-		gamma = tf.	(name+'_gamma', dtype=tf.float32, shape=[n_out],
+		gamma = tf.get_variable(name+'_gamma', dtype=tf.float32, shape=[n_out],
 			initializer=tf.constant_initializer(1.0))
 	batch_mean, batch_var = tf.nn.moments(X, [0,1,2],
 										  name=name + 'moments')
