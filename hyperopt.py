@@ -8,7 +8,7 @@ import time
 import cPickle as pkl
 import numpy as np
 
-from train_cifar import run
+from cifar/train_cifar import run
 
 def random_independent(n_trials=3):
 	y_best = 0.
