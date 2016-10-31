@@ -481,21 +481,23 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
         return validationAccuracy
     else:
         #run over test set
-        '''
-        # Test accuracy
         tacc_total = 0.
         test_generator = minibatcher(testx, testy, batch_size, shuffle=False)
-        for i, batch in enumerate(test_generator):
-        batch_x, batch_y = batch
-        feed_dict={x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
-        tacc = sess.run(accuracy, feed_dict=feed_dict)
-        tacc_total += tacc
-        tacc_total = tacc_total/(i+1.)
-        print('Test accuracy: %f' % (tacc_total,))
-        save_model(saver, './', sess)
-        sess.close()
-        return tacc_total
-        '''
+            for i, batch in enumerate(test_generator):
+                batch_x, batch_y = batch
+                #construct the feed_dictionary
+                feed_dict = {keep_prob: dropout,
+                        learning_rate : lr_current, phase_train : True}
+                for g in xrange(numGPUs):
+                    feed_dict[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
+                    feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
+                #run session
+                vacc_ = sess.run(avg_accuracy, feed_dict=feed_dict)
+                vacc_total += vacc_
+            vacc_total = vacc_total/(i+1.)
+            print('Test accuracy: %f' % (tacc_total,))
+            save_model(saver, './', sess)
+            sess.close()
 
 ##### MAIN SCRIPT #####
 def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batchNorm=True,
