@@ -365,9 +365,10 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     #avg losses
     print(lossesPerGPU)
     print(accuracyPerGPU)
-    avg_loss = tf.reduce_mean(tf.pack(lossesPerGPU))
-    avg_accuracy = tf.reduce_mean(tf.pack(accuracyPerGPU))
-    
+    #avg_loss = tf.reduce_mean(tf.pack(lossesPerGPU))
+    #avg_accuracy = tf.reduce_mean(tf.pack(accuracyPerGPU))
+    avg_loss = loss
+    avg_accuracy = accuracy
     #init all variables
     init = tf.initialize_all_variables()
     print('Variables initialized')
@@ -428,6 +429,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                     feed_dict[ys[g]] = batches_y[g]
                 # Optimize
                 __, cost_, acc_ = sess.run([train_op, avg_loss, avg_accuracy], feed_dict=feed_dict)
+                print("Session run...")
                 cost_total += cost_
                 acc_total += acc_
 
