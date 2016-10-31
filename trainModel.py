@@ -62,7 +62,7 @@ def average_gradients(tower_grads):
 	return average_grads
 
 ###Training FUNCTIONS------------------------------------------------------------------
-def trainSingleGPU(model, lr, batch_size, n_epochs, n_filters,
+def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters,
 		trial_num, combine_train_val, std_mult,
 		gpuIdx,
 		isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
@@ -121,10 +121,7 @@ def trainSingleGPU(model, lr, batch_size, n_epochs, n_filters,
 		else:
 			cost = tf.reduce_sum(tf.pow(y - pred, 2)) / (2 * 37)
 
-		momentum=0.9
-		nesterov=True
-		psi_preconditioner = 5e0
-		opt = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum, use_nesterov=nesterov)
+		opt = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum, use_nesterov=True)
 
 
 		# Evaluate model
@@ -257,7 +254,7 @@ def trainSingleGPU(model, lr, batch_size, n_epochs, n_filters,
 		sess.close()
 		return tacc_total
 
-def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters,
+def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters,
 		trial_num, combine_train_val, std_mult,
 		gpuIdxs,
 		isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
@@ -282,12 +279,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters,
 	phase_train = tf.placeholder(tf.bool)
 
 	#create optimiser
-	if use_batchNorm:
-		momentum=0.9
-		nesterov=True
-		opt = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum, use_nesterov=nesterov)
-	else:
-		opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
+	opt = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum, use_nesterov=True)
 	#create some placeholders
 	#one of x for each GPU
 	xs = []
@@ -479,11 +471,28 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters,
 		sess.close()
 
 ##### MAIN SCRIPT #####
-def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batchNorm=True,
-		trial_num='N', combine_train_val=False, std_mult=0.4, deviceIdxs=[0], experimentIdx = 0):
+def run(opt):
+	# Parameters
+	nesterov=True
+	model = opt['model']
+	lr = opt['lr']
+	batch_size = opt['batch_size']
+	n_epochs = opt['n_epochs']
+	n_filters = opt['n_filters']
+	trial_num = opt['trial_num']
+	combine_train_val = opt['combine_train_val']
+	std_mult = opt['std_mult']
+	filter_gain = opt['filter_gain']
+	momentum = opt['momentum']
+	psi_preconditioner = opt['psi_preconditioner']
+	delay = opt['delay']
+	model_dir = 'hyperopt_mean_pooling/trial'+str(trial_num)
+	deviceIdxs = opt['deviceIdxs']
+	datasetIdx = opt['datasetIdx']
+	#0. RESET DEFAULT GRAPH
 	tf.reset_default_graph()
 	#1. LOAD DATA---------------------------------------------------------------------
-	if experimentIdx == 0: #MNIST
+	if datasetIdx == 0: #MNIST
 		print("MNIST")
 		# Load dataset
 		train = np.load('/home/sgarbin/data/mnist_rotation_new/rotated_train.npz')
@@ -500,7 +509,7 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 		n_input = n_rows * n_cols * n_channels
 		n_classes = 10 				# MNIST total classes (0-9 digits)
 		size_after_conv = 7 * 7
-	elif experimentIdx == 1: #CIFAR10
+	elif datasetIdx == 1: #CIFAR10
 		print("CIFAR10")
 		# Load dataset
 		trainx = np.load('/home/sgarbin/data/cifar_numpy/trainX.npy')
@@ -520,7 +529,7 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 		n_classes = 10 
 		size_after_conv = 8 * 8
 
-	elif experimentIdx == 2: #Plankton
+	elif datasetIdx == 2: #Plankton
 		print("Plankton")
 		# Load dataset
 		trainx = np.load('/home/sgarbin/data/plankton_numpy/trainX.npy')
@@ -539,7 +548,7 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 		n_input = n_rows * n_cols * n_channels
 		n_classes = 121
 		size_after_conv = -1
-	elif experimentIdx == 3: #Galaxies
+	elif datasetIdx == 3: #Galaxies
 		print("Galaxies")
 		# Load dataset
 		trainx = np.load('/home/sgarbin/data/galaxies_numpy/trainX.npy')
@@ -567,15 +576,29 @@ def run(model='', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30, use_batch
 		sys.exit(1)
 	if len(deviceIdxs) > 1:
 		print("Using Multi-GPU Training Loop")
-		return trainMultiGPU(model, lr, batch_size, n_epochs, n_filters,
+		return trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters,
 		trial_num, combine_train_val, std_mult, deviceIdxs, isClassification,
 		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy)
 	else:
 		print("Using Single-GPU Training Loop")
-		return trainSingleGPU(model, lr, batch_size, n_epochs, n_filters,
+		return trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters,
 		trial_num, combine_train_val, std_mult, deviceIdxs[0], isClassification,
 		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy)
 #ENTRY POINT------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-	run(model='fullyConvolutional', lr=1e-3, batch_size=100, n_epochs=10, std_mult=0.4,
-		n_filters=10, combine_train_val=False)
+	opt = {}
+	opt['model'] = 'deep_complex_bias'
+	opt['lr'] = 3e-2
+	opt['batch_size'] = 53
+	opt['n_epochs'] = 120
+	opt['n_filters'] = 8
+	opt['trial_num'] = 'M'
+	opt['combine_train_val'] = False
+	opt['std_mult'] = 0.3
+	opt['filter_gain'] = 3.7
+	opt['momentum'] = 0.93
+	opt['psi_preconditioner'] = 3.4
+	opt['delay'] = 13
+	opt['datasetIdx'] = 0
+	opt['deviceIdxs'] = [0]
+	run(opt)

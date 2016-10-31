@@ -12,126 +12,78 @@ def checkFolder(dir):
 	if not os.path.exists(dir):
 		os.makedirs(dir)
 
-
-def random_independent(n_trials=3, experimentIdx = 0, deviceIdxs=[0], model=''):
+def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_complex_bias'):
 	y_best = 0.
 	best_params = {}
-	best_num_filters = 0
-	actual_n_trials = n_trials
-	y_s = [] #all results
-	#number of filters to try
-	filters = [8]
-	print("Num trials per filter", actual_n_trials)
-	for f in filters:
-		local_y_s = []
-		print("Processsing for num Filters:", f)
-		for i in xrange(actual_n_trials):
-			n_epochs = 500
+	opt = {}
+	datasetName = ''
+	if datasetIdx == 0:
+		datasetName = 'MNIST'
+	elif datasetIdx == 1:
+		datasetName = 'CIFAR10'
+	elif datasetIdx == 2:
+		datasetName = 'PLANKTON'
+	elif datasetIdx == 3:
+		datasetName = 'GALAXIES'
+	else:
+		datasetName = 'UNKOWN_DATASET'
+	for i in xrange(n_trials):
+		opt['y'] = -1
+		while opt['y'] < 0:
+			# Remove files corresponding to trial
+			trial_num = i + 10
+			log_path = './logs/hyperopt_mean_pooling/trial'+str(trial_num)
+			log_path = log_path + '_' + datasetName
+			if os.path.exists(log_path):
+				shutil.rmtree(log_path)
+			checkpoint_path = './checkpoints/hyperopt_mean_pooling/trial'+str(trial_num)
+			checkpoint_path = checkpoint_path + '_' + datasetName
+			if os.path.exists(checkpoint_path):
+				shutil.rmtree(checkpoint_path)
 
-			#switch here as well
-			lr = log_uniform_rand(1e-2, 1e-4)
-			batch_size = int(log_uniform_rand(64,256))
-			std_mult = uniform_rand(0.05, 1.0)
-			if batch_size % len(deviceIdxs) != 0:
-				while batch_size % len(deviceIdxs) != 0:
-					batch_size += 1
-				print("WARNING: Setting batch size to be divisible by number of GPUs.")
+			opt['model'] = model
+			opt['lr'] = log_uniform_rand(5e-3, 1e-1)
+			opt['batch_size'] = int(log_uniform_rand(40,120))
+			opt['n_epochs'] = 100
+			opt['n_filters'] = int(uniform_rand(2,12))
+			opt['trial_num'] = trial_num
+			opt['combine_train_val'] = False
+			opt['std_mult'] = uniform_rand(0.05, 0.5)
+			opt['filter_gain'] = uniform_rand(1., 5.)
+			opt['momentum'] = uniform_rand(0.85, 0.99)
+			opt['psi_preconditioner'] = log_uniform_rand(1e-1, 1e1)
+			opt['delay'] = int(uniform_rand(7,15))
+			opt['datasetIdx'] = datasetIdx
+			opt['deviceIdxs'] = deviceIdxs
 			print
-			print('Learning rate: %f' % (lr,))
-			print('Batch size: %f' % (batch_size,))
-			print('Stddev multiplier: %f' % (std_mult,))
+			for key, val in opt.iteritems():
+				print(key + ': ' + str(val))
 			print
-			y = run(model=model,
-				lr=lr,
-				batch_size=batch_size,
-				std_mult=std_mult,
-				n_epochs=n_epochs,
-				n_filters=f,
-				trial_num=i,
-				combine_train_val=False,
-				experimentIdx = experimentIdx,
-				deviceIdxs = deviceIdxs,
-				use_batchNorm = True)
-			local_y_s.append(y)
-			if y > y_best:
-				y_best = y
-				best_params['lr'] = lr
-				best_params['batch_size'] = batch_size
-				best_params['std_mult'] = std_mult
-				best_num_filters = f
-		#remember all ys 
-		y_s.append(local_y_s)
-		y_s_a = np.asarray(y_s)
-		#save temp
-		if experimentIdx == 0:
-				fileName = "results/MNIST/bestYResultsMNIST_temp_" + str(f) + ".npy"
-		elif experimentIdx == 1:
-				fileName = "results/CIFAR/bestYResultsCIFAR_temp_" + str(f) + ".npy"
-		elif experimentIdx == 2:
-				fileName = "results/PLANKTON/bestYResultsPLANKTON_temp_" + str(f) + ".npy"
-		elif experimentIdx == 3:
-				fileName = "results/GALAXIES/bestYResultsGALAXIES_temp_" + str(f) + ".npy"
-		checkFolder(os.path.dirname(fileName))
-		np.save(fileName, y_s_a)
+			opt['y'] = run(opt)
+		
+		save_name = './logs/hyperopt_mean_pooling/numpy/trial'+str(trial_num)+'.pkl'
+		with open(save_name, 'w') as fp:
+			pkl.dump(opt, fp, protocol=pkl.HIGHEST_PROTOCOL)
+		if opt['y'] > y_best:
+			y_best = opt['y']
+			best_params = opt
 		
 		print
 		print
 		print('Best y so far')
 		print y_best
 		print('Best params so far')	
-		print best_params
+		for key, val in best_params.iteritems():
+			print('Best ' + key + ': ' + str(val))
 		print
 		print
-
+		print
+	
 	print('Best y overall')
 	print y_best
 	print('Best params overall')	
-	print best_params
-	#save y_s
-	if experimentIdx == 0:
-		fileName = "results/yResultsMNIST.npy" 
-	elif experimentIdx == 1:
-		fileName = "results/yResultsCIFAR.npy" 
-	np.save(fileName, np.asarray(y_s))
-
-	y = []
-	for i in xrange(5):
-		y.append(run(model=model,
-			lr=best_params['lr'],
-			batch_size=best_params['batch_size'],
-			std_mult=best_params['std_mult'],
-			n_epochs=n_epochs,
-			n_filters=best_num_filters,
-			trial_num='T-'+str(i),
-			combine_train_val=True,
-			experimentIdx = experimentIdx,
-			deviceIdxs = deviceIdxs,
-			use_batchNorm = True))		
-		print
-		print('Current y: %f' % (y[i],))
-		print
-
-	print('Best num filters:', best_num_filters)
-	print('Best y overall:')
-	print y_best
-	print('Best params overall:')	
-	print best_params
-	# Compute statistics
-	print y
-	y = np.asarray(y)
-	mean = np.mean(y)
-	print('Mean: %f' % (mean,))
-	print('Std: %f' % (np.std(y),))
-	#save y
-	if experimentIdx == 0:
-			fileName = "results/MNIST/bestYResultsMNIST.npy"
-	elif experimentIdx == 1:
-			fileName = "results/CIFAR/bestYResultsCIFAR.npy"
-	elif experimentIdx == 2:
-			fileName = "results/PLANKTON/bestYResultsPLANKTON.npy"
-	elif experimentIdx == 3:
-			fileName = "results/GALAXIES/bestYResultsGALAXIES_temp.npy"
-	np.save(fileName, y)
+	for key, val in best_params.iteritems():
+		print('Best ' + key + ': ' + str(val))
 
 def uniform_rand(min_, max_):
 	gap = max_ - min_
@@ -149,9 +101,9 @@ def log_uniform_rand(min_, max_, size=1):
 
 #ENTRY POINT:
 if __name__ == '__main__':
-	print("experimentIdx: ", int(sys.argv[1]))
+	print("datasetIdx: ", int(sys.argv[1]))
 	deviceIdxs = [int(x.strip()) for x in sys.argv[2].split(',')]
 	print("deviceIdxs : ", deviceIdxs)
 	print("NetworkModel : ", sys.argv[3])
-	random_independent(n_trials=24, experimentIdx=int(sys.argv[1]), deviceIdxs=deviceIdxs, model=sys.argv[3]) #SWITCH MNIST/CIFAR
+	random_independent(n_trials=24, datasetIdx=int(sys.argv[1]), deviceIdxs=deviceIdxs, model=sys.argv[3]) #SWITCH MNIST/CIFAR
 	print("ALL FINISHED! :)")
