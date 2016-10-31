@@ -586,8 +586,13 @@ def run(opt):
 		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy)
 #ENTRY POINT------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
+	print("datasetIdx: ", int(sys.argv[1]))
+	deviceIdxs = [int(x.strip()) for x in sys.argv[2].split(',')]
+	print("deviceIdxs : ", deviceIdxs)
+	print("NetworkModel : ", sys.argv[3])
+	#create options
 	opt = {}
-	opt['model'] = 'deep_complex_bias'
+	opt['model'] = sys.argv[3]
 	opt['lr'] = 3e-2
 	opt['batch_size'] = 53
 	opt['n_epochs'] = 120
@@ -599,6 +604,8 @@ if __name__ == '__main__':
 	opt['momentum'] = 0.93
 	opt['psi_preconditioner'] = 3.4
 	opt['delay'] = 13
-	opt['datasetIdx'] = 0
-	opt['deviceIdxs'] = [0]
+	opt['datasetIdx'] = int(sys.argv[1])
+	opt['deviceIdxs'] = deviceIdxs
+	#run
 	run(opt)
+	print("ALL FINISHED! :)")
