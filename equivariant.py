@@ -621,15 +621,17 @@ def run(opt):
 
 
 if __name__ == '__main__':
+	opt = {}
 	opt['model'] = 'deep_complex_bias'
-	opt['lr'] = 1e-2
-	opt['batch_size'] = 80
-	opt['n_epochs'] = 150
+	opt['lr'] = 3e-2
+	opt['batch_size'] = 53
+	opt['n_epochs'] = 120
 	opt['n_filters'] = 8
 	opt['trial_num'] = 'N'
 	opt['combine_train_val'] = False
-	opt['std_mult'] = 0.15
-	opt['filter_gain'] = 3.
-	opt['momentum'] = 0.9
-	opt['psi_preconditioner'] = 5.
+	opt['std_mult'] = 0.3
+	opt['filter_gain'] = 3.7
+	opt['momentum'] = 0.93
+	opt['psi_preconditioner'] = 3.4
+	opt['delay'] = 13
 	run(opt)
