@@ -417,7 +417,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
         vacc_total = 0.
         # accumulate batches until we have enough
         for i, batch in enumerate(generator): # batch loop
-            print("Waiting for batch")
+            #print("Waiting for batch")
             batch_x, batch_y = batch
             #construct the feed_dictionary
             feed_dict = {keep_prob: dropout,
