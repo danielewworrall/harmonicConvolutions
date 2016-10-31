@@ -52,7 +52,6 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, device
 			if batch_size % len(deviceIdxs) != 0:
 				while batch_size % len(deviceIdxs) != 0:
 					batch_size += 1
-				batch_size = batch_size + 1
 				print("WARNING: Setting batch size to be divisible by number of GPUs.")
 			print
 			print('Learning rate: %f' % (lr,))

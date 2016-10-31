@@ -329,7 +329,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                 #print(scope)
                 #build model 
                 prediction = modelFunc(xs[linearGPUIdx], keep_prob, n_filters, n_rows, n_cols, n_channels,\
-                    size_after_conv, n_classes, batch_size, phase_train, std_mult, use_batchNorm)
+                    size_after_conv, n_classes, int(batch_size / numGPUs), phase_train, std_mult, use_batchNorm)
                 #define loss
                 if True: #ALRIGHT
                 #if isClassification:
