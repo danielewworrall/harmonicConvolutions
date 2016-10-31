@@ -251,7 +251,6 @@ def average_gradients(tower_grads):
         print('Processing %d sets of gradients.' % len(tower_grads))
     average_grads = []
     for grad_and_vars in zip(*tower_grads): #for each grad, vars set
-        print("GRAD VARS SET")
         # Note that each grad_and_vars looks like the following:
         #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
         grads = []
@@ -376,7 +375,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     avg_accuracy = accuracy
     #init all variables
     init = tf.initialize_all_variables()
-    print('Variables initialized')
+    print('Variables initialized...')
 
     #done for final refinement after ideal params selected in hyperopt
     if combine_train_val:
@@ -398,7 +397,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     config.inter_op_parallelism_threads = 2 #we shouldn't need this, but stalls otherwise
     sess = tf.Session(config=config)
     summary = tf.train.SummaryWriter('./logs/current', sess.graph)
-    print('Summaries constructed')
+    print('Summaries constructed...')
 
     # GRAPH EXECUTION---------------------------------------------------
     sess.run(init)
@@ -411,7 +410,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     best = 0.
     validationAccuracy = -1
     sizePerGPU = int(batch_size / numGPUs)
-    print('Starting trainig loop')
+    print('Starting trainig loop...')
     # Keep training until reach max iterations
     while epoch < n_epochs: # epoch loop
         generator = minibatcher(trainx, trainy, batch_size, shuffle=True)
@@ -461,11 +460,11 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
             best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=10)
 
         print "[" + str(trial_num),str(epoch) + \
-        "], Epoch Loss: " + \
+        "], EPOCH »» Time: " + \
+        "{:.3f}".format(time.time()-start) + ", Counter: " + \
+        "{:.5f}".format(counter) + ", Loss: " + \
         "{:.6f}".format(cost_total) + ", Train Acc: " + \
-        "{:.5f}".format(acc_total) + ", Time: " + \
-        "{:.5f}".format(time.time()-start) + ", Counter: " + \
-        "{:2d}".format(counter) + ", Val acc: " + \
+        "{:.3f}".format(acc_total) + ", Val acc: " + \
         "{:.5f}".format(vacc_total)
         epoch += 1
         validationAccuracy = vacc_total
