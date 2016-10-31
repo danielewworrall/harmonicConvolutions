@@ -349,7 +349,6 @@ def get_complex_rotated_filters(R, psi, filter_size):
     k = filter_size
     for m, r in R.iteritems():
         rsh = r.get_shape().as_list()
-        print rsh
         # Get the basis matrices
         cmasks, smasks = get_complex_basis_matrices(filter_size, order=m)
         # Reshape and project taps on to basis
@@ -359,7 +358,6 @@ def get_complex_rotated_filters(R, psi, filter_size):
         r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
         ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
         usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
-        print ucos.get_shape(), psi[m].get_shape()
         # Rotate basis matrices
         cosine = tf.cos(psi[m])*ucos + tf.sin(psi[m])*usin
         sine = -tf.sin(psi[m])*ucos + tf.cos(psi[m])*usin

@@ -156,8 +156,8 @@ def conv_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train, std_m
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
 
-def deep_complex_bias(x, drop_prob, n_filters, n_classes, bs, phase_train,
-					  std_mult, filter_gain):
+def deep_complex_bias(x, n_filters, n_classes, bs, phase_train, std_mult,
+					  filter_gain):
 	"""The deep_complex_bias architecture. Current test time score is 94.7% for 7 layers 
 	deep, 5 filters
 	"""
@@ -395,7 +395,11 @@ def minibatcher(inputs, targets, batch_size, shuffle=False):
 
 def save_model(saver, saveDir, sess, saveSubDir=''):
 	"""Save a model checkpoint"""
-	save_path = saver.save(sess, saveDir + "checkpoints/" + saveSubDir + "/model.ckpt")
+	dir_ = saveDir + "checkpoints/" + saveSubDir
+	if not os.path.exists(dir_):
+		os.mkdir(dir_)
+		print("Created: %s" % (dir_))
+	save_path = saver.save(sess, dir_ + "/model.ckpt")
 	print("Model saved in file: %s" % save_path)
 
 def restore_model(saver, saveDir, sess):
@@ -428,9 +432,7 @@ def get_learning_rate(current, best, counter, learning_rate, delay=15):
     return (best, counter, learning_rate)
 
 ##### MAIN SCRIPT #####
-def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
-		bn_config=[False, False], trial_num='N', combine_train_val=False,
-		std_mult=0.4, lr_decay=0.5, filter_gain=2.):
+def run(opt):
 	tf.reset_default_graph()
 	# Load dataset
 	mnist_train = np.load('./data/mnist_rotation_new/rotated_train.npz')
@@ -441,27 +443,31 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	mnist_testx, mnist_testy = mnist_test['x'], mnist_test['y']
 
 	# Parameters
-	lr = lr
-	batch_size = batch_size
-	n_epochs = n_epochs
-	save_step = 100		# Not used yet
-	model = model
-	momentum=0.9
 	nesterov=True
-	psi_preconditioner = 5e0
+	model = opt['model']
+	lr = opt['lr']
+	batch_size = opt['batch_size']
+	n_epochs = opt['n_epochs']
+	n_filters = opt['n_filters']
+	trial_num = opt['trial_num']
+	combine_train_val = opt['combine_train_val']
+	std_mult = opt['std_mult']
+	filter_gain = opt['filter_gain']
+	momentum = opt['momentum']
+	psi_preconditioner = opt['psi_preconditioner']
+	delay = opt['delay']
+	model_dir = 'hyperopt_mean_pooling/trial'+str(trial_num)
 	
 	# Network Parameters
 	n_input = 784 				# MNIST data input (img shape: 28*28)
 	n_classes = 10 				# MNIST total classes (0-9 digits)
-	dropout = 0.75 				# Dropout, probability to keep units
-	n_filters = n_filters
 	dataset_size = 10000
 	
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [batch_size, n_input])
 	y = tf.placeholder(tf.int64, [batch_size])
 	learning_rate = tf.placeholder(tf.float32)
-	keep_prob = tf.placeholder(tf.float32)
+	#keep_prob = tf.placeholder(tf.float32)
 	phase_train = tf.placeholder(tf.bool)
 	
 	# Construct model
@@ -472,7 +478,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		pred = conv_complex_bias(x, keep_prob, n_filters, n_classes, batch_size,
 								 phase_train, std_mult)
 	elif model == 'deep_complex_bias':	
-		pred = deep_complex_bias(x, keep_prob, n_filters, n_classes, batch_size,
+		pred = deep_complex_bias(x, n_filters, n_classes, batch_size,
 								 phase_train, std_mult, filter_gain)
 	elif model == 'deep_residual':	
 		pred = deep_residual(x, n_filters, n_classes, batch_size, phase_train,
@@ -496,11 +502,6 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		modified_gvs.append((g, v))
 	optimizer = opt.apply_gradients(modified_gvs)
 	print('  Optimizer built')
-	
-	grad_summaries_op = []
-	for g, v in grads_and_vars:
-		if 'psi' in v.name:
-			grad_summaries_op.append(tf.histogram_summary(v.name, g))
 	
 	# Evaluate model
 	correct_pred = tf.equal(tf.argmax(pred, 1), y)
@@ -529,7 +530,11 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
 	sess = tf.Session(config=config)
 	#sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
-	summary = tf.train.SummaryWriter('./logs/mean_pooling', sess.graph)
+	summary_dir = './logs/hyperopt_mean_pooling/trial'+str(trial_num)
+	if not os.path.exists(summary_dir):
+		os.mkdir(summary_dir)
+		print("Created: %s" % (summary_dir))
+	summary = tf.train.SummaryWriter(summary_dir, sess.graph)
 	print('  Summaries constructed')
 	
 	# Launch the graph
@@ -553,14 +558,18 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 			#lr_current = lr/np.sqrt(1.+lr_decay*epoch)
 			
 			# Optimize
-			feed_dict = {x: batch_x, y: batch_y, keep_prob: dropout,
-						 learning_rate : lr_current, phase_train : True}
-			__, cost_, acc_, gso = sess.run([optimizer, cost, accuracy,
-										grad_summaries_op], feed_dict=feed_dict)
+			feed_dict = {x: batch_x, y: batch_y, learning_rate : lr_current,
+						 phase_train : True}
+			__, cost_, acc_ = sess.run([optimizer, cost, accuracy],
+				feed_dict=feed_dict)
+			if np.isnan(cost_):
+				print
+				print('Oops: Training went unstable')
+				print
+				return -1
+				
 			cost_total += cost_
 			acc_total += acc_
-			for summ in gso:
-				summary.add_summary(summ, step)
 			step += 1
 		cost_total /=(i+1.)
 		acc_total /=(i+1.)
@@ -570,7 +579,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 			for i, batch in enumerate(val_generator):
 				batch_x, batch_y = batch
 				# Calculate batch loss and accuracy
-				feed_dict = {x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
+				feed_dict = {x: batch_x, y: batch_y, phase_train : False}
 				vacc_ = sess.run(accuracy, feed_dict=feed_dict)
 				vacc_total += vacc_
 			vacc_total = vacc_total/(i+1.)
@@ -580,7 +589,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		for summ in summaries:
 			summary.add_summary(summ, step)
 
-		best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=10)
+		best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=delay)
 		
 		print "[" + str(trial_num),str(epoch) + \
 			"], Minibatch Loss: " + \
@@ -592,7 +601,7 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 		epoch += 1
 				
 		if (epoch) % 50 == 0:
-			save_model(saver, './', sess, saveSubDir='mean_pooling')
+			save_model(saver, './', sess, saveSubDir=model_dir)
 	
 	print "Testing"
 	
@@ -601,16 +610,26 @@ def run(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500, n_filters=30,
 	test_generator = minibatcher(mnist_testx, mnist_testy, batch_size, shuffle=False)
 	for i, batch in enumerate(test_generator):
 		batch_x, batch_y = batch
-		feed_dict={x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
+		feed_dict={x: batch_x, y: batch_y, phase_train : False}
 		tacc = sess.run(accuracy, feed_dict=feed_dict)
 		tacc_total += tacc
 	tacc_total = tacc_total/(i+1.)
 	print('Test accuracy: %f' % (tacc_total,))
-	save_model(saver, './', sess, saveSubDir='mean_pooling')
+	save_model(saver, './', sess, saveSubDir=model_dir)
 	sess.close()
 	return tacc_total
 
 
 if __name__ == '__main__':
-	run(model='deep_complex_bias', lr=1e-2, batch_size=80, n_epochs=150,
-		std_mult=0.15, n_filters=8, combine_train_val=False, filter_gain=3.)
+	opt['model'] = 'deep_complex_bias'
+	opt['lr'] = 1e-2
+	opt['batch_size'] = 80
+	opt['n_epochs'] = 150
+	opt['n_filters'] = 8
+	opt['trial_num'] = 'N'
+	opt['combine_train_val'] = False
+	opt['std_mult'] = 0.15
+	opt['filter_gain'] = 3.
+	opt['momentum'] = 0.9
+	opt['psi_preconditioner'] = 5.
+	run(opt)
