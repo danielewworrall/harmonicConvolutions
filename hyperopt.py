@@ -13,24 +13,12 @@ def checkFolder(dir):
 		os.makedirs(dir)
 
 
-def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, deviceIdxs=[0], model=''):
+def random_independent(n_trials=3, experimentIdx = 0, deviceIdxs=[0], model=''):
 	y_best = 0.
 	best_params = {}
 	best_num_filters = 0
 	actual_n_trials = n_trials
 	y_s = [] #all results
-	if fixedParams:
-		learning_rates = np.load("trialParams/learning_rates.npy")
-		batch_sizes = np.load("trialParams/batch_sizes.npy")
-		stddev_multipliers = np.load("trialParams/stddev_multipliers.npy")
-		#for debug
-		print("learning rates:", learning_rates)
-		print("batch sizes:", batch_sizes)
-		print("stddevs:", stddev_multipliers)
-		#make sure user parameters agree
-		if n_trials != learning_rates.shape[0]:
-			print("WARNING: Setting ntrials to loaded experiment files: ", learning_rates.shape[0])
-			actual_n_trials = learning_rates.shape[0]
 	#number of filters to try
 	filters = [8]
 	print("Num trials per filter", actual_n_trials)
@@ -41,14 +29,9 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, device
 			n_epochs = 500
 
 			#switch here as well
-			if fixedParams:
-				lr = learning_rates[i]
-				batch_size = int(batch_sizes[i])
-				std_mult = stddev_multipliers[i]
-			else:
-				lr = log_uniform_rand(1e-2, 1e-4)
-				batch_size = int(log_uniform_rand(64,256))
-				std_mult = uniform_rand(0.05, 1.0)
+			lr = log_uniform_rand(1e-2, 1e-4)
+			batch_size = int(log_uniform_rand(64,256))
+			std_mult = uniform_rand(0.05, 1.0)
 			if batch_size % len(deviceIdxs) != 0:
 				while batch_size % len(deviceIdxs) != 0:
 					batch_size += 1
@@ -170,5 +153,5 @@ if __name__ == '__main__':
 	deviceIdxs = [int(x.strip()) for x in sys.argv[2].split(',')]
 	print("deviceIdxs : ", deviceIdxs)
 	print("NetworkModel : ", sys.argv[3])
-	random_independent(n_trials=24, fixedParams=True, experimentIdx=int(sys.argv[1]), deviceIdxs=deviceIdxs, model=sys.argv[3]) #SWITCH MNIST/CIFAR
+	random_independent(n_trials=24, experimentIdx=int(sys.argv[1]), deviceIdxs=deviceIdxs, model=sys.argv[3]) #SWITCH MNIST/CIFAR
 	print("ALL FINISHED! :)")
