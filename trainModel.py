@@ -64,7 +64,7 @@ def average_gradients(tower_grads):
 ###Training FUNCTIONS------------------------------------------------------------------
 def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
 		trial_num, combine_train_val, std_mult,
-		gpuIdx,
+		gpuIdx, datasetIdx,
 		isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
 		trainx, trainy, validx, validy, testx, testy):
 	n_input = n_rows * n_cols * n_channels
@@ -234,7 +234,7 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs
 			save_model(saver, './', sess)
 	
 	print "Testing"
-	if experimentIdx == 2 or experimentIdx == 3:
+	if datasetIdx == 2 or datasetIdx == 3:
 		print("Test labels not available for this dataset, relying on validation accuracy instead.")
 		print('Test accuracy: %f' % (validationAccuracy,))
 		save_model(saver, './', sess)
@@ -257,7 +257,7 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs
 
 def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
 		trial_num, combine_train_val, std_mult,
-		gpuIdxs,
+		gpuIdxs, datasetIdx,
 		isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
 		trainx, trainy, validx, validy, testx, testy):
 	numGPUs = len(gpuIdxs)
@@ -444,7 +444,7 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 			save_model(saver, './', sess)
 
 	print "Testing"
-	if experimentIdx == 2 or experimentIdx == 3:
+	if datasetIdx == 2 or datasetIdx == 3:
 		print("Test labels not available for this dataset, relying on validation accuracy instead.")
 		print('Test accuracy: %f' % (validationAccuracy,))
 		save_model(saver, './', sess)
@@ -577,12 +577,12 @@ def run(opt):
 	if len(deviceIdxs) > 1:
 		print("Using Multi-GPU Training Loop")
 		return trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
-		trial_num, combine_train_val, std_mult, deviceIdxs, isClassification,
+		trial_num, combine_train_val, std_mult, deviceIdxs, datasetIdx, isClassification,
 		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy)
 	else:
 		print("Using Single-GPU Training Loop")
 		return trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
-		trial_num, combine_train_val, std_mult, deviceIdxs[0], isClassification,
+		trial_num, combine_train_val, std_mult, deviceIdxs[0], datasetIdx, isClassification,
 		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy)
 #ENTRY POINT------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
