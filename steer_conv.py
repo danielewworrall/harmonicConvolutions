@@ -267,25 +267,23 @@ def batch_norm(X, phase_train, decay=0.99, name='batchNorm', device='/cpu:0'):
 	batch-normalization-in-tensorflow"""
 	n_out = X.get_shape().as_list()[-1]
 	
-	with tf.device(device):
-	#if True:
-	#with tf.variable_scope(name) as scope:
-		beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=[n_out],
-			initializer=tf.constant_initializer(0.0))
-		gamma = tf.get_variable(name+'_gamma', dtype=tf.float32, shape=[n_out],
-			initializer=tf.constant_initializer(1.0))
-		batch_mean, batch_var = tf.nn.moments(X, [0,1,2],
-											  name=name + 'moments')
-		ema = tf.train.ExponentialMovingAverage(decay=decay)
+    with tf.device(device):
+        beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=[n_out],
+            initializer=tf.constant_initializer(0.0))
+        gamma = tf.get_variable(name+'_gamma', dtype=tf.float32, shape=[n_out],
+            initializer=tf.constant_initializer(1.0))
+	batch_mean, batch_var = tf.nn.moments(X, [0,1,2],
+										  name=name + 'moments')
+	ema = tf.train.ExponentialMovingAverage(decay=decay)
 
-		def mean_var_with_update():
-			ema_apply_op = ema.apply([batch_mean, batch_var])
-			with tf.control_dependencies([ema_apply_op]):
-				return tf.identity(batch_mean), tf.identity(batch_var)
+	def mean_var_with_update():
+		ema_apply_op = ema.apply([batch_mean, batch_var])
+		with tf.control_dependencies([ema_apply_op]):
+			return tf.identity(batch_mean), tf.identity(batch_var)
 
-		mean, var = tf.cond(phase_train, mean_var_with_update,
-					lambda: (ema.average(batch_mean), ema.average(batch_var)))
-		normed = tf.nn.batch_normalization(X, mean, var, beta, gamma, 1e-3)
+	mean, var = tf.cond(phase_train, mean_var_with_update,
+				lambda: (ema.average(batch_mean), ema.average(batch_var)))
+	normed = tf.nn.batch_normalization(X, mean, var, beta, gamma, 1e-3)
 	return normed
 
 def sum_magnitudes(X, eps=1e-4):
