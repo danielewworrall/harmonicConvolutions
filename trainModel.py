@@ -427,8 +427,7 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 		for summ in summaries:
 			summary.add_summary(summ, step)
 
-		if use_batchNorm: #only change learning rate when NOT using Adam
-			best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=10)
+		best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=10)
 
 		print "[" + str(trial_num),str(epoch) + \
 		"], EPOCH | Time: " + \
