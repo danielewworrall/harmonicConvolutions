@@ -417,6 +417,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
         vacc_total = 0.
         # accumulate batches until we have enough
         for i, batch in enumerate(generator): # batch loop
+            print("Waiting for batch")
             batch_x, batch_y = batch
             #construct the feed_dictionary
             feed_dict = {keep_prob: dropout,
@@ -425,8 +426,9 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                 feed_dict[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
                 feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
             # Optimize
+            print("Session run start")
             __, cost_, acc_ = sess.run([train_op, avg_loss, avg_accuracy], feed_dict=feed_dict)
-            #print("Session run...")
+            print("Session run end")
             cost_total += cost_
             acc_total += acc_
 
