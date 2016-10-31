@@ -62,7 +62,7 @@ def average_gradients(tower_grads):
 	return average_grads
 
 ###Training FUNCTIONS------------------------------------------------------------------
-def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters,
+def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
 		trial_num, combine_train_val, std_mult,
 		gpuIdx,
 		isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
@@ -113,7 +113,8 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs
 		phase_train = tf.placeholder(tf.bool)
 
 		# Construct model
-		pred = modelFunc(x, keep_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, batch_size, phase_train, std_mult)
+		pred = modelFunc(x, keep_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv,
+			n_classes, batch_size, phase_train, std_mult, filter_gain)
 
 		# Define loss and optimizer
 		if isClassification:
@@ -254,7 +255,7 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs
 		sess.close()
 		return tacc_total
 
-def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters,
+def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
 		trial_num, combine_train_val, std_mult,
 		gpuIdxs,
 		isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
@@ -305,7 +306,7 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 				#print(scope)
 				#build model 
 				prediction = modelFunc(xs[linearGPUIdx], keep_prob, n_filters, n_rows, n_cols, n_channels,\
-					size_after_conv, n_classes, int(batch_size / numGPUs), phase_train, std_mult)
+					size_after_conv, n_classes, int(batch_size / numGPUs), phase_train, std_mult, filter_gain)
 				#define loss
 				if isClassification:
 					loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(prediction, ys[linearGPUIdx]))
@@ -575,12 +576,12 @@ def run(opt):
 		sys.exit(1)
 	if len(deviceIdxs) > 1:
 		print("Using Multi-GPU Training Loop")
-		return trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters,
+		return trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
 		trial_num, combine_train_val, std_mult, deviceIdxs, isClassification,
 		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy)
 	else:
 		print("Using Single-GPU Training Loop")
-		return trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters,
+		return trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
 		trial_num, combine_train_val, std_mult, deviceIdxs[0], isClassification,
 		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy)
 #ENTRY POINT------------------------------------------------------------------------------------------------------
