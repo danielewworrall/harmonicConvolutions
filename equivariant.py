@@ -75,7 +75,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
-		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train)
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='batchNorm1')
 	
 	with tf.name_scope('block2') as scope:
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
@@ -89,7 +89,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train)
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='batchNorm2')
 	
 	with tf.name_scope('block3') as scope:
 		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
@@ -103,7 +103,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train)
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, name='batchNorm3')
 
 	# LAYER 7
 	with tf.name_scope('block4') as scope:
