@@ -429,7 +429,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                     feed_dict[ys[g]] = batches_y[g]
                 # Optimize
                 __, cost_, acc_ = sess.run([train_op, avg_loss, avg_accuracy], feed_dict=feed_dict)
-                print("Session run...")
+                #print("Session run...")
                 cost_total += cost_
                 acc_total += acc_
 
