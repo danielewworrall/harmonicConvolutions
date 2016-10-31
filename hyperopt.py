@@ -4,11 +4,12 @@ import os
 import sys
 import shutil
 import time
+sys.path.append('./cifar')
 
 import cPickle as pkl
 import numpy as np
 
-from cifar/train_cifar import run
+from train_cifar import run
 
 def random_independent(n_trials=3):
 	y_best = 0.
