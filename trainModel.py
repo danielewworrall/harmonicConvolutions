@@ -367,10 +367,10 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     #avg losses
     print(lossesPerGPU)
     print(accuracyPerGPU)
-    #avg_loss = tf.reduce_mean(tf.pack(lossesPerGPU))
-    #avg_accuracy = tf.reduce_mean(tf.pack(accuracyPerGPU))
-    avg_loss = loss
-    avg_accuracy = accuracy
+    avg_loss = tf.reduce_mean(tf.pack(lossesPerGPU))
+    avg_accuracy = tf.reduce_mean(tf.pack(accuracyPerGPU))
+    #avg_loss = loss
+    #avg_accuracy = accuracy
     #init all variables
     init = tf.initialize_all_variables()
     print('Variables initialized')
@@ -390,9 +390,9 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
 
     # Configure tensorflow session
     config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
+    config.gpu_options.allow_growth = False
     config.log_device_placement = False
-    config.inter_op_parallelism_threads = 1 #we shouldn't need this, but stalls otherwise
+    config.inter_op_parallelism_threads = 2 #we shouldn't need this, but stalls otherwise
     sess = tf.Session(config=config)
     summary = tf.train.SummaryWriter('./logs/current', sess.graph)
     print('Summaries constructed')
@@ -423,12 +423,10 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
             feed_dict = {keep_prob: dropout,
                     learning_rate : lr_current, phase_train : True}
             for g in xrange(numGPUs):
-                feed_dict[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
-                feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
+                feed_dict[xs[g]] = np.copy(batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:])
+                feed_dict[ys[g]] = np.copy(batch_y[g*sizePerGPU:(g+1)*sizePerGPU])
             # Optimize
-            print("Session run start")
             __, cost_, acc_ = sess.run([train_op, avg_loss, avg_accuracy], feed_dict=feed_dict)
-            print("Session run end")
             cost_total += cost_
             acc_total += acc_
 
