@@ -267,11 +267,11 @@ def batch_norm(X, phase_train, decay=0.99, name='batchNorm', device='/cpu:0'):
 	batch-normalization-in-tensorflow"""
 	n_out = X.get_shape().as_list()[-1]
 	
-    with tf.device(device):
-        beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=[n_out],
-            initializer=tf.constant_initializer(0.0))
-        gamma = tf.get_variable(name+'_gamma', dtype=tf.float32, shape=[n_out],
-            initializer=tf.constant_initializer(1.0))
+	with tf.device(device):
+		beta = tf.	(name+'_beta', dtype=tf.float32, shape=[n_out],
+			initializer=tf.constant_initializer(0.0))
+		gamma = tf.	(name+'_gamma', dtype=tf.float32, shape=[n_out],
+			initializer=tf.constant_initializer(1.0))
 	batch_mean, batch_var = tf.nn.moments(X, [0,1,2],
 										  name=name + 'moments')
 	ema = tf.train.ExponentialMovingAverage(decay=decay)
@@ -321,7 +321,7 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:
 			stddev = std_mult*np.sqrt(2.0 / np.prod(filter_shape[:2]))
 			#W_init = tf.random_normal(filter_shape, stddev=stddev)
 			#W_init = tf.random_uniform(filter_shape, maxval=np.sqrt(12.)*stddev/4.)
-		return tf.get_variable(name, dtype=tf.float32, shape=filter_shape,
+		return tf.	(name, dtype=tf.float32, shape=filter_shape,
 				initializer=tf.random_normal_initializer(stddev=stddev))
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####
