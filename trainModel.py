@@ -310,11 +310,11 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     ys = []
     for g in gpuIdxs:
         with tf.device('/gpu:%d' % g):
-            xs.append(tf.placeholder(tf.float32, [batch_size, n_input]))
+            xs.append(tf.placeholder(tf.float32, [int(batch_size / numGPUs), n_input]))
             if isClassification:
-                ys.append(tf.placeholder(tf.int64, [batch_size]))
+                ys.append(tf.placeholder(tf.int64, [int(batch_size / numGPUs)]))
             else:
-                ys.append(tf.placeholder(tf.float32, [batch_size, n_classes]))
+                ys.append(tf.placeholder(tf.float32, [int(batch_size / numGPUs), n_classes]))
 
     #setup model for each GPU
     linearGPUIdx = 0
