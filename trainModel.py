@@ -343,8 +343,6 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
                 #reuse variables for next # Reuse variables for the next tower.
                 tf.get_variable_scope().reuse_variables()
-                # Retain the summaries from the final tower.
-                #summaries = tf.get_collection(tf.GraphKeys.SUMMARIES, scope)
                 # Calculate the gradients for the batch of data on this CIFAR tower.
                 grads = opt.compute_gradients(loss)
                 # Keep track of the gradients across all towers.
@@ -460,7 +458,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
             best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=10)
 
         print "[" + str(trial_num),str(epoch) + \
-        "], EPOCH »» Time: " + \
+        "], EPOCH | Time: " + \
         "{:.3f}".format(time.time()-start) + ", Counter: " + \
         "{:.5f}".format(counter) + ", Loss: " + \
         "{:.6f}".format(cost_total) + ", Train Acc: " + \
