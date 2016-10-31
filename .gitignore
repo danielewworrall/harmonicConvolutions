@@ -1,5 +1,4 @@
 *.t7
-cifar*
 logs
 checkpoints
 pics/
