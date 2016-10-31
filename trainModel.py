@@ -25,28 +25,37 @@ def trainSingleGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
         gpuIdx,
         isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
         trainx, trainy, validx, validy, testx, testy):
-
-	n_input = n_rows * n_cols * n_channels
-
+    n_input = n_rows * n_cols * n_channels
+    #select the correct function to build the model
+    if model == 'fullyConvolutional':
+        modelFunc = fullyConvolutional
+    elif model == 'fullyConvolutional_Dieleman':
+        modelFunc = fullyConvolutional_Dieleman
+    elif model == 'deep_complex_bias':
+        modelFunc = deep_complex_bias
+    else:
+        print('Model unrecognized')
+        sys.exit(1)
+    print('Using model: %s' % model)
     #single gpu model
     #PARAMETERS-----------------------------------------------------------------------
-	# Parameters
-	lr = lr
-	batch_size = batch_size
-	n_epochs = n_epochs
-	save_step = 100		# Not used yet
-	model = model
-	
-	# Network Parameters
-	dropout = 0.75 				# Dropout, probability to keep units
-	n_filters = n_filters
-	dataset_size = trainx.shape[0] + validx.shape[0]
-	print("Total size of trainig set (train + validation): ", dataset_size)
-	print("Total output size: ", n_classes)
-	if isClassification:
-		print("Using classification loss.")
-	else:
-		print("Using regression loss.")
+    # Parameters
+    lr = lr
+    batch_size = batch_size
+    n_epochs = n_epochs
+    save_step = 100		# Not used yet
+    model = model
+
+    # Network Parameters
+    dropout = 0.75 				# Dropout, probability to keep units
+    n_filters = n_filters
+    dataset_size = trainx.shape[0] + validx.shape[0]
+    print("Total size of trainig set (train + validation): ", dataset_size)
+    print("Total output size: ", n_classes)
+    if isClassification:
+        print("Using classification loss.")
+    else:
+        print("Using regression loss.")
 	print
 	print("Learning Rate: ", lr)
 	print("Batch Size: ", batch_size)
@@ -68,15 +77,8 @@ def trainSingleGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
 		phase_train = tf.placeholder(tf.bool)
 		
 		# Construct model
-		if model == 'fullyConvolutional':
-			pred = fullyConvolutional(x, keep_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, batch_size, phase_train, std_mult, use_batchNorm)
-		elif model == 'fullyConvolutional_Dieleman':
-			pred = fullyConvolutional_Dieleman(x, keep_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, batch_size, phase_train, std_mult, use_batchNorm)
-		else:
-			print('Model unrecognized')
-			sys.exit(1)
-		print('Using model: %s' % (model,))
-
+		pred = modelFunc(x, keep_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes, batch_size, phase_train, std_mult, use_batchNorm)
+		
 		# Define loss and optimizer
 		if isClassification:
 			cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
@@ -287,6 +289,8 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
         modelFunc = fullyConvolutional
     elif model == 'fullyConvolutional_Dieleman':
         modelFunc = fullyConvolutional_Dieleman
+    elif model == 'deep_complex_bias':
+        modelFunc = deep_complex_bias
     else:
         print('Model unrecognized')
         sys.exit(1)
@@ -331,11 +335,10 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                 prediction = modelFunc(xs[linearGPUIdx], keep_prob, n_filters, n_rows, n_cols, n_channels,\
                     size_after_conv, n_classes, int(batch_size / numGPUs), phase_train, std_mult, use_batchNorm)
                 #define loss
-                if True: #ALRIGHT
-                #if isClassification:
+                if isClassification:
                     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(prediction, ys[linearGPUIdx]))
-                #else:
-                #    loss = tf.reduce_mean(tf.pow(y - prediction, 2))
+                else:
+                    loss = tf.reduce_mean(tf.pow(y - prediction, 2))
                 #define accuracy
                 correct_prediction = tf.equal(tf.argmax(prediction, 1), ys[linearGPUIdx])
                 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
