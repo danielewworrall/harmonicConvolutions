@@ -246,7 +246,7 @@ def average_gradients(tower_grads):
     if len(tower_grads) == 1:
         return tower_grads[0]
     else:
-        print('Processing %d sets of gradients.' len(tower_grads))
+        print('Processing %d sets of gradients.' % len(tower_grads))
     average_grads = []
     for grad_and_vars in zip(*tower_grads): #for each grad, vars set
         print("GRAD VARS SET")
