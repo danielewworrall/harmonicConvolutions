@@ -234,7 +234,7 @@ def complex_nonlinearity(X, b, fnc, eps=1e-4):
 	return R
 
 def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
-					   name='complexBatchNorm', outerScope='complexBatchNormOuter'):
+					   name='complexBatchNorm', outerScope='complexBatchNormOuter', device='/cpu:0'):
 	"""Batch normalization for the magnitudes of X
 	
 	X: dict of channels {rotation order: (real, imaginary)}
@@ -249,7 +249,7 @@ def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
 	idx = 0
 	for m, r in X.iteritems():
 		magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-		Rb = batch_norm(magnitude, phase_train, decay=decay, name=name+'_'+str(idx))
+		Rb = batch_norm(magnitude, phase_train, decay=decay, name=name+'_'+str(idx), device=device)
 		c = fnc(Rb)/magnitude
 		R[m] = (r[0]*c, r[1]*c)
 		idx += 1
