@@ -49,6 +49,11 @@ def random_independent(n_trials=3, fixedParams = True, experimentIdx = 0, device
 				lr = log_uniform_rand(1e-2, 1e-4)
 				batch_size = int(log_uniform_rand(64,256))
 				std_mult = uniform_rand(0.05, 1.0)
+			if batch_size % len(deviceIdxs) != 0:
+				while batch_size % len(deviceIdxs) != 0:
+					batch_size += 1
+				batch_size = batch_size + 1
+				print("WARNING: Setting batch size to be divisible by number of GPUs.")
 			print
 			print('Learning rate: %f' % (lr,))
 			print('Batch size: %f' % (batch_size,))

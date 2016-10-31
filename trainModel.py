@@ -243,7 +243,6 @@ def average_gradients(tower_grads):
     List of pairs of (gradient, variable) where the gradient has been averaged
     across all towers.
     """
-    return tower_grads[0]
     if len(tower_grads) == 1:
         return tower_grads[0]
     else:
@@ -408,6 +407,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
     counter = 0
     best = 0.
     validationAccuracy = -1
+    sizePerGPU = int(batch_size / numGPUs)
     print('Starting trainig loop')
     # Keep training until reach max iterations
     while epoch < n_epochs: # epoch loop
@@ -416,32 +416,24 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
         acc_total = 0.
         vacc_total = 0.
         # accumulate batches until we have enough
-        batches_x = []
-        batches_y = [] 
         for i, batch in enumerate(generator): # batch loop
             batch_x, batch_y = batch
-            batches_x.append(batch_x)
-            batches_y.append(batch_y)
-            # only train once we have enough batches
-            if len(batches_x) == numGPUs:
-                #construct the feed_dictionary
-                feed_dict = {keep_prob: dropout,
-                        learning_rate : lr_current, phase_train : True}
-                for g in xrange(numGPUs):
-                    feed_dict[xs[g]] = batches_x[g]
-                    feed_dict[ys[g]] = batches_y[g]
-                # Optimize
-                __, cost_, acc_ = sess.run([train_op, avg_loss, avg_accuracy], feed_dict=feed_dict)
-                #print("Session run...")
-                cost_total += cost_
-                acc_total += acc_
+            #construct the feed_dictionary
+            feed_dict = {keep_prob: dropout,
+                    learning_rate : lr_current, phase_train : True}
+            for g in xrange(numGPUs):
+                feed_dict[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
+                feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
+            # Optimize
+            __, cost_, acc_ = sess.run([train_op, avg_loss, avg_accuracy], feed_dict=feed_dict)
+            #print("Session run...")
+            cost_total += cost_
+            acc_total += acc_
 
-                step += 1
-                batches_x = []
-                batches_y = []
+            step += 1
 
-        cost_total /=((i/numGPUs)+1.)
-        acc_total /=((i/numGPUs)+1.)
+        cost_total /=((i)+1.)
+        acc_total /=((i)+1.)
 
         '''
         if not combine_train_val:
