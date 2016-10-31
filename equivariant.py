@@ -38,7 +38,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 	nf3 = int(n_filters*(filter_gain**2.))
 	with tf.device('/cpu:0'):
 		weights = {
-			'w1' : get_weights_dict([[6,],[5,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
+			'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1'),
 			'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
 			'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf2, std_mult=std_mult, name='W3'),
 			'w4' : get_weights_dict([[6,],[5,],[5,]], nf2, nf2, std_mult=std_mult, name='W4'),
@@ -63,7 +63,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 			'psi6' : get_phase_dict(nf3, nf3, 2, name='psi6')
 		}
 		# Reshape input picture
-		x = tf.reshape(x, shape=[bs, 28, 28, 1])
+		x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
 	
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:

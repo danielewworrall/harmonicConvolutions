@@ -450,7 +450,7 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                 #run session
                 vacc_ = sess.run(avg_accuracy, feed_dict=feed_dict)
                 vacc_total += vacc_
-                vacc_total = vacc_total/(i+1.)
+            vacc_total = vacc_total/(i+1.)
 
         feed_dict={cost_ph : cost_total, acc_ph : vacc_total, lr_ph : lr_current}
         summaries = sess.run([cost_op, acc_op, lr_op], feed_dict=feed_dict)
