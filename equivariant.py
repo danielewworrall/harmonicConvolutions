@@ -53,7 +53,7 @@ def fullyConvolutional(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size
 			'psi2' : get_phase_dict(nf, nf, 2, name='psi2')
 		}
 		# Reshape input picture
-	x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
+		x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
 	
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:

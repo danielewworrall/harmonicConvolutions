@@ -245,6 +245,8 @@ def average_gradients(tower_grads):
     """
     if len(tower_grads) == 1:
         return tower_grads[0]
+    else:
+        print('Processing %d sets of gradients.' len(tower_grads))
     average_grads = []
     for grad_and_vars in zip(*tower_grads): #for each grad, vars set
         print("GRAD VARS SET")
@@ -334,7 +336,9 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(prediction, ys[linearGPUIdx]))
                 #else:
                 #    loss = tf.reduce_mean(tf.pow(y - prediction, 2))
-    
+                #define accuracy
+                correct_prediction = tf.equal(tf.argmax(prediction, 1), ys[linearGPUIdx])
+                accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
                 #reuse variables for next # Reuse variables for the next tower.
                 tf.get_variable_scope().reuse_variables()
                 # Retain the summaries from the final tower.
@@ -346,8 +350,6 @@ def trainMultiGPU(model, lr, batch_size, n_epochs, n_filters, use_batchNorm,
                 # Keep track of losses per gpu
                 lossesPerGPU.append(loss)
                 # Keep track of accuracy per gpu
-                correct_prediction = tf.equal(tf.argmax(prediction, 1), ys[linearGPUIdx])
-                accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
                 accuracyPerGPU.append(accuracy)
 
 
