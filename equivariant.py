@@ -118,6 +118,97 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
 		
+def plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
+			 size_after_conv, n_classes, bs, phase_train, std_mult,
+			 filter_gain=2.0, device='/cpu:0'):
+	"""The deep_complex_bias architecture. Current test time score on rot-MNIST
+	is 97.81%---state-of-the-art
+	"""
+	# Sure layers weight & bias
+	order = 3
+	nf = n_filters
+	nf2 = int(n_filters*filter_gain)
+	nf3 = int(n_filters*(filter_gain**2.))
+	with tf.device(device):
+		weights = {
+			'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1', device=device),
+			'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2', device=device),
+			'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf2, std_mult=std_mult, name='W3', device=device),
+			'w4' : get_weights_dict([[6,],[5,],[5,]], nf2, nf2, std_mult=std_mult, name='W4', device=device),
+			'w5' : get_weights_dict([[6,],[5,],[5,]], nf2, nf3, std_mult=std_mult, name='W5', device=device),
+			'w6' : get_weights_dict([[6,],[5,],[5,]], nf3, nf3, std_mult=std_mult, name='W6', device=device),
+			'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, n_classes, std_mult=std_mult, name='W7', device=device),
+		}
+		
+		biases = {
+			'b1' : get_bias_dict(nf, 2, name='b1', device=device),
+			'b2' : get_bias_dict(nf, 2, name='b2', device=device),
+			'b3' : get_bias_dict(nf2, 2, name='b3', device=device),
+			'b4' : get_bias_dict(nf2, 2, name='b4', device=device),
+			'b5' : get_bias_dict(nf3, 2, name='b5', device=device),
+			'b6' : get_bias_dict(nf3, 2, name='b6', device=device),
+			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
+				initializer=tf.constant_initializer(1e-2)),
+			'psi1' : get_phase_dict(1, nf, 2, name='psi1', device=device),
+			'psi2' : get_phase_dict(nf, nf, 2, name='psi2', device=device),
+			'psi3' : get_phase_dict(nf, nf2, 2, name='psi3', device=device),
+			'psi4' : get_phase_dict(nf2, nf2, 2, name='psi4', device=device),
+			'psi5' : get_phase_dict(nf2, nf3, 2, name='psi5', device=device),
+			'psi6' : get_phase_dict(nf3, nf3, 2, name='psi6', device=device)
+		}
+		# Reshape input picture
+		x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
+	
+	# Convolutional Layers
+	with tf.name_scope('block1') as scope:
+		cv1 = real_input_rotated_conv(x, weights['w1'], biases['psi1'],
+									  filter_size=5, padding='SAME', name='1')
+		cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
+		
+		# LAYER 2
+		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
+										 filter_size=5, output_orders=[0,1,2],
+										 padding='SAME', name='2')
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train,
+								 name='batchNorm1', device=device)
+	
+	with tf.name_scope('block2') as scope:
+		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+		# LAYER 3
+		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
+										 filter_size=5, output_orders=[0,1,2],
+										 padding='SAME', name='3')
+		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
+
+		# LAYER 4
+		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
+										 filter_size=5, output_orders=[0,1,2],
+										 padding='SAME', name='4')
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train,
+								 name='batchNorm2', device=device)
+	
+	with tf.name_scope('block3') as scope:
+		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+		# LAYER 5
+		cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
+										 filter_size=5, output_orders=[0,1,2],
+										 padding='SAME', name='5')
+		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
+
+		# LAYER 6
+		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
+										 filter_size=5, output_orders=[0,1,2],
+										 padding='SAME', name='4')
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train,
+								 name='batchNorm3', device=device)
+
+	# LAYER 7
+	with tf.name_scope('block4') as scope:
+		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=5,
+								 padding='SAME', name='7')
+		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
+		return tf.nn.bias_add(cv7, biases['b7'])
+
 
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
 	"""conv2d wrapper. Supply input X, weights V and optional bias"""
@@ -170,7 +261,7 @@ def get_phase_dict(n_in, n_out, order, name='b',device='/cpu:0'):
 
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
-def minibatcher(inputs, targets, batch_size, shuffle=False):
+def minibatcher(inputs, targets, batch_size, shuffle=False, augment=False):
 	"""Input and target are minibatched. Returns a generator"""
 	assert len(inputs) == len(targets)
 	if shuffle:
@@ -181,7 +272,78 @@ def minibatcher(inputs, targets, batch_size, shuffle=False):
 			excerpt = indices[start_idx:start_idx + batch_size]
 		else:
 			excerpt = slice(start_idx, start_idx + batch_size)
-		yield inputs[excerpt], targets[excerpt]
+		# Data augmentation
+		im = []
+		for i in xrange(len(batch)):
+			img = inputs[excerpt]
+			if augment:
+				img = preprocess(img, img.shape)
+			im.append(img)
+		im = np.dstack(im)
+		#im = np.transpose(im, (2,1,0)).reshape(-1,3,IM_SHAPE[0],IM_SHAPE[1])
+		yield im, targets[excerpt]
+
+def dataGen(addresses, labels, IM_SHAPE, MB_SIZE, preproc=False):
+    '''Get images, resize and preprocess'''
+    order = np.random.permutation(np.arange(len(addresses)))
+    batches = np.array_split(order, np.ceil(len(addresses)/(1.*MB_SIZE)))
+    for batch in batches:
+        im = []; lab = []
+        for i in batch:
+            img = skio.imread(addresses[i]).astype(theano.config.floatX)[...,:3]
+            img = cv2.resize(img, IM_SHAPE)
+            if preproc:
+                img = preprocess(img, IM_SHAPE)
+            im.append(img)
+            lab.append(int(labels[i]))
+        im = np.dstack(im)
+        im = np.transpose(im, (2,1,0)).reshape(-1,3,IM_SHAPE[0],IM_SHAPE[1])
+        lab = np.hstack(lab).astype(np.int32)
+        # Really need to add some kind of preprocessing
+        yield (im, lab)
+
+def threadedGen(generator, num_cached=50):
+    '''Threaded generator to multithread the data loading pipeline'''
+    import Queue
+    queue = Queue.Queue(maxsize=num_cached)
+    sentinel = object()  # guaranteed unique reference
+
+    # define producer (putting items into queue)
+    def producer():
+        for item in generator:
+            queue.put(item)
+        queue.put(sentinel)
+
+    # start producer (in a background thread)
+    import threading
+    thread = threading.Thread(target=producer)
+    thread.daemon = True
+    thread.start()
+
+    # run as consumer (read items from queue, in current thread)
+    item = queue.get()
+    while item is not sentinel:
+        yield item
+        queue.task_done()
+        item = queue.get()
+        
+def preprocess(im, IM_SHAPE):
+    '''Data normalizations and augmentations'''
+    # Random crops
+    CROP_SIZE = 10
+    crops = np.random.randint(CROP_SIZE, size=2)
+    CROP_IM_SIZE = (IM_SHAPE[0] - CROP_SIZE, IM_SHAPE[1] - CROP_SIZE)
+    im = im[crops[0]:crops[0]+CROP_IM_SIZE[0],crops[1]:crops[1]+CROP_IM_SIZE[1]]
+    # Random rotations
+    angle = np.random.rand() * 360.
+    M = cv2.getRotationMatrix2D((IM_SHAPE[1]/2,IM_SHAPE[0]/2), angle, 1)
+    im = cv2.warpAffine(im, M, (IM_SHAPE[1],IM_SHAPE[0]))
+    # Random fliplr
+    if np.random.rand() > 0.5:
+        im = im[:,::-1,:]
+    # Random Gaussian blur
+    #im = cv2.GaussianBlur(im, (0,0), 5*np.exp(-2*np.random.rand()))
+    return im
 
 def save_model(saver, saveDir, sess):
 	"""Save a model checkpoint"""

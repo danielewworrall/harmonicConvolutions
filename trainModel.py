@@ -91,7 +91,7 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size,
 	dropout = 0.75 				# Dropout, probability to keep units
 	n_filters = n_filters
 	dataset_size = trainx.shape[0] + validx.shape[0]
-	print("Total size of trainig set (train + validation): ", dataset_size)
+	print("Total size of training set (train + validation): ", dataset_size)
 	print("Total output size: ", n_classes)
 	if isClassification:
 		print("Using classification loss.")
@@ -162,6 +162,8 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size,
 	acc_op = tf.scalar_summary("Validation Accuracy", acc_ph)
 	cost_ph = tf.placeholder(tf.float32, [], name='cost_')
 	cost_op = tf.scalar_summary("Training Cost", cost_ph)
+	vcost_ph = tf.placeholder(tf.float32, [], name='vcost_')
+	vcost_op = tf.scalar_summary("Valid Cost", vcost_ph)
 	lr_ph = tf.placeholder(tf.float32, [], name='lr_')
 	lr_op = tf.scalar_summary("Learning Rate", lr_ph)
 	config = tf.ConfigProto()
@@ -188,6 +190,7 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size,
 		generator = minibatcher(trainx, trainy, batch_size, shuffle=True)
 		cost_total = 0.
 		acc_total = 0.
+		vloss_total = 0.
 		vacc_total = 0.
 		for i, batch in enumerate(generator):
 			batch_x, batch_y = batch
@@ -212,12 +215,14 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size,
 				batch_x, batch_y = batch
 				# Calculate batch loss and accuracy
 				feed_dict = {x: batch_x, y: batch_y, keep_prob: 1., phase_train : False}
-				vacc_ = sess.run(accuracy, feed_dict=feed_dict)
+				vloss_, vacc_ = sess.run([cost, accuracy], feed_dict=feed_dict)
 				vacc_total += vacc_
+				vloss_total += vloss_
 			vacc_total = vacc_total/(i+1.)
 		
-		feed_dict={cost_ph : cost_total, acc_ph : vacc_total, lr_ph : lr_current}
-		summaries = sess.run([cost_op, acc_op, lr_op], feed_dict=feed_dict)
+		feed_dict={cost_ph : cost_total, vcost_ph : vloss_total,
+				   acc_ph : vacc_total, lr_ph : lr_current}
+		summaries = sess.run([cost_op, vcost_op, acc_op, lr_op], feed_dict=feed_dict)
 		for summ in summaries:
 			summary.add_summary(summ, step)
 
@@ -361,6 +366,8 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 	acc_op = tf.scalar_summary("Validation Accuracy", acc_ph)
 	cost_ph = tf.placeholder(tf.float32, [], name='cost_')
 	cost_op = tf.scalar_summary("Training Cost", cost_ph)
+	vcost_ph = tf.placeholder(tf.float32, [], name='vcost_')
+	vcost_op = tf.scalar_summary("Valid Cost", vcost_ph)
 	lr_ph = tf.placeholder(tf.float32, [], name='lr_')
 	lr_op = tf.scalar_summary("Learning Rate", lr_ph)
 
@@ -384,13 +391,14 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 	best = 0.
 	validationAccuracy = -1
 	sizePerGPU = int(batch_size / numGPUs)
-	print('Starting trainig loop...')
+	print('Starting training loop...')
 	# Keep training until reach max iterations
 	while epoch < n_epochs: # epoch loop
 		generator = minibatcher(trainx, trainy, batch_size, shuffle=True)
 		cost_total = 0.
 		acc_total = 0.
 		vacc_total = 0.
+		vloss_total = 0.
 		# accumulate batches until we have enough
 		for i, batch in enumerate(generator): # batch loop
 			batch_x, batch_y = batch
@@ -403,7 +411,8 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 			# Optimize
 			__, cost_, acc_ = sess.run([train_op, avg_loss, avg_accuracy], feed_dict=feed_dict)
 			if step % display_step == 0:
-				print('  Train. Acc.: %f' % acc_)
+				print('  [%.4f] T Loss: %f, T Acc.: %f' %
+					  (time.time()-start, cost_, acc_))
 			cost_total += cost_
 			acc_total += acc_
 
@@ -423,23 +432,27 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 					feed_dict[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
 					feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
 				#run session
-				vacc_ = sess.run(avg_accuracy, feed_dict=feed_dict)
+				vloss_, vacc_ = sess.run([avg_loss, avg_accuracy], feed_dict=feed_dict)
+				vloss_total += vloss_
 				vacc_total += vacc_
 			vacc_total = vacc_total/(i+1.)
+			vloss_total = vloss_total/(i+1.)
 
-		feed_dict={cost_ph : cost_total, acc_ph : vacc_total, lr_ph : lr_current}
-		summaries = sess.run([cost_op, acc_op, lr_op], feed_dict=feed_dict)
+		feed_dict={cost_ph : cost_total, vcost_ph : vloss_total,
+				   acc_ph : vacc_total, lr_ph : lr_current}
+		summaries = sess.run([cost_op, vcost_op, acc_op, lr_op], feed_dict=feed_dict)
 		for summ in summaries:
 			summary.add_summary(summ, step)
 
 		best, counter, lr_current = get_learning_rate(vacc_total, best, counter, lr_current, delay=10)
 
 		print "[" + str(trial_num),str(epoch) + \
-		"], EPOCH | Time: " + \
+		"] Time: " + \
 		"{:.3f}".format(time.time()-start) + ", Counter: " + \
-		"{:.5f}".format(counter) + ", Loss: " + \
-		"{:.6f}".format(cost_total) + ", Train Acc: " + \
-		"{:.3f}".format(acc_total) + ", Val acc: " + \
+		"{:d}".format(counter) + ", Loss: " + \
+		"{:.5f}".format(cost_total) + ", Val loss: " + \
+		"{:.5f}".format(vloss_total) + ", Train Acc: " + \
+		"{:.5f}".format(acc_total) + ", Val acc: " + \
 		"{:.5f}".format(vacc_total)
 		epoch += 1
 		validationAccuracy = vacc_total
@@ -552,6 +565,8 @@ def run(opt):
 		n_channels = 1
 		n_input = n_rows * n_cols * n_channels
 		n_classes = 121
+		n_filters = 32
+		filter_gain = 2
 		size_after_conv = -1
 	elif datasetIdx == 3: #Galaxies
 		print("Galaxies")
