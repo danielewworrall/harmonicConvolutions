@@ -120,7 +120,7 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs
 		if isClassification:
 			cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
 		else:
-			cost = tf.reduce_sum(tf.pow(y - pred, 2)) / (2 * 37)
+			cost = tf.reduce_mean(tf.pow(y - pred, 2)) / 2.
 
 		opt = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum, use_nesterov=True)
 
@@ -310,7 +310,7 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 				if isClassification:
 					loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(prediction, ys[linearGPUIdx]))
 				else:
-					loss = tf.reduce_mean(tf.pow(y - prediction, 2))
+					loss = tf.reduce_mean(tf.pow(y - prediction, 2)) / 2.
 				#define accuracy
 				correct_prediction = tf.equal(tf.argmax(prediction, 1), ys[linearGPUIdx])
 				accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
