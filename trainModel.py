@@ -66,7 +66,7 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs
 		trial_num, combine_train_val, std_mult,
 		gpuIdx, datasetIdx,
 		isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
-		trainx, trainy, validx, validy, testx, testy):
+		trainx, trainy, validx, validy, testx, testy, display_step):
 	n_input = n_rows * n_cols * n_channels
 	#select the correct function to build the model
 	if model == 'deep_complex_bias':
@@ -195,6 +195,8 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs
 						 learning_rate : lr_current, phase_train : True}
 			__, cost_, acc_, gso = sess.run([optimizer, cost, accuracy,
 										grad_summaries_op], feed_dict=feed_dict)
+			if step % display_step == 0:
+				print('  Train. Acc.: %f' % acc_)
 			cost_total += cost_
 			acc_total += acc_
 			for summ in gso:
@@ -259,7 +261,7 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 		trial_num, combine_train_val, std_mult,
 		gpuIdxs, datasetIdx,
 		isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
-		trainx, trainy, validx, validy, testx, testy):
+		trainx, trainy, validx, validy, testx, testy, display_step):
 	numGPUs = len(gpuIdxs)
 	n_input = n_rows * n_cols * n_channels
 	dropout = 0.75 
@@ -399,6 +401,8 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 				feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
 			# Optimize
 			__, cost_, acc_ = sess.run([train_op, avg_loss, avg_accuracy], feed_dict=feed_dict)
+			if step % display_step == 0:
+				print('  Train. Acc.: %f' % acc_)
 			cost_total += cost_
 			acc_total += acc_
 
@@ -488,6 +492,7 @@ def run(opt):
 	model_dir = 'hyperopt_mean_pooling/trial'+str(trial_num)
 	deviceIdxs = opt['deviceIdxs']
 	datasetIdx = opt['datasetIdx']
+	display_step = opt['displayStep']
 	#0. RESET DEFAULT GRAPH
 	tf.reset_default_graph()
 	#1. LOAD DATA---------------------------------------------------------------------
@@ -577,12 +582,12 @@ def run(opt):
 		print("Using Multi-GPU Training Loop")
 		return trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
 		trial_num, combine_train_val, std_mult, deviceIdxs, datasetIdx, isClassification,
-		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy)
+		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy, display_step)
 	else:
 		print("Using Single-GPU Training Loop")
 		return trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
 		trial_num, combine_train_val, std_mult, deviceIdxs[0], datasetIdx, isClassification,
-		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy)
+		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy, display_step)
 #ENTRY POINT------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
 	print("datasetIdx: ", int(sys.argv[1]))
@@ -605,6 +610,7 @@ if __name__ == '__main__':
 	opt['delay'] = 13
 	opt['datasetIdx'] = int(sys.argv[1])
 	opt['deviceIdxs'] = deviceIdxs
+	opt['displayStep'] = 10
 	#run
 	run(opt)
 	print("ALL FINISHED! :)")
