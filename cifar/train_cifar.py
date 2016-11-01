@@ -104,40 +104,30 @@ def steer_net(x, n_filters, n_classes, bs, phase_train, std_mult, filter_gain):
 	}
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
-		cv1 = real_input_rotated_conv(x, weights['w1'], psis['p1'],
-									  filter_size=5, padding='SAME', name='1')
+		cv1 = real_input_rotated_conv(x, weights['w1'], psis['p1'], filter_size=5, padding='SAME', name='1')
 		cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
 		# LAYER 2
-		cv2 = complex_input_rotated_conv(cv1, weights['w2'], psis['p2'],
-										 filter_size=5, output_orders=[0,1,2],
+		cv2 = complex_input_rotated_conv(cv1, weights['w2'], psis['p2'], filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train)
 		# LAYER 3
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv3 = complex_input_rotated_conv(cv2, weights['w3'], psis['p3'],
-										 filter_size=5, output_orders=[0,1,2],
-										 padding='SAME', name='3')
+		cv3 = complex_input_rotated_conv(cv2, weights['w3'], psis['p3'], filter_size=5, output_orders=[0,1,2], padding='SAME', name='3')
 		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
 	
 	with tf.name_scope('block2') as scope:
-		cv4 = complex_input_rotated_conv(cv3, weights['w4'], psis['p4'],
-									  filter_size=3, padding='SAME', name='4')
+		cv4 = complex_input_rotated_conv(cv3, weights['w4'], psis['p4'], filter_size=3, padding='SAME', name='4')
 		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train)
 		# LAYER 2
-		cv5 = complex_input_rotated_conv(cv4, weights['w5'], psis['p5'],
-										 filter_size=3, output_orders=[0,1,2],
-										 padding='SAME', name='5')
+		cv5 = complex_input_rotated_conv(cv4, weights['w5'], psis['p5'], filter_size=3, output_orders=[0,1,2], padding='SAME', name='5')
 		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
 		# LAYER 3
 		cv5 = mean_pooling(cv5, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv6 = complex_input_rotated_conv(cv5, weights['w6'], psis['p6'],
-										 filter_size=3, output_orders=[0,1,2],
-										 padding='SAME', name='6')
+		cv6 = complex_input_rotated_conv(cv5, weights['w6'], psis['p6'], filter_size=3, output_orders=[0,1,2], padding='SAME', name='6')
 		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train)
 	
 	with tf.name_scope('block3') as scope:
-		cv7 = complex_input_rotated_conv(cv6, weights['w7'], psis['p7'],
-									  filter_size=3, padding='SAME', name='7')
+		cv7 = complex_input_rotated_conv(cv6, weights['w7'], psis['p7'], filter_size=3, padding='SAME', name='7')
 		cv7 = complex_nonlinearity(cv7, biases['b7'], tf.nn.relu)
 		cv7 = stack_magnitudes(cv7)
 		
@@ -427,8 +417,8 @@ def run(opt):
 
 if __name__ == '__main__':
 	opt = {}
-	opt['model'] = 'all_cnn'
-	opt['lr'] = 1e-2
+	opt['model'] = 'steer_net'
+	opt['lr'] = 1e-1
 	opt['batch_size'] = 64
 	opt['n_epochs'] = 50
 	opt['n_filters'] = 32
