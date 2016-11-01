@@ -27,10 +27,11 @@ def checkFolder(dir):
 
 
 ##### MODELS #####
-def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_after_conv, n_classes,
- bs, phase_train, std_mult, filter_gain=2.0, device='/cpu:0'):
-	"""The deep_complex_bias architecture. Current test time score is 94.7% for 7 layers 
-	deep, 5 filters
+def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
+					  size_after_conv, n_classes, bs, phase_train, std_mult,
+					  filter_gain=2.0, device='/cpu:0'):
+	"""The deep_complex_bias architecture. Current test time score on rot-MNIST
+	is 97.81%---state-of-the-art
 	"""
 	# Sure layers weight & bias
 	order = 3
@@ -76,7 +77,8 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
-		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='batchNorm1', device=device)
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train,
+								 name='batchNorm1', device=device)
 	
 	with tf.name_scope('block2') as scope:
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
@@ -90,7 +92,8 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='batchNorm2', device=device)
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train,
+								 name='batchNorm2', device=device)
 	
 	with tf.name_scope('block3') as scope:
 		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
@@ -104,7 +107,8 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels, size_
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='4')
-		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, name='batchNorm3', device=device)
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train,
+								 name='batchNorm3', device=device)
 
 	# LAYER 7
 	with tf.name_scope('block4') as scope:
@@ -155,9 +159,11 @@ def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
 
 def maxpool2d(X, k=2):
 	"""Tied max pool. k is the stride and pool size"""
-	return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1], padding='VALID')
+	return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1],
+						  padding='VALID')
 
-def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W', device='/cpu:0'):
+def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W',
+					 device='/cpu:0'):
 	"""Return a dict of weights for use with real_input_equi_conv. comp_shape is
 	a list of the number of elements per Fourier base. For 3x3 weights use
 	[3,2,2,2]. I currently assume order increasing from 0.
@@ -174,7 +180,8 @@ def get_bias_dict(n_filters, order, name='b', device='/cpu:0'):
 	with tf.device(device):
 		bias_dict = {}
 		for i in xrange(order+1):
-			bias = tf.get_variable(name+'_'+str(i), dtype=tf.float32, shape=[n_filters],
+			bias = tf.get_variable(name+'_'+str(i), dtype=tf.float32,
+								   shape=[n_filters],
 				initializer=tf.constant_initializer(1e-2))
 			bias_dict[i] = bias
 	return bias_dict
@@ -186,7 +193,8 @@ def get_phase_dict(n_in, n_out, order, name='b',device='/cpu:0'):
 		for i in xrange(order+1):
 			init = np.random.rand(1,1,n_in,n_out) * 2. *np.pi
 			init = np.float32(init)
-			phase = tf.get_variable(name+'_'+str(i), dtype=tf.float32, shape=[1,1,n_in,n_out],
+			phase = tf.get_variable(name+'_'+str(i), dtype=tf.float32,
+									shape=[1,1,n_in,n_out],
 				initializer=tf.constant_initializer(init))
 			phase_dict[i] = phase
 	return phase_dict
