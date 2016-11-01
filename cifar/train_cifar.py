@@ -287,8 +287,10 @@ def run(opt):
 	phase_train = tf.placeholder(tf.bool)
 	
 	# Construct model
-	#pred = all_cnn(x, n_filters, n_classes, batch_size, phase_train, std_mult, filter_gain)
-	pred = steer_net(x, n_filters, n_classes, batch_size, phase_train, std_mult, filter_gain)
+	if model=='all_cnn':
+		pred = all_cnn(x, n_filters, n_classes, batch_size, phase_train, std_mult, filter_gain)
+	elif model=='steer_net':
+		pred = steer_net(x, n_filters, n_classes, batch_size, phase_train, std_mult, filter_gain)
 
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
@@ -425,16 +427,16 @@ def run(opt):
 
 if __name__ == '__main__':
 	opt = {}
-	opt['model'] = 'deep_complex_bias'
-	opt['lr'] = 1e-3
+	opt['model'] = 'all_cnn'
+	opt['lr'] = 1e-2
 	opt['batch_size'] = 64
-	opt['n_epochs'] = 120
-	opt['n_filters'] = 64
+	opt['n_epochs'] = 50
+	opt['n_filters'] = 32
 	opt['trial_num'] = 'M'
 	opt['combine_train_val'] = False
-	opt['std_mult'] = 0.3
+	opt['std_mult'] = 1.
 	opt['filter_gain'] = 2
 	opt['momentum'] = 0.93
-	opt['psi_preconditioner'] = 3.4
+	opt['psi_preconditioner'] = 1.
 	opt['delay'] = 13
 	run(opt)
