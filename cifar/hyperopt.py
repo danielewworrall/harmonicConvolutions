@@ -18,7 +18,7 @@ def random_independent(n_trials=3):
 		opt['y'] = -1
 		while opt['y'] < 0:
 			# Remove files corresponding to trial
-			trial_num = i + 10
+			trial_num = i 
 			log_path = '../logs/cifar/trial'+str(trial_num)
 			if os.path.exists(log_path):
 				shutil.rmtree(log_path)
@@ -27,16 +27,16 @@ def random_independent(n_trials=3):
 				shutil.rmtree(checkpoint_path)
 			
 			opt['model'] = 'deep_complex_bias'
-			opt['lr'] = log_uniform_rand(5e-3, 1e-1)
-			opt['batch_size'] = int(log_uniform_rand(40,120))
-			opt['n_epochs'] = 80
+			opt['lr'] = 1e-1 #log_uniform_rand(1e-4, 1e-1)
+			opt['batch_size'] = int(log_uniform_rand(40,80))
+			opt['n_epochs'] = 20
 			opt['n_filters'] = 32
-			opt['trial_num'] = trial_num
+			opt['trial_num'] = trial_num + 20
 			opt['combine_train_val'] = False
-			opt['std_mult'] = uniform_rand(0.05, 0.5)
+			opt['std_mult'] = 1. #uniform_rand(0.05, 0.15)
 			opt['filter_gain'] = 2
-			opt['momentum'] = uniform_rand(0.85, 0.99)
-			opt['psi_preconditioner'] = log_uniform_rand(1e-1, 1e1)
+			opt['momentum'] = uniform_rand(0.85, 0.9)
+			opt['psi_preconditioner'] = log_uniform_rand(0.4, 0.7)
 			opt['delay'] = int(uniform_rand(7,15))
 	
 			print
@@ -49,8 +49,9 @@ def random_independent(n_trials=3):
 		with open(save_name, 'w') as fp:
 			pkl.dump(opt, fp, protocol=pkl.HIGHEST_PROTOCOL)
 		if opt['y'] > y_best:
+			print('New best model')
 			y_best = opt['y']
-			best_params = opt
+			best_params = opt.copy()
 		
 		print
 		print
@@ -68,32 +69,6 @@ def random_independent(n_trials=3):
 	print('Best params overall')	
 	for key, val in best_params.iteritems():
 		print('Best ' + key + ': ' + str(val))
-	
-	"""
-	y = []
-	best_params['combine_train_val'] = True
-	for i in xrange(5):
-		best_params['trial_num'] = 'T-'+str(i)
-		y.append(run(best_params))
-		print
-		print('Current y: %f' % (y[i],))
-		print
-	
-	print('Best y overall')
-	print y_best
-	print('Best params overall')	
-	for key, val in opt.iteritems():
-		print('Best ' + key + ': ' + str(val))
-	# Compute statistics
-	print y
-	y = np.asarray(y)
-	save_name = './logs/hyperopt_mean_pooling/numpy/test.npz'
-	np.savez(save_name, y=y)
-	
-	mean = np.mean(y)
-	print('Mean: %f' % (mean,))
-	print('Std: %f' % (np.std(y),))
-	"""
 
 def uniform_rand(min_, max_):
 	gap = max_ - min_

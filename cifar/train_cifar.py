@@ -16,6 +16,53 @@ from steer_conv import *
 
 from matplotlib import pyplot as plt
 
+def all_cnn(x, n_filters, n_classes, bs, phase_train, std_mult, filter_gain):
+	"""The deep_complex_bias architecture adapted for CIFAR"""
+	# Sure layers weight & bias
+	nf = 3*n_filters
+	nf2 = 3*int(n_filters*filter_gain)
+	
+	weights = {
+		'w1' : get_weights([3,3,3,nf], std_mult=1., name='W1'),
+		'w2' : get_weights([3,3,nf,nf], std_mult=1., name='W2'),
+		'w3' : get_weights([3,3,nf,nf], std_mult=1., name='W3'),
+		'w4' : get_weights([3,3,nf,nf2], std_mult=1., name='W4'),
+		'w5' : get_weights([3,3,nf2,nf2], std_mult=1., name='W5'),
+		'w6' : get_weights([3,3,nf2,nf2], std_mult=1., name='W6'),
+		'w7' : get_weights([3,3,nf2,nf2], std_mult=1., name='W7'),
+		'w8' : get_weights([1,1,nf2,nf2], std_mult=1., name='W8'),
+		'w9' : get_weights([1,1,nf2,n_classes], std_mult=1., name='W9')
+	}
+	
+	biases = {
+		'b1' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b1'),
+		'b2' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b2'),
+		'b3' : tf.Variable(tf.constant(1e-2, shape=[nf]), name='b3'),
+		'b4' : tf.Variable(tf.constant(1e-2, shape=[nf2]), name='b4'),
+		'b5' : tf.Variable(tf.constant(1e-2, shape=[nf2]), name='b5'),
+		'b6' : tf.Variable(tf.constant(1e-2, shape=[nf2]), name='b6'),
+		'b7' : tf.Variable(tf.constant(1e-2, shape=[nf2]), name='b8'),
+		'b8' : tf.Variable(tf.constant(1e-2, shape=[nf2]), name='b8'),
+		'b9' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b9')}
+
+	# Convolutional Layers
+	with tf.name_scope('block1') as scope:
+		cv1 = conv2d(x, weights['w1'], b=biases['b1'], padding='SAME', name='1')
+		cv2 = conv2d(tf.nn.relu(cv1), weights['w2'], b=biases['b2'], padding='SAME', name='2')
+		cv3 = conv2d(tf.nn.relu(cv2), weights['w3'], b=biases['b3'], strides=(1,2,2,1), padding='SAME', name='3')
+	
+	with tf.name_scope('block2') as scope:
+		cv4 = conv2d(tf.nn.relu(cv3), weights['w4'], b=biases['b4'], padding='SAME', name='4')
+		cv5 = conv2d(tf.nn.relu(cv4), weights['w5'], b=biases['b5'], padding='SAME', name='5')
+		cv6 = conv2d(tf.nn.relu(cv5), weights['w6'], b=biases['b6'], strides=(1,2,2,1), padding='SAME', name='6')
+	
+	with tf.name_scope('block3') as scope:
+		cv7 = conv2d(tf.nn.relu(cv6), weights['w7'], b=biases['b7'], padding='SAME', name='7')		
+		cv8 = conv2d(tf.nn.relu(cv7), weights['w8'], b=biases['b8'], name='8')
+		cv9 = conv2d(tf.nn.relu(cv8), weights['w9'], b=biases['b9'], name='9')
+		print cv9
+		return tf.reduce_mean(cv9, reduction_indices=[1,2])
+
 def steer_net(x, n_filters, n_classes, bs, phase_train, std_mult, filter_gain):
 	"""The deep_complex_bias architecture adapted for CIFAR"""
 	# Sure layers weight & bias
@@ -24,9 +71,9 @@ def steer_net(x, n_filters, n_classes, bs, phase_train, std_mult, filter_gain):
 	nf2 = int(n_filters*filter_gain)
 	
 	weights = {
-		'w1' : get_weights_dict([[3,],[2,],[2,]], 3, nf, std_mult=std_mult, name='W1'),
-		'w2' : get_weights_dict([[3,],[2,],[2,]], nf, nf, std_mult=std_mult, name='W2'),
-		'w3' : get_weights_dict([[3,],[2,],[2,]], nf, nf, std_mult=std_mult, name='W3'),
+		'w1' : get_weights_dict([[6,],[5,],[5,]], 3, nf, std_mult=std_mult, name='W1'),
+		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
+		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W3'),
 		'w4' : get_weights_dict([[3,],[2,],[2,]], nf, nf2, std_mult=std_mult, name='W4'),
 		'w5' : get_weights_dict([[3,],[2,],[2,]], nf2, nf2, std_mult=std_mult, name='W5'),
 		'w6' : get_weights_dict([[3,],[2,],[2,]], nf2, nf2, std_mult=std_mult, name='W6'),
@@ -58,17 +105,17 @@ def steer_net(x, n_filters, n_classes, bs, phase_train, std_mult, filter_gain):
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
 		cv1 = real_input_rotated_conv(x, weights['w1'], psis['p1'],
-									  filter_size=3, padding='SAME', name='1')
+									  filter_size=5, padding='SAME', name='1')
 		cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
 		# LAYER 2
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], psis['p2'],
-										 filter_size=3, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train)
 		# LAYER 3
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], psis['p3'],
-										 filter_size=3, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='3')
 		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
 	
@@ -240,12 +287,14 @@ def run(opt):
 	phase_train = tf.placeholder(tf.bool)
 	
 	# Construct model
+	#pred = all_cnn(x, n_filters, n_classes, batch_size, phase_train, std_mult, filter_gain)
 	pred = steer_net(x, n_filters, n_classes, batch_size, phase_train, std_mult, filter_gain)
 
 	# Define loss and optimizer
 	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
 	opt = tf.train.MomentumOptimizer(learning_rate=learning_rate,
 									 momentum=momentum, use_nesterov=nesterov)
+	#opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
 	print('  Constructed loss')
 	
 	grads_and_vars = opt.compute_gradients(cost)
