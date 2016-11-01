@@ -62,11 +62,12 @@ def average_gradients(tower_grads):
 	return average_grads
 
 ###Training FUNCTIONS------------------------------------------------------------------
-def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
-		trial_num, combine_train_val, std_mult,
-		gpuIdx, datasetIdx,
-		isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
-		trainx, trainy, validx, validy, testx, testy, display_step):
+def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size,
+				   n_epochs, n_filters, filter_gain, trial_num,
+				   combine_train_val, std_mult, gpuIdx, datasetIdx,
+				   isClassification, n_rows, n_cols, n_channels, n_classes,
+				   size_after_conv, trainx, trainy, validx, validy, testx,
+				   testy, display_step):
 	n_input = n_rows * n_cols * n_channels
 	#select the correct function to build the model
 	if model == 'deep_complex_bias':
@@ -257,11 +258,11 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs
 		sess.close()
 		return tacc_total
 
-def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
-		trial_num, combine_train_val, std_mult,
-		gpuIdxs, datasetIdx,
-		isClassification, n_rows, n_cols, n_channels, n_classes, size_after_conv,
-		trainx, trainy, validx, validy, testx, testy, display_step):
+def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
+				  n_filters, filter_gain, trial_num, combine_train_val,
+				  std_mult,	gpuIdxs, datasetIdx, isClassification, n_rows,
+				  n_cols, n_channels, n_classes, size_after_conv, trainx,
+				  trainy, validx, validy, testx, testy, display_step):
 	numGPUs = len(gpuIdxs)
 	n_input = n_rows * n_cols * n_channels
 	dropout = 0.75 

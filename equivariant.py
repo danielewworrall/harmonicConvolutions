@@ -56,7 +56,8 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 			'b4' : get_bias_dict(nf2, 2, name='b4', device=device),
 			'b5' : get_bias_dict(nf3, 2, name='b5', device=device),
 			'b6' : get_bias_dict(nf3, 2, name='b6', device=device),
-			'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7'),
+			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
+				initializer=tf.constant_initializer(1e-2)),
 			'psi1' : get_phase_dict(1, nf, 2, name='psi1', device=device),
 			'psi2' : get_phase_dict(nf, nf, 2, name='psi2', device=device),
 			'psi3' : get_phase_dict(nf, nf2, 2, name='psi3', device=device),
@@ -116,38 +117,6 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 								 padding='SAME', name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
-
-##### CUSTOM BLOCKS FOR MODEL #####
-def res_block(x, w1, w2, psi1, psi2, b, phase_train, filter_size=5,
-			  strides=(1,2,2,1), name='1'):
-	"""Residual block"""
-		
-	with tf.name_scope('block'+name) as scope:
-		cv1 = complex_input_rotated_conv(x, w1, psi1, filter_size=filter_size,
-									  output_orders=[0,1,2], padding='SAME',
-									  strides=strides, name='1')
-		cv1 = complex_nonlinearity(cv1, b, tf.nn.relu)
-		
-		# LAYER 2
-		cv2 = complex_input_rotated_conv(cv1, w2, psi2, filter_size=filter_size,
-										 output_orders=[0,1,2], padding='SAME',
-										 name='2')
-		cv2 = complex_batch_norm(cv2, lambda x:x, phase_train, device=device)
-		
-		# Shortcut across equal rotation order complex feature maps
-		for order, val in x.iteritems():
-			s0 = tf.nn.avg_pool(val[0], (1,strides[1],strides[2],1), strides,
-								padding='VALID', name='s'+str(order)+'_0')
-			p = tf.maximum(cv2[order][0].get_shape()[3]-s0.get_shape()[3],0)
-			s0 = tf.pad(s0,[[0,0],[0,0],[0,0],[0,p]])
-			
-			s1 = tf.nn.avg_pool(val[0], (1,strides[1],strides[2],1), strides,
-								padding='VALID', name='s'+str(order)+'_1')
-			s1 = tf.pad(s1,[[0,0],[0,0],[0,0],[0,p]])
-			
-			cv2[order] = (cv2[order][0]+s0, cv2[order][1]+s1)
-			
-		return cv2
 		
 
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):

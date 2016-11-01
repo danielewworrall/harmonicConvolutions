@@ -305,7 +305,7 @@ def to_constant_float(Q):
 	
 	Q: numpy tensor
 	"""
-	#Q = tf.Variable(Q, trainable=False)###########################################
+	#Q = tf.Variable(Q, trainable=False) ############################################
 	return tf.to_float(Q)
 
 def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:0'):
@@ -319,8 +319,6 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:
 	with tf.device(device):
 		if W_init == None:
 			stddev = std_mult*np.sqrt(2.0 / np.prod(filter_shape[:3]))
-			#W_init = tf.random_normal(filter_shape, stddev=stddev)
-			#W_init = tf.random_uniform(filter_shape, maxval=np.sqrt(12.)*stddev/4.)
 		return tf.get_variable(name, dtype=tf.float32, shape=filter_shape,
 				initializer=tf.random_normal_initializer(stddev=stddev))
 
