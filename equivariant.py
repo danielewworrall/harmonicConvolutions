@@ -123,7 +123,7 @@ def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 				filter_gain=2.0, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
-	order = 3
+	order = 2
 	nf = n_filters
 	nf2 = int(n_filters*filter_gain)
 	nf3 = int(n_filters*(filter_gain**2.))
