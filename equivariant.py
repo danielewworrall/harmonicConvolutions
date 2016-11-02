@@ -165,7 +165,7 @@ def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 		
 		# LAYER 2
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
-										 filter_size=5, output_orders=[0],
+										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train,
 								 name='batchNorm1', device=device)
@@ -174,13 +174,13 @@ def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 3
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
-										 filter_size=5, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='3')
 		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
 
 		# LAYER 4
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
-										 filter_size=5, output_orders=[0],
+										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='4')
 		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train,
 								 name='batchNorm2', device=device)
@@ -189,13 +189,13 @@ def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 5
 		cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
-										 filter_size=5, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='5')
 		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
 
 		# LAYER 6
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
-										 filter_size=5, output_orders=[0],
+										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='4')
 		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train,
 								 name='batchNorm3', device=device)
