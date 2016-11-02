@@ -32,11 +32,11 @@ def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_com
 		while opt['y'] < 0:
 			# Remove files corresponding to trial
 			trial_num = i + 10
-			log_path = './logs/hyperopt_mean_pooling/trial'+str(trial_num)
+			log_path = './logs/hyperopt_stable/trial'+str(trial_num)
 			log_path = log_path + '_' + datasetName
 			if os.path.exists(log_path):
 				shutil.rmtree(log_path)
-			checkpoint_path = './checkpoints/hyperopt_mean_pooling/trial'+str(trial_num)
+			checkpoint_path = './checkpoints/hyperopt_stable/trial'+str(trial_num)
 			checkpoint_path = checkpoint_path + '_' + datasetName
 			if os.path.exists(checkpoint_path):
 				shutil.rmtree(checkpoint_path)
@@ -63,7 +63,7 @@ def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_com
 			print
 			opt['y'] = run(opt)
 		
-		save_name = './logs/hyperopt_mean_pooling/numpy/trial'+str(trial_num)+'.pkl'
+		save_name = './logs/hyperopt_stable/numpy/trial'+str(trial_num)+'.pkl'
 		with open(save_name, 'w') as fp:
 			pkl.dump(opt, fp, protocol=pkl.HIGHEST_PROTOCOL)
 		if opt['y'] > y_best:
