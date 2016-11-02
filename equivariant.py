@@ -141,7 +141,7 @@ def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 		biases = {
 			'b1' : get_bias_dict(nf, order, name='b1', device=device),
 			'b2' : get_bias_dict(nf, order, name='b2', device=device),
-			'b3' : get_bias_dict(nf2, ordername='b3', device=device),
+			'b3' : get_bias_dict(nf2, order, name='b3', device=device),
 			'b4' : get_bias_dict(nf2, order, name='b4', device=device),
 			'b5' : get_bias_dict(nf3, order, name='b5', device=device),
 			'b6' : get_bias_dict(nf3, order, name='b6', device=device),
