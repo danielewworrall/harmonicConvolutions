@@ -261,7 +261,8 @@ def get_phase_dict(n_in, n_out, order, name='b',device='/cpu:0'):
 
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
-def minibatcher(inputs, targets, batch_size, shuffle=False, augment=False):
+def minibatcher(inputs, targets, batch_size, shuffle=False, augment=False,
+				img_shape=(95,95)):
 	"""Input and target are minibatched. Returns a generator"""
 	assert len(inputs) == len(targets)
 	if shuffle:
@@ -271,79 +272,36 @@ def minibatcher(inputs, targets, batch_size, shuffle=False, augment=False):
 		if shuffle:
 			excerpt = indices[start_idx:start_idx + batch_size]
 		else:
-			excerpt = slice(start_idx, start_idx + batch_size)
+			excerpt = np.arange(batch_size) + start_idx
 		# Data augmentation
 		im = []
-		for i in xrange(len(batch)):
-			img = inputs[excerpt]
+		for i in xrange(len(excerpt)):
+			img = inputs[excerpt[i]]
 			if augment:
-				img = preprocess(img, img.shape)
+				img = preprocess(img, img_shape)
+			else:
+				img = np.reshape(img, img_shape)
+				img = img[10:-10,10:-10]
+				img = np.reshape(img, [1,np.prod(img.shape)])
 			im.append(img)
-		im = np.dstack(im)
-		#im = np.transpose(im, (2,1,0)).reshape(-1,3,IM_SHAPE[0],IM_SHAPE[1])
+		im = np.vstack(im)
 		yield im, targets[excerpt]
 
-def dataGen(addresses, labels, IM_SHAPE, MB_SIZE, preproc=False):
-    '''Get images, resize and preprocess'''
-    order = np.random.permutation(np.arange(len(addresses)))
-    batches = np.array_split(order, np.ceil(len(addresses)/(1.*MB_SIZE)))
-    for batch in batches:
-        im = []; lab = []
-        for i in batch:
-            img = skio.imread(addresses[i]).astype(theano.config.floatX)[...,:3]
-            img = cv2.resize(img, IM_SHAPE)
-            if preproc:
-                img = preprocess(img, IM_SHAPE)
-            im.append(img)
-            lab.append(int(labels[i]))
-        im = np.dstack(im)
-        im = np.transpose(im, (2,1,0)).reshape(-1,3,IM_SHAPE[0],IM_SHAPE[1])
-        lab = np.hstack(lab).astype(np.int32)
-        # Really need to add some kind of preprocessing
-        yield (im, lab)
-
-def threadedGen(generator, num_cached=50):
-    '''Threaded generator to multithread the data loading pipeline'''
-    import Queue
-    queue = Queue.Queue(maxsize=num_cached)
-    sentinel = object()  # guaranteed unique reference
-
-    # define producer (putting items into queue)
-    def producer():
-        for item in generator:
-            queue.put(item)
-        queue.put(sentinel)
-
-    # start producer (in a background thread)
-    import threading
-    thread = threading.Thread(target=producer)
-    thread.daemon = True
-    thread.start()
-
-    # run as consumer (read items from queue, in current thread)
-    item = queue.get()
-    while item is not sentinel:
-        yield item
-        queue.task_done()
-        item = queue.get()
-        
 def preprocess(im, IM_SHAPE):
-    '''Data normalizations and augmentations'''
-    # Random crops
-    CROP_SIZE = 10
-    crops = np.random.randint(CROP_SIZE, size=2)
-    CROP_IM_SIZE = (IM_SHAPE[0] - CROP_SIZE, IM_SHAPE[1] - CROP_SIZE)
-    im = im[crops[0]:crops[0]+CROP_IM_SIZE[0],crops[1]:crops[1]+CROP_IM_SIZE[1]]
-    # Random rotations
-    angle = np.random.rand() * 360.
-    M = cv2.getRotationMatrix2D((IM_SHAPE[1]/2,IM_SHAPE[0]/2), angle, 1)
-    im = cv2.warpAffine(im, M, (IM_SHAPE[1],IM_SHAPE[0]))
-    # Random fliplr
-    if np.random.rand() > 0.5:
-        im = im[:,::-1,:]
-    # Random Gaussian blur
-    #im = cv2.GaussianBlur(im, (0,0), 5*np.exp(-2*np.random.rand()))
-    return im
+	'''Data normalizations and augmentations'''
+	# Random rotations
+	im = np.reshape(im, IM_SHAPE)
+	angle = np.random.rand() * 360.
+	im = sciint.rotate(im, angle, reshape=False)
+	# Random crops
+	CROP_SIZE = 20
+	crops = np.random.randint(CROP_SIZE, size=2)
+	CROP_IM_SIZE = (IM_SHAPE[0] - CROP_SIZE, IM_SHAPE[1] - CROP_SIZE)
+	im = im[crops[0]:crops[0]+CROP_IM_SIZE[0],crops[1]:crops[1]+CROP_IM_SIZE[1]]
+	# Random fliplr
+	if np.random.rand() > 0.5:
+		im = im[:,::-1]
+	return np.reshape(im, [1,np.prod(im.shape)])
 
 def save_model(saver, saveDir, sess):
 	"""Save a model checkpoint"""

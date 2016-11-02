@@ -2,7 +2,7 @@ import os
 import sys
 import time
 
-#import cv2
+import cv2
 import numpy as np
 import scipy.linalg as scilin
 import scipy.ndimage.interpolation as sciint
@@ -267,7 +267,7 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 				  n_filters, filter_gain, trial_num, combine_train_val,
 				  std_mult,	gpuIdxs, datasetIdx, isClassification, n_rows,
 				  n_cols, n_channels, n_classes, size_after_conv, trainx,
-				  trainy, validx, validy, testx, testy, display_step):
+				  trainy, validx, validy, testx, testy, display_step, augment):
 	numGPUs = len(gpuIdxs)
 	n_input = n_rows * n_cols * n_channels
 	dropout = 0.75 
@@ -281,7 +281,7 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 		print('Model unrecognized')
 		sys.exit(1)
 	print('Using model: %s' % model)
-	
+
 	#create some variables to use in training
 	learning_rate = tf.placeholder(tf.float32)
 	keep_prob = tf.placeholder(tf.float32)
@@ -394,7 +394,8 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 	print('Starting training loop...')
 	# Keep training until reach max iterations
 	while epoch < n_epochs: # epoch loop
-		generator = minibatcher(trainx, trainy, batch_size, shuffle=True)
+		generator = minibatcher(trainx, trainy, batch_size, shuffle=True,
+								augment=augment)
 		cost_total = 0.
 		acc_total = 0.
 		vacc_total = 0.
@@ -403,8 +404,8 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 		for i, batch in enumerate(generator): # batch loop
 			batch_x, batch_y = batch
 			#construct the feed_dictionary
-			feed_dict = {keep_prob: dropout,
-					learning_rate : lr_current, phase_train : True}
+			feed_dict = {keep_prob: dropout, learning_rate : lr_current,
+						 phase_train : True}
 			for g in xrange(numGPUs):
 				feed_dict[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
 				feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
@@ -422,12 +423,13 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 		acc_total /=((i)+1.)
 
 		if not combine_train_val:
-			val_generator = minibatcher(validx, validy, batch_size, shuffle=False)
+			val_generator = minibatcher(validx, validy, batch_size,
+										shuffle=False, augment=False)
 			for i, batch in enumerate(val_generator):
 				batch_x, batch_y = batch
 				#construct the feed_dictionary
-				feed_dict = {keep_prob: dropout,
-						learning_rate : lr_current, phase_train : True}
+				feed_dict = {keep_prob: dropout, learning_rate : lr_current,
+							 phase_train : True}
 				for g in xrange(numGPUs):
 					feed_dict[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
 					feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
@@ -507,6 +509,7 @@ def run(opt):
 	deviceIdxs = opt['deviceIdxs']
 	datasetIdx = opt['datasetIdx']
 	display_step = opt['displayStep']
+	augment = opt['augment']
 	#0. RESET DEFAULT GRAPH
 	tf.reset_default_graph()
 	#1. LOAD DATA---------------------------------------------------------------------
@@ -560,14 +563,15 @@ def run(opt):
 		testy = np.zeros(1) #symbolic only as not available
 
 		isClassification = True
-		n_rows = 95
-		n_cols = 95
+		n_rows = 95-20
+		n_cols = 95-20
 		n_channels = 1
 		n_input = n_rows * n_cols * n_channels
 		n_classes = 121
 		n_filters = 32
 		filter_gain = 2
 		size_after_conv = -1
+		augment = True
 	elif datasetIdx == 3: #Galaxies
 		print("Galaxies")
 		# Load dataset
@@ -596,9 +600,13 @@ def run(opt):
 		sys.exit(1)
 	if len(deviceIdxs) > 1:
 		print("Using Multi-GPU Training Loop")
-		return trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
-		trial_num, combine_train_val, std_mult, deviceIdxs, datasetIdx, isClassification,
-		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy, display_step)
+		return trainMultiGPU(model, lr, momentum, psi_preconditioner,
+							 batch_size, n_epochs, n_filters, filter_gain,
+							 trial_num, combine_train_val, std_mult, deviceIdxs,
+							 datasetIdx, isClassification, n_rows, n_cols,
+							 n_channels, n_classes, size_after_conv, trainx,
+							 trainy, validx, validy, testx, testy, display_step,
+							 augment)
 	else:
 		print("Using Single-GPU Training Loop")
 		return trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
@@ -627,6 +635,7 @@ if __name__ == '__main__':
 	opt['datasetIdx'] = int(sys.argv[1])
 	opt['deviceIdxs'] = deviceIdxs
 	opt['displayStep'] = 10
+	opt['augment'] = False
 	#run
 	run(opt)
 	print("ALL FINISHED! :)")
