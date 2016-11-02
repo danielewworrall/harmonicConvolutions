@@ -279,6 +279,8 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 		modelFunc = deep_complex_bias
 	elif model == 'fullyConvolutional_Dieleman':
 		modelFunc = fullyConvolutional_Dieleman
+	elif model == 'deep_stable':
+		modelFunc = deep_stable
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
