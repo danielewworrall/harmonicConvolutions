@@ -129,13 +129,13 @@ def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 	nf3 = int(n_filters*(filter_gain**2.))
 	with tf.device(device):
 		weights = {
-			'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1', device=device),
-			'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2', device=device),
-			'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf2, std_mult=std_mult, name='W3', device=device),
-			'w4' : get_weights_dict([[6,],[5,],[5,]], nf2, nf2, std_mult=std_mult, name='W4', device=device),
-			'w5' : get_weights_dict([[6,],[5,],[5,]], nf2, nf3, std_mult=std_mult, name='W5', device=device),
-			'w6' : get_weights_dict([[6,],[5,],[5,]], nf3, nf3, std_mult=std_mult, name='W6', device=device),
-			'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, n_classes, std_mult=std_mult, name='W7', device=device),
+			'w1' : get_weights_dict([[6,],[5,]], n_channels, nf, std_mult=std_mult, name='W1', device=device),
+			'w2' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=std_mult, name='W2', device=device),
+			'w3' : get_weights_dict([[6,],[5,]], nf, nf2, std_mult=std_mult, name='W3', device=device),
+			'w4' : get_weights_dict([[6,],[5,]], nf2, nf2, std_mult=std_mult, name='W4', device=device),
+			'w5' : get_weights_dict([[6,],[5,]], nf2, nf3, std_mult=std_mult, name='W5', device=device),
+			'w6' : get_weights_dict([[6,],[5,]], nf3, nf3, std_mult=std_mult, name='W6', device=device),
+			'w7' : get_weights_dict([[6,],[5,]], nf3, n_classes, std_mult=std_mult, name='W7', device=device),
 		}
 		
 		biases = {
