@@ -67,7 +67,7 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size,
 				   combine_train_val, std_mult, gpuIdx, datasetIdx,
 				   isClassification, n_rows, n_cols, n_channels, n_classes,
 				   size_after_conv, trainx, trainy, validx, validy, testx,
-				   testy, display_step):
+				   testy, display_step, log_path, checkpoint_path):
 	n_input = n_rows * n_cols * n_channels
 	#select the correct function to build the model
 	if model == 'deep_complex_bias':
@@ -173,7 +173,7 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size,
 	config.log_device_placement = False
 	config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
 	sess = tf.Session(config=config)
-	summary = tf.train.SummaryWriter('./logs/current', sess.graph)
+	summary = tf.train.SummaryWriter(log_path, sess.graph)
 	print('  Summaries constructed')
 	
 	# GRAPH EXECUTION---------------------------------------------------
@@ -241,13 +241,15 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size,
 		validationAccuracy = vacc_total
 				
 		if (epoch) % 50 == 0:
-			save_model(saver, './', sess)
+			save_path = saver.save(sess, checkpoint_path)
+			print("Model saved in file: %s" % save_path)
 	
 	print "Testing"
 	if datasetIdx == 2 or datasetIdx == 3:
 		print("Test labels not available for this dataset, relying on validation accuracy instead.")
 		print('Test accuracy: %f' % (validationAccuracy,))
-		save_model(saver, './', sess)
+		save_path = saver.save(sess, saveDir + "checkpoints/model.ckpt")
+		print("Model saved in file: %s" % save_path)
 		sess.close()
 		return validationAccuracy
 	else:
@@ -261,7 +263,8 @@ def trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size,
 			tacc_total += tacc
 		tacc_total = tacc_total/(i+1.)
 		print('Test accuracy: %f' % (tacc_total,))
-		save_model(saver, './', sess)
+		save_path = saver.save(sess, checkpoint_path)
+		print("Model saved in file: %s" % save_path)
 		sess.close()
 		return tacc_total
 
@@ -514,6 +517,8 @@ def run(opt):
 	datasetIdx = opt['datasetIdx']
 	display_step = opt['displayStep']
 	augment = opt['augment']
+	log_path = opt['log_path']
+	checkpoint_path = opt['checkpoint_path']
 	#0. RESET DEFAULT GRAPH
 	tf.reset_default_graph()
 	#1. LOAD DATA---------------------------------------------------------------------
@@ -617,9 +622,14 @@ def run(opt):
 							 augment)
 	else:
 		print("Using Single-GPU Training Loop")
-		return trainSingleGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs, n_filters, filter_gain,
-		trial_num, combine_train_val, std_mult, deviceIdxs[0], datasetIdx, isClassification,
-		n_rows, n_cols, n_channels, n_classes, size_after_conv,trainx,trainy,validx,validy,testx,testy, display_step)
+		return trainSingleGPU(model, lr, momentum, psi_preconditioner,
+							  batch_size, n_epochs, n_filters, filter_gain,
+							  trial_num, combine_train_val, std_mult,
+							  deviceIdxs[0], datasetIdx, isClassification,
+							  n_rows, n_cols, n_channels, n_classes,
+							  size_after_conv, trainx, trainy, validx, validy,
+							  testx,testy, display_step, log_path,
+							  checkpoint_path)
 #ENTRY POINT------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
 	print("datasetIdx: ", int(sys.argv[1]))
