@@ -117,13 +117,11 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 								 padding='SAME', name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
-		
-def plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
-			 size_after_conv, n_classes, bs, phase_train, std_mult,
-			 filter_gain=2.0, device='/cpu:0'):
-	"""The deep_complex_bias architecture. Current test time score on rot-MNIST
-	is 97.81%---state-of-the-art
-	"""
+
+def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
+				size_after_conv, n_classes, bs, phase_train, std_mult,
+				filter_gain=2.0, device='/cpu:0'):
+	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 3
 	nf = n_filters
@@ -167,7 +165,7 @@ def plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 		
 		# LAYER 2
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
-										 filter_size=5, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0],
 										 padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train,
 								 name='batchNorm1', device=device)
@@ -182,7 +180,7 @@ def plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 
 		# LAYER 4
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
-										 filter_size=5, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0],
 										 padding='SAME', name='4')
 		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train,
 								 name='batchNorm2', device=device)
@@ -197,7 +195,7 @@ def plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 
 		# LAYER 6
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
-										 filter_size=5, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0],
 										 padding='SAME', name='4')
 		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train,
 								 name='batchNorm3', device=device)
@@ -208,7 +206,6 @@ def plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 								 padding='SAME', name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
-
 
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
 	"""conv2d wrapper. Supply input X, weights V and optional bias"""
