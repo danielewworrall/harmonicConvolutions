@@ -44,17 +44,19 @@ def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_com
 			opt['model'] = model
 			opt['lr'] = log_uniform_rand(5e-3, 1e-1)
 			opt['batch_size'] = int(log_uniform_rand(40,120))
-			opt['n_epochs'] = 100
-			opt['n_filters'] = int(uniform_rand(2,12))
+			opt['n_epochs'] = 80
+			opt['n_filters'] = int(uniform_rand(6,10))
 			opt['trial_num'] = trial_num
 			opt['combine_train_val'] = False
-			opt['std_mult'] = uniform_rand(0.05, 0.5)
-			opt['filter_gain'] = uniform_rand(1., 5.)
-			opt['momentum'] = uniform_rand(0.85, 0.99)
+			opt['std_mult'] = uniform_rand(0.1, 1.)
+			opt['filter_gain'] = uniform_rand(2., 4.)
+			opt['momentum'] = uniform_rand(0.9, 0.99)
 			opt['psi_preconditioner'] = log_uniform_rand(1e-1, 1e1)
 			opt['delay'] = int(uniform_rand(7,15))
 			opt['datasetIdx'] = datasetIdx
 			opt['deviceIdxs'] = deviceIdxs
+			opt['displayStep'] = 10
+			opt['augment'] = False
 			print
 			for key, val in opt.iteritems():
 				print(key + ': ' + str(val))

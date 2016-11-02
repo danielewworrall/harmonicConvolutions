@@ -529,6 +529,7 @@ def run(opt):
 			
 		lr  = 3e-2
 		std_mult = 1.
+		display_step = 10000/(batch_size*3.)
 
 		isClassification = True
 		n_rows = 28
