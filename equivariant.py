@@ -139,20 +139,20 @@ def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 		}
 		
 		biases = {
-			'b1' : get_bias_dict(nf, 2, name='b1', device=device),
-			'b2' : get_bias_dict(nf, 2, name='b2', device=device),
-			'b3' : get_bias_dict(nf2, 2, name='b3', device=device),
-			'b4' : get_bias_dict(nf2, 2, name='b4', device=device),
-			'b5' : get_bias_dict(nf3, 2, name='b5', device=device),
-			'b6' : get_bias_dict(nf3, 2, name='b6', device=device),
+			'b1' : get_bias_dict(nf, order, name='b1', device=device),
+			'b2' : get_bias_dict(nf, order, name='b2', device=device),
+			'b3' : get_bias_dict(nf2, order, name='b3', device=device),
+			'b4' : get_bias_dict(nf2, order, name='b4', device=device),
+			'b5' : get_bias_dict(nf3, order, name='b5', device=device),
+			'b6' : get_bias_dict(nf3, order, name='b6', device=device),
 			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
 				initializer=tf.constant_initializer(1e-2)),
-			'psi1' : get_phase_dict(1, nf, 2, name='psi1', device=device),
-			'psi2' : get_phase_dict(nf, nf, 2, name='psi2', device=device),
-			'psi3' : get_phase_dict(nf, nf2, 2, name='psi3', device=device),
-			'psi4' : get_phase_dict(nf2, nf2, 2, name='psi4', device=device),
-			'psi5' : get_phase_dict(nf2, nf3, 2, name='psi5', device=device),
-			'psi6' : get_phase_dict(nf3, nf3, 2, name='psi6', device=device)
+			'psi1' : get_phase_dict(1, nf, order, name='psi1', device=device),
+			'psi2' : get_phase_dict(nf, nf, order, name='psi2', device=device),
+			'psi3' : get_phase_dict(nf, nf2, order, name='psi3', device=device),
+			'psi4' : get_phase_dict(nf2, nf2, order, name='psi4', device=device),
+			'psi5' : get_phase_dict(nf2, nf3, order, name='psi5', device=device),
+			'psi6' : get_phase_dict(nf3, nf3, order, name='psi6', device=device)
 		}
 		# Reshape input picture
 		x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
