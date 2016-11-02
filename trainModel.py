@@ -524,6 +524,9 @@ def run(opt):
 		trainx, trainy = train['x'], train['y']
 		validx, validy = valid['x'], valid['y']
 		testx, testy = test['x'], test['y']
+			
+		lr  = 3e-2
+		std_mult = 1.
 
 		isClassification = True
 		n_rows = 28
