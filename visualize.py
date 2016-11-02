@@ -50,6 +50,8 @@ def deep_complex_bias(x, n_filters, n_classes, bs, std_mult):
 		'psi6' : get_bias_dict(4*nf, 2, rand_init=True, name='psi6'),
 		'b7' : tf.Variable(tf.constant(1e-2, shape=[n_classes]), name='b7')
 	}
+	
+	#weights = lazy_lpf(weights, sigma2=3.)
 	# Reshape input picture
 	x = tf.reshape(x, shape=[bs, 28, 28, 1])
 	features = []
@@ -63,7 +65,7 @@ def deep_complex_bias(x, n_filters, n_classes, bs, std_mult):
 		
 		# LAYER 2
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
-										 filter_size=5, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0],
 										 padding='SAME', name='2')
 		cv2 = complex_nonlinearity(cv2, biases['b2'], tf.nn.relu)
 		features.append(cv2)
@@ -73,14 +75,14 @@ def deep_complex_bias(x, n_filters, n_classes, bs, std_mult):
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 3
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
-										 filter_size=5, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0],
 										 padding='SAME', name='3')
 		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
 		features.append(cv3)
 
 		# LAYER 4
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
-										 filter_size=5, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0],
 										 padding='SAME', name='4')
 		cv4 = complex_nonlinearity(cv4, biases['b4'], tf.nn.relu)
 		features.append(cv4)
@@ -90,14 +92,14 @@ def deep_complex_bias(x, n_filters, n_classes, bs, std_mult):
 		cv4 = mean_pooling(cv4, strides=(1,1,1,1))
 		# LAYER 5
 		cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
-										 filter_size=5, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0],
 										 padding='SAME', name='5')
 		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
 		features.append(cv5)
 
 		# LAYER 6
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
-										 filter_size=5, output_orders=[0,1,2],
+										 filter_size=5, output_orders=[0],
 										 padding='SAME', name='4')
 		cv6 = complex_nonlinearity(cv6, biases['b6'], tf.nn.relu)
 		features.append(cv6)
@@ -157,7 +159,6 @@ def get_complex_bias_dict(n_filters, order, name='b'):
 		bias_y = tf.Variable(tf.constant(1e-2, shape=[n_filters]), name=name+'y_'+str(i))
 		bias_dict[i] = (bias_x, bias_y)
 	return bias_dict
-
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
 def minibatcher(inputs, targets, batch_size, shuffle=False):
@@ -224,6 +225,24 @@ def rotate_back_90(X):
 		X_.append(x)
 	X_ = np.stack(X_, axis=0)
 	return X_
+
+def lazy_lpf(weights, sigma2):
+	"""Low pass filter the weights using a 2d Gaussian with bandwidth sigma"""
+	tap6 = np.asarray(np.exp(-np.asarray([0.,1.,2.,4.,5.,8.])/sigma2))
+	tap6 = tf.reshape(to_constant_float(tap6), (6,1,1))
+	tap5 = np.asarray(np.exp(-np.asarray([1.,2.,4.,5.,8.])/sigma2))
+	tap5 = tf.reshape(to_constant_float(tap5), (5,1,1))
+	weights_ = {}
+	for k, v in weights.iteritems():
+		weights_[k] = {}
+		for key, val in v.iteritems():
+			if val.get_shape()[0] == 6:
+				val = val*tap6
+			elif val.get_shape()[0] == 5:
+				val = val*tap5
+			weights_[k][key] = val
+	return weights_
+	
 
 ##### MAIN SCRIPT #####
 def view_feature_maps(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
@@ -464,7 +483,7 @@ def equivariance_test(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
 
 	# Parameters
 	batch_size = 4
-	layer = 5
+	layer = 0
 	
 	# Network Parameters
 	n_input = 784 				# MNIST data input (img shape: 28*28)
@@ -536,6 +555,60 @@ def equivariance_test(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
 					plt.draw()
 					raw_input(i)
 
+def equivariance_stability(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
+					  n_filters=30, bn_config=[False, False], trial_num='N',
+					  combine_train_val=False, std_mult=0.4, lr_decay=0.05):
+	tf.reset_default_graph()
+	# Load dataset
+	mnist_train = np.load('./data/mnist_rotation_new/rotated_train.npz')
+	mnist_valid = np.load('./data/mnist_rotation_new/rotated_valid.npz')
+	mnist_test = np.load('./data/mnist_rotation_new/rotated_test.npz')
+	mnist_trainx, mnist_trainy = mnist_train['x'], mnist_train['y']
+	mnist_validx, mnist_validy = mnist_valid['x'], mnist_valid['y']
+	mnist_testx, mnist_testy = mnist_test['x'], mnist_test['y']
+
+	# Parameters
+	batch_size = 40
+	layer = 5
+	
+	# Network Parameters
+	n_input = 784 				# MNIST data input (img shape: 28*28)
+	n_classes = 10 				# MNIST total classes (0-9 digits)
+	dropout = 0.75 				# Dropout, probability to keep units
+	n_filters = n_filters
+	dataset_size = 10000
+	
+	# tf Graph input
+	X = tf.placeholder(tf.float32, [batch_size, n_input])
+	
+	# Construct model
+	features, __, __ = deep_complex_bias(X, n_filters, n_classes, batch_size, std_mult)
+	
+	plt.ion()
+	plt.show()
+	with tf.Session() as sess:
+		# Launch the graph
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
+		for __ in xrange(100):			
+			#saver = tf.train.Saver()
+			#restore_model(saver, './', sess)
+			plt.clf()
+			idx = np.random.randint(dataset_size)
+
+			input_ = mnist_trainx[idx,:]
+			input_ = np.reshape(input_, (1,784))
+			input_ = rotate_feature_maps(input_, batch_size)
+			output = sess.run(features[layer], feed_dict={X : input_})
+			
+			for k, v in output.iteritems():
+				for i in xrange(v[0].shape[-1]):
+					x = np.sum(np.sum(v[0][...,i], axis=1), axis=1)
+					y = np.sum(np.sum(v[1][...,i], axis=1), axis=1)
+					r = np.sqrt(x**2 + y**2)
+					plt.plot(np.linspace(0.,360.,num=batch_size),r)
+					plt.draw()
+			raw_input(idx)
 
 if __name__ == '__main__':
 	#view_feature_maps(model='deep_complex_bias', lr=2e-2, batch_size=200,
@@ -544,9 +617,11 @@ if __name__ == '__main__':
 	#view_biases()
 	#count_feature_maps(model='deep_complex_bias', lr=2e-2, batch_size=200,
 	#				  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
-	equivariance_test(model='deep_complex_bias', lr=2e-2, batch_size=200,
-					  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
-
+	#equivariance_test(model='deep_complex_bias', lr=2e-2, batch_size=200,
+	#				  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
+	equivariance_stability(model='deep_complex_bias', lr=2e-2, batch_size=200,
+						   n_epochs=500, std_mult=0.3, n_filters=5,
+						   combine_train_val=False)
 
 
 
