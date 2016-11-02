@@ -278,11 +278,13 @@ def minibatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 		for i in xrange(len(excerpt)):
 			img = inputs[excerpt[i]]
 			if augment:
-				img = preprocess(img, img_shape)
-			else:
-				img = np.reshape(img, img_shape)
-				img = img[10:-10,10:-10]
-				img = np.reshape(img, [1,np.prod(img.shape)])
+				# We use shuffle as a proxy for training
+				if shuffle:
+					img = preprocess(img, img_shape)
+				else:
+					img = np.reshape(img, img_shape)
+					img = img[10:-10,10:-10]
+					img = np.reshape(img, [1,np.prod(img.shape)])
 			im.append(img)
 		im = np.vstack(im)
 		yield im, targets[excerpt]
