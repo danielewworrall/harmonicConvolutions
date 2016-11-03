@@ -406,7 +406,13 @@ def get_complex_basis_matrices(filter_size, order=1):
 
 ##### SPECIAL FUNCTIONS #####
 def mean_pooling(X, ksize=(1,1,1,1), strides=(1,1,1,1)):
-	"""Implement mean pooling on complex-valued feature maps"""
+	"""Implement mean pooling on complex-valued feature maps. The complex mean
+	on a local receptive field, is performed as mean(real) + i*mean(imag)
+	
+	X: dict of channels {rotation order: (real, imaginary)}
+	ksize: kernel size 4-tuple (default (1,1,1,1))
+	strides: stride size 4-tuple (default (1,1,1,1))
+	"""
 	Y = {}
 	for k, v in X.iteritems():
 		y0 = tf.nn.avg_pool(v[0], ksize=ksize, strides=strides,
@@ -415,5 +421,72 @@ def mean_pooling(X, ksize=(1,1,1,1), strides=(1,1,1,1)):
 							padding='VALID', name='mean_pooling')
 		Y[k] = (y0,y1)
 	return Y
+
+def get_complex_basis_functions(filter_size, order):
+	"""Return complex exponential basis functions of order order
+	
+	filter_size: linear dimensions, must be an int
+	order: the filter order, must be an int (pos and neg allowed)
+	"""
+	k = filter_size
+	lin = np.linspace((1.-k)/2., (k-1.)/2., k)
+	X, Y = np.meshgrid(lin, lin)
+	theta = np.arctan2(-Y, X)
+	R = np.cos(order*theta)
+	R = to_constant_float(R/(np.sum(R**2)+1e-6))
+	I = np.sin(order*theta)
+	I = to_constant_float(I/(np.sum(I**2)+1e-6))
+	return tf.reshape(R, tf.pack([k,k,1,1])), tf.reshape(I, tf.pack([k,k,1,1]))
+
+def hough_module(X, weights, filter_size):
+	"""Implement a differential Hough module, which is a variation of the
+	equivariant voting module from Liu et al. (2012)
+	
+	X: dict of channels {rotation order: (real, imaginary)}
+	weights: dict of univariate complex weights {rotation order: (real, imaginary)}
+	filter_size: linear dimensions, must be an int
+	"""
+	# Create a basis spanning all the orders of the output feature maps
+	response = {}
+	Zr = 0
+	Zi = 0
+	for order, data in X.iteritems():
+		Wr, Wi = weights[order]
+		# May need to include an envelope term
+		basis = get_complex_basis_functions(filter_size, -order)
+		Yr, Yi = complex_conv(data, basis, padding='SAME', name='hough_conv')
+		# May need to constrain W to lie on the circle
+		Zr += Wr*Yr - Wi*Yi
+		Zi += Wr*Yi + Wi*Yr
+	return Zr, Zi
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
