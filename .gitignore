@@ -1,7 +1,7 @@
 *.t7
-logs
-checkpoints
+logs/
+checkpoints/
 pics/
-data
+data/
 *.pyc
 results/
