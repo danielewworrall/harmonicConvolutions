@@ -33,7 +33,7 @@ def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_com
 		opt['y'] = -1
 		while opt['y'] < 0:
 			# Remove files corresponding to trial
-			trial_num = i + 10
+			trial_num = i + 10 + 24
 			log_path = './logs/hyperopt_stable/trial'+str(trial_num)
 			log_path = log_path + '_' + datasetName
 			if os.path.exists(log_path):
@@ -111,5 +111,5 @@ if __name__ == '__main__':
 	deviceIdxs = [int(x.strip()) for x in sys.argv[2].split(',')]
 	print("deviceIdxs : ", deviceIdxs)
 	print("NetworkModel : ", sys.argv[3])
-	random_independent(n_trials=24, datasetIdx=int(sys.argv[1]), deviceIdxs=deviceIdxs, model=sys.argv[3]) #SWITCH MNIST/CIFAR
+	random_independent(n_trials=10, datasetIdx=int(sys.argv[1]), deviceIdxs=deviceIdxs, model=sys.argv[3]) #SWITCH MNIST/CIFAR
 	print("ALL FINISHED! :)")
