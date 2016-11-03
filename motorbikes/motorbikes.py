@@ -29,11 +29,13 @@ def deep_motorbike(x, opt):
 	phase_train = opt['phase_train']
 	std_mult = opt['std_mult']
 	filter_gain = opt['filter_gain']
+	n_bases = opt['n_bases']
+	hough_size = opt['hough_size']
 	
 	weights = {
 		'w1' : get_weights_dict([[6,],[5,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
 		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
-		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, n_classes, std_mult=std_mult, name='W3'),
+		'w3' : get_weights_dict([[6,],[5,],[5,]], nf, 1, std_mult=std_mult, name='W3')
 	}
 	
 	biases = {
@@ -44,8 +46,10 @@ def deep_motorbike(x, opt):
 	psis = {
 		'p1' : get_phase_dict(1, nf, order, name='psi1'),
 		'p2' : get_phase_dict(nf, nf, order, name='psi2'),
-		'p3' : get_phase_dict(nf, n_classes, order, name='psi3'),
+		'p3' : get_phase_dict(nf, 1, order, name='psi3'),
 	}
+	
+	hough_weights = get_hough_dict([0,1,2], name='hough_weights')
 	
 	# Convolutional Layers
 	with tf.name_scope('convolutions') as scope:
@@ -58,15 +62,17 @@ def deep_motorbike(x, opt):
 										 filter_size=5,
 										 output_orders=xrange(order+1),
 										 padding='SAME', name='2')
-		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train)
+		cv2 = complex_nonlinearity(cv2, biases['b2'], tf.nn.relu)
 
 		# LAYER 3
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], psis['p3'],
+										 output_orders=xrange(n_bases),
 										 filter_size=5, padding='SAME',
 										 name='3')
 	
-	with tf.name_scope('output') as scope:
-		return tf.reduce_mean(sum_magnitudes(cv3), reduction_indices=[1,2])
+	with tf.name_scope('hough_module') as scope:
+		cv4 = hough_module(cv3, hough_weights, filter_size=hough_size)
+		return tf.sqrt(tf.square(cv4[0]) + tf.square(cv4[1]) + 1e-4), tf.reshape(cv3[0][0][:,:,:,0], (-1,125,200,1))
 
 ################################################################################
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
@@ -112,6 +118,16 @@ def get_phase_dict(n_in, n_out, order, name='b'):
 		phase_dict[i] = phase
 	return phase_dict
 
+def get_hough_dict(orders, name='h'):
+	"""Return a dict of hough weights"""
+	hough_dict = {}
+	for order in orders:
+		hough_real = tf.Variable(tf.constant(1e-2, shape=[1,]),
+								 name=name+'_r'+str(order))
+		hough_imag = tf.Variable(tf.constant(1e-2, shape=[1,]),
+								 name=name+'_i'+str(order))
+		hough_dict[order] = (hough_real, hough_imag)
+	return hough_dict
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
 def minibatcher(inputs, targets, batch_size, shuffle=False):
@@ -176,7 +192,7 @@ def dataGen(addresses, labels, batch_size, shuffle=True):
 			im = []
 			lab = []
 			for i in batch:
-				img = np.reshape(skio.imread(addresses[i]), (125,200,1))
+				img = skio.imread(addresses[i])[:,:,np.newaxis]
 				img = ZMUV(img)
 				im.append(img)
 				lab.append(int(labels[i]))
@@ -223,9 +239,17 @@ def get_addresses(base_dir, n_images, tag, pad):
 		addresses.append(base_dir + '/' + tag + '_' + str(i+1).zfill(pad) + '.png')
 	return addresses
 	
+def get_mask(sigma2=10):
+	"""Make a Gaussian blob as 62, 100"""
+	x = np.arange(200)
+	y = np.arange(125)
+	
+	X, Y = np.meshgrid(x,y)
+	return np.exp(-((X-100)**2 + (Y-62)**2)/sigma2)
+
 
 ##### MAIN SCRIPT #####
-def run(opt):
+def train(opt):
 	tf.reset_default_graph()
 	# Load dataset
 	n_pos = 65
@@ -269,26 +293,27 @@ def run(opt):
 	
 	# tf Graph input
 	x = tf.placeholder(tf.float32, [batch_size, 125, 200, 1])
-	y = tf.placeholder(tf.int64, [batch_size])
+	y = tf.placeholder(tf.float32, [batch_size, 125, 200, 1])
 	learning_rate = tf.placeholder(tf.float32)
-	#keep_prob = tf.placeholder(tf.float32)
 	phase_train = tf.placeholder(tf.bool)
 	opt['phase_train'] = phase_train
 	
 	# Construct model
-	pred = deep_motorbike(x, opt)
-
+	pred, inter = deep_motorbike(x, opt)
+	
 	# Define loss and optimizer
-	cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
+	cost = tf.reduce_sum(tf.square(pred - y), reduction_indices=[1,2,3])
+	cost = tf.reduce_mean(cost)
 	print('  Constructed loss')
-	opt = tf.train.MomentumOptimizer(learning_rate=learning_rate,
-									 momentum=momentum,
-									 use_nesterov=nesterov).minimize(cost)
+	#opt = tf.train.MomentumOptimizer(learning_rate=learning_rate,
+	#								 momentum=momentum,
+	#								 use_nesterov=nesterov).minimize(cost)
+	opt = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
 	print('  Optimizer built')
 	
 	# Evaluate model
-	correct_pred = tf.equal(tf.argmax(pred, 1), y)
-	accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+	#correct_pred = tf.equal(tf.argmax(pred, 1), y)
+	#accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 	print('  Evaluation metric constructed')
 			
 	# Initializing the variables
@@ -296,12 +321,13 @@ def run(opt):
 	print('  Variables initialized')
 	
 	# Summary writers
-	acc_ph = tf.placeholder(tf.float32, [], name='acc_')
-	acc_op = tf.scalar_summary("Validation Accuracy", acc_ph)
 	cost_ph = tf.placeholder(tf.float32, [], name='cost_')
 	cost_op = tf.scalar_summary("Training Cost", cost_ph)
 	lr_ph = tf.placeholder(tf.float32, [], name='lr_')
 	lr_op = tf.scalar_summary("Learning Rate", lr_ph)
+	input_op = tf.image_summary("Input image", x, max_images=5)
+	inter_op = tf.image_summary("Intermediate image", inter, max_images=5)
+	output_op = tf.image_summary("Output image", pred, max_images=5)
 	
 	config = tf.ConfigProto()
 	config.gpu_options.allow_growth = True
@@ -328,41 +354,44 @@ def run(opt):
 	best = 0.
 	print('  Begin training')
 	# Keep training until reach max iterations
+	mask = get_mask(25.)[np.newaxis,:,:,np.newaxis]*10.
 	epoch = 0
 	while epoch < n_epochs:
 		generator = dataGen(addresses, labels, batch_size, shuffle=True)
 		cost_total = 0.
-		acc_total = 0.
 		for i, batch in enumerate(generator):
 			batch_x, batch_y = batch
+			batch_y = batch_y[:,np.newaxis,np.newaxis,np.newaxis]*mask
 			# Optimize
 			feed_dict = {x: batch_x, y: batch_y, learning_rate: lr_current,
 						 phase_train : True}
-			__, cost_, acc_ = sess.run([opt, cost, accuracy],
-				feed_dict=feed_dict)
+			__, cost_ = sess.run([opt, cost], feed_dict=feed_dict)
 			if np.isnan(cost_):
 				print
 				print('Oops: Training went unstable')
 				print
 				return -1
-				
+			print('  %f' % (cost_,))
+			if i % 10 == 0:
+				feed_dict = {x: batch_x, phase_train : False}
+				summaries = sess.run([input_op, inter_op, output_op], feed_dict=feed_dict)
+				for summ in summaries:
+					summary.add_summary(summ, step)
+
 			cost_total += cost_
-			acc_total += acc_
 			step += 1
 		cost_total /=(i+1.)
-		acc_total /=(i+1.)
 		
-		feed_dict={cost_ph : cost_total, acc_ph : acc_total, lr_ph : lr_current}
-		summaries = sess.run([cost_op, acc_op, lr_op], feed_dict=feed_dict)
+		feed_dict={cost_ph : cost_total, lr_ph : lr_current}
+		summaries = sess.run([cost_op, lr_op], feed_dict=feed_dict)
 		for summ in summaries:
 			summary.add_summary(summ, step)
 
-		best, counter, lr_current = get_learning_rate(acc_total, best, counter, lr_current, delay=delay)
+		#best, counter, lr_current = get_learning_rate(acc_total, best, counter, lr_current, delay=delay)
 		
 		print "[" + str(trial_num),str(epoch) + \
 			"], Minibatch Loss: " + \
-			"{:.6f}".format(cost_total) + ", Train Acc: " + \
-			"{:.5f}".format(acc_total) + ", Time: " + \
+			"{:.6f}".format(cost_total) + ", Time: " + \
 			"{:.5f}".format(time.time()-start) + ", Counter: " + \
 			"{:2d}".format(counter) 
 		epoch += 1
@@ -375,15 +404,91 @@ def run(opt):
 	print("Model saved in file: %s" % save_path)
 	sess.close()
 
+def inference(opt):
+	tf.reset_default_graph()
+	# Load dataset
+	n_pos = 65
+	n_neg = 900
+	n_test1 = 69
+	n_test2 = 100
+	pos_dir = '../data/motorbikes/train_images/positives_resized'
+	neg_dir = '../data/motorbikes/train_images/negatives_resized'
+	test1_dir = '../data/motorbikes/test_images/test1/images_resized'
+	test2_dir = '../data/motorbikes/test_images/test2/images_resized'
+	
+	pos_addresses = get_addresses(pos_dir, n_pos, 'image', 4)
+	neg_addresses = get_addresses(neg_dir, n_neg, 'image', 4)
+	test1_addresses = get_addresses(test1_dir, n_test1, 'image', 4)
+	test2_addresses = get_addresses(test2_dir, n_test2, 'image', 4)
+	
+	addresses = test2_addresses
+	labels = np.zeros((len(addresses),))
+
+	# Parameters
+	nesterov=True
+	model = opt['model']
+	lr = opt['lr']
+	batch_size = 1 # opt['batch_size']
+	n_epochs = opt['n_epochs']
+	n_filters = opt['n_filters']
+	trial_num = opt['trial_num']
+	combine_train_val = opt['combine_train_val']
+	std_mult = opt['std_mult']
+	filter_gain = opt['filter_gain']
+	momentum = opt['momentum']
+	psi_preconditioner = opt['psi_preconditioner']
+	delay = opt['delay']
+	summary_dir = opt['log_dir'] + '/trial' + str(trial_num)
+	checkpoint_dir = opt['checkpoint_dir'] + '/trial' + str(trial_num)
+	
+	# Network Parameters
+	n_classes = opt['n_classes']
+	dataset_size = len(labels)
+	
+	# tf Graph input
+	x = tf.placeholder(tf.float32, [1, None, None, 1])
+	y = tf.placeholder(tf.int64, [batch_size])
+	phase_train = tf.placeholder(tf.bool)
+	opt['phase_train'] = phase_train
+	
+	# Construct model
+	__, fm = deep_motorbike(x, opt)
+	print(' Model constructed')
+	
+	config = tf.ConfigProto()
+	config.gpu_options.allow_growth = True
+	config.log_device_placement = False
+	config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
+	plt.figure(figsize=(8,12))
+	plt.ion()
+	plt.show()
+	with tf.Session(config=config) as sess:
+		# Launch the graph
+		saver = tf.train.Saver()
+		saver.restore(sess, checkpoint_dir + '/model.ckpt')
+	
+		generator = dataGen(addresses, labels, batch_size, shuffle=False)
+		for i, batch in enumerate(generator):
+			batch_x, batch_y = batch
+			# Optimize
+			feed_dict = {x: batch_x, y: batch_y, phase_train : False}
+			feature_map = sess.run(fm, feed_dict=feed_dict)
+			plt.subplot(2,1,1)
+			plt.imshow(batch_x[0,:,:,0], cmap='gray', interpolation='nearest')
+			plt.subplot(2,1,2)
+			plt.imshow(feature_map[0,:,:,0], cmap='jet', interpolation='nearest')
+			plt.draw()
+			plt.pause(1.)
+			
 
 if __name__ == '__main__':
 	opt = {}
 	opt['model'] = 'deep_motorbike'
 	opt['n_classes'] = 2
-	opt['lr'] = 3e-2
+	opt['lr'] = 1e-3
 	opt['batch_size'] = 30
-	opt['n_epochs'] = 120
-	opt['n_filters'] = 8
+	opt['n_epochs'] = 10
+	opt['n_filters'] = 32
 	opt['trial_num'] = 'M'
 	opt['combine_train_val'] = False
 	opt['std_mult'] = 0.3
@@ -393,5 +498,8 @@ if __name__ == '__main__':
 	opt['delay'] = 13
 	opt['log_dir'] = '../logs/motorbikes'
 	opt['checkpoint_dir'] = '../checkpoints/motorbikes'
-	run(opt)
+	opt['n_bases'] = 2
+	opt['hough_size'] = 125
+	train(opt)
+	#inference(opt)
 
