@@ -512,7 +512,7 @@ def preprocess(im, im_shape, crop_margin):
 	im = sktr.warp(im, affine_matrix)
 	new_shape = np.asarray(im_shape) - 2.*np.asarray((crop_margin,)*2)
 	im = central_crop(im, new_shape)
-	plt.imshow()
+	plt.imshow(im, interpolation='nearest', cmap='gray')
 	plt.show()
 	return np.reshape(im, [1,np.prod(new_shape)])
 
