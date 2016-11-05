@@ -8,6 +8,7 @@ import time
 import numpy as np
 import scipy.linalg as scilin
 import scipy.ndimage.interpolation as sciint
+import skimage.transform as sktr
 import tensorflow as tf
 
 import input_data
@@ -18,7 +19,6 @@ from matplotlib import pyplot as plt
 
 import scipy as sp
 from scipy import ndimage
-from scipy import misc
 
 ##### HELPERS #####
 def checkFolder(dir):
@@ -490,20 +490,61 @@ def minibatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 		im = np.vstack(im)
 		yield im, targets[excerpt]
 
-def preprocess(im, im_shape, crop_shape):
+def preprocess(im, im_shape, crop_margin):
 	'''Data normalizations and augmentations'''
 	# Random rotations
+	'''
 	im = np.reshape(im, im_shape)
 	angle = np.random.rand() * 360.
 	im = sciint.rotate(im, angle, reshape=False)
 	# Random crops
 	crops = np.random.randint(2*crop_shape, size=2)
-	crop_im_shape = (im_shape[0] - 2*crop_shape, im_shape[1] - 2*crop_shape)
-	im = im[crops[0]:crops[0]+crop_im_shape[0],crops[1]:crops[1]+crop_im_shape[1]]
+	crop_shape = np.asarray(im_shape[0]-2*crop_margin,im_shape[1]-2*crop_margin)
+	im = im[crops[0]:crops[0]+crop_shape[0],crops[1]:crops[1]+crop_shape[1]]
+	'''
 	# Random fliplr
 	if np.random.rand() > 0.5:
 		im = im[:,::-1]
+	'''
+	# Rescale log_uniform[1,1.6]
+	rescale_factor = log_uniform_rand(1.,1.6)
+	new_shape = crop_shape*rescale_factor
+	im = sktr.resize(im, new_shape)
+	im = central_crop(im, crop_shape)
+	'''
+	# Random affine transformation
+	new_scale = log_uniform_rand(1.,1.6)
+	new_angle = uniform_rand(-np.pi,np.pi)
+	new_shear = uniform_rand(-np.pi/9.,np.pi/9.)
+	new_translation = (uniform_rand(-crop_margin,crop_margin),
+					   uniform_rand(-crop_margin,crop_margin))
+	affine_matrix = sktr.AffineTransform(scale=(new_scale, new_scale),
+										 rotation=new_angle, shear=new_shear,
+										 translation=new_translation)
+	output = sktr.warp(im, affine_matrix)
 	return np.reshape(im, [1,np.prod(im.shape)])
+
+
+def central_crop(im, new_shape):
+	im_shape = np.asarray(im.shape)
+	new_shape = np.asarray(new_shape)
+	top_left = (im_shape - new_shape)/2
+	bottom_right = top_left + new_shape
+	return im[top_left[0]:bottom_right[0],top_left[1]:bottom_right[1]]
+
+def uniform_rand(min_, max_):
+	gap = max_ - min_
+	return gap*np.random.rand() + min_
+
+def log_uniform_rand(min_, max_, size=1):
+	if size > 1:
+		output = []
+		for i in xrange(size):
+			output.append(10**uniform_rand(np.log10(min_), np.log10(max_)))
+	else:
+		output = 10**uniform_rand(np.log10(min_), np.log10(max_))
+	return output
+
 
 def save_model(saver, saveDir, sess, saveSubDir=''):
 	"""Save a model checkpoint"""

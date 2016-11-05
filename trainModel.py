@@ -370,8 +370,8 @@ def run(opt):
 		data = load_dataset(data_dir, 'plankton_numpy')
 		opt['lr'] = 1.
 		opt['batch_size'] = 32
-		opt['std_mult'] = 1.
-		opt['momentum'] = 0.93
+		opt['std_mult'] = 1e-1
+		opt['momentum'] = 0.95
 		opt['psi_preconditioner'] = 3.4
 		opt['delay'] = 8
 		opt['display_step'] = 10
