@@ -492,28 +492,11 @@ def minibatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 
 def preprocess(im, im_shape, crop_margin):
 	'''Data normalizations and augmentations'''
-	# Random rotations
-	'''
-	
-	angle = np.random.rand() * 360.
-	im = sciint.rotate(im, angle, reshape=False)
-	# Random crops
-	crops = np.random.randint(2*crop_shape, size=2)
-	crop_shape = np.asarray(im_shape[0]-2*crop_margin,im_shape[1]-2*crop_margin)
-	im = im[crops[0]:crops[0]+crop_shape[0],crops[1]:crops[1]+crop_shape[1]]
-	'''
 	# Random fliplr
 	im = np.reshape(im, im_shape)
 	if np.random.rand() > 0.5:
 		im = im[:,::-1]
-	'''
-	# Rescale log_uniform[1,1.6]
-	rescale_factor = log_uniform_rand(1.,1.6)
-	new_shape = crop_shape*rescale_factor
-	im = sktr.resize(im, new_shape)
-	im = central_crop(im, crop_shape)
-	'''
-	# Random affine transformation
+	# Random affine transformation: rotation, scale, stretch, shift and shear
 	rdm_scale = log_uniform_rand(1.,1.6)
 	rdm_angle = uniform_rand(0,np.pi/2.)
 	rdm_stretch = log_uniform_rand(1.,1.3)
@@ -529,6 +512,8 @@ def preprocess(im, im_shape, crop_margin):
 	im = sktr.warp(im, affine_matrix)
 	new_shape = np.asarray(im_shape) - 2.*np.asarray((crop_margin,)*2)
 	im = central_crop(im, new_shape)
+	plt.imshow()
+	plt.show()
 	return np.reshape(im, [1,np.prod(new_shape)])
 
 def central_crop(im, new_shape):
