@@ -494,7 +494,7 @@ def preprocess(im, im_shape, crop_margin):
 	'''Data normalizations and augmentations'''
 	# Random rotations
 	'''
-	im = np.reshape(im, im_shape)
+	
 	angle = np.random.rand() * 360.
 	im = sciint.rotate(im, angle, reshape=False)
 	# Random crops
@@ -503,6 +503,7 @@ def preprocess(im, im_shape, crop_margin):
 	im = im[crops[0]:crops[0]+crop_shape[0],crops[1]:crops[1]+crop_shape[1]]
 	'''
 	# Random fliplr
+	im = np.reshape(im, im_shape)
 	if np.random.rand() > 0.5:
 		im = im[:,::-1]
 	'''
