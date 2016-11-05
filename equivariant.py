@@ -521,9 +521,10 @@ def preprocess(im, im_shape, crop_margin):
 	affine_matrix = sktr.AffineTransform(scale=(new_scale, new_scale),
 										 rotation=new_angle, shear=new_shear,
 										 translation=new_translation)
-	output = sktr.warp(im, affine_matrix)
-	return np.reshape(im, [1,np.prod(im.shape)])
-
+	im = sktr.warp(im, affine_matrix)
+	new_shape = np.asarray(im_shape) - 2.*np.asarray((crop_margin,)*2)
+	im = central_crop(im, new_shape)
+	return np.reshape(im, [1,np.prod(new_shape)])
 
 def central_crop(im, new_shape):
 	im_shape = np.asarray(im.shape)
