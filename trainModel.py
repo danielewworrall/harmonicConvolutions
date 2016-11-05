@@ -354,6 +354,8 @@ def run(opt):
 		opt['crop_shape'] = 0
 		opt['n_channels'] = 1
 		opt['n_classes'] = 10
+		opt['log_path'] = './logs/deep_mnist'
+		opt['checkpoint_path'] = './checkpoints/deep_mnist'
 	elif opt['datasetIdx'] == 'cifar10': 
 		# Load dataset
 		data = load_dataset(data_dir, 'cifar_numpy')
@@ -366,8 +368,8 @@ def run(opt):
 		# Load dataset
 		data = load_dataset(data_dir, 'plankton_numpy')
 		opt['model'] = getattr(equivariant, 'deep_plankton')
-		opt['lr'] = 3e-1
-		opt['batch_size'] = 50
+		opt['lr'] = 1.
+		opt['batch_size'] = 32
 		opt['std_mult'] = 1.
 		opt['momentum'] = 0.93
 		opt['psi_preconditioner'] = 3.4

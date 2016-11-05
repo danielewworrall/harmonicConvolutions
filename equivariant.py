@@ -321,8 +321,7 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 								 name='batchNorm4', device=device)
 	
 	with tf.name_scope('block5') as scope:
-		cv11 = mean_pooling(cv10, ksize=(1,3,3,1), strides=(1,2,2,1))
-		cv11 = complex_input_conv(cv11, weights['w11'], filter_size=5,
+		cv11 = complex_input_conv(cv10, weights['w11'], filter_size=5,
 								 padding='SAME', name='11')
 		cv11 = tf.reduce_mean(sum_magnitudes(cv11), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv11, biases['b11'])
