@@ -494,12 +494,14 @@ def preprocess(im, im_shape, crop_margin):
 	'''Data normalizations and augmentations'''
 	# Random fliplr
 	im = np.reshape(im, im_shape)
+	plt.imshow(im, interpolation='nearest', cmap='gray')
+	plt.show()
 	if np.random.rand() > 0.5:
 		im = im[:,::-1]
 	# Random affine transformation: rotation, scale, stretch, shift and shear
-	rdm_scale = log_uniform_rand(1.,1.6)
+	rdm_scale = log_uniform_rand(1./1.6,1.6)
 	rdm_angle = uniform_rand(0,np.pi/2.)
-	rdm_stretch = log_uniform_rand(1.,1.3)
+	rdm_stretch = log_uniform_rand(1./1.3,1.3)
 	new_scale = (rdm_scale*(1.+rdm_stretch*np.cos(rdm_angle)),
 				 rdm_scale*(1.+rdm_stretch*np.sin(rdm_angle)))
 	new_angle = uniform_rand(-np.pi,np.pi)
