@@ -514,12 +514,16 @@ def preprocess(im, im_shape, crop_margin):
 	im = central_crop(im, crop_shape)
 	'''
 	# Random affine transformation
-	new_scale = log_uniform_rand(1.,1.6)
+	rdm_scale = log_uniform_rand(1.,1.6)
+	rdm_angle = uniform_rand(0,np.pi/2.)
+	rdm_stretch = log_uniform_rand(1.,1.3)
+	new_scale = (rdm_scale*(1.+rdm_stretch*np.cos(rdm_angle)),
+				 rdm_scale*(1.+rdm_stretch*np.sin(rdm_angle)))
 	new_angle = uniform_rand(-np.pi,np.pi)
 	new_shear = uniform_rand(-np.pi/9.,np.pi/9.)
 	new_translation = (uniform_rand(-crop_margin,crop_margin),
 					   uniform_rand(-crop_margin,crop_margin))
-	affine_matrix = sktr.AffineTransform(scale=(new_scale, new_scale),
+	affine_matrix = sktr.AffineTransform(scale=new_scale,
 										 rotation=new_angle, shear=new_shear,
 										 translation=new_translation)
 	im = sktr.warp(im, affine_matrix)
