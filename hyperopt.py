@@ -3,21 +3,28 @@
 import os
 import shutil
 import sys
+import shutil
 import time
+sys.path.append('./cifar')
 
 import cPickle as pkl
 import numpy as np
 
+<<<<<<< HEAD
 from trainModel import run
 ##### HELPERS #####
 def checkFolder(dir):
 	if not os.path.exists(dir):
 		os.makedirs(dir)
+=======
+from train_cifar import run
+>>>>>>> 2b4ea0d49e47df165f5e59a94a279a253cdf65f6
 
 def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_complex_bias'):
 	y_best = 0.
 	best_params = {}
 	opt = {}
+<<<<<<< HEAD
 	datasetName = ''
 	if datasetIdx == 0:
 		datasetName = 'MNIST'
@@ -29,10 +36,13 @@ def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_com
 		datasetName = 'GALAXIES'
 	else:
 		datasetName = 'UNKOWN_DATASET'
+=======
+>>>>>>> 2b4ea0d49e47df165f5e59a94a279a253cdf65f6
 	for i in xrange(n_trials):
 		opt['y'] = -1
 		while opt['y'] < 0:
 			# Remove files corresponding to trial
+<<<<<<< HEAD
 			trial_num = i + 10 + 24
 			log_path = './logs/hyperopt_stable/trial'+str(trial_num)
 			log_path = log_path + '_' + datasetName
@@ -61,18 +71,49 @@ def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_com
 			opt['augment'] = False
 			opt['log_path'] = log_path
 			opt['checkpoint_path'] = checkpoint_path + ''
+=======
+			trial_num = i + 10
+			log_path = './logs/cifar/trial'+str(trial_num)
+			if os.path.exists(log_path):
+				shutil.rmtree(log_path)
+			checkpoint_path = './checkpoints/cifar/trial'+str(trial_num)
+			if os.path.exists(checkpoint_path):
+				shutil.rmtree(checkpoint_path)
+			
+			opt['model'] = 'deep_complex_bias'
+			opt['lr'] = log_uniform_rand(5e-3, 1e-1)
+			opt['batch_size'] = int(log_uniform_rand(40,120))
+			opt['n_epochs'] = 80
+			opt['n_filters'] = 32
+			opt['trial_num'] = trial_num
+			opt['combine_train_val'] = False
+			opt['std_mult'] = uniform_rand(0.05, 0.5)
+			opt['filter_gain'] = 2
+			opt['momentum'] = uniform_rand(0.85, 0.99)
+			opt['psi_preconditioner'] = log_uniform_rand(1e-1, 1e1)
+			opt['delay'] = int(uniform_rand(7,15))
+	
+>>>>>>> 2b4ea0d49e47df165f5e59a94a279a253cdf65f6
 			print
 			for key, val in opt.iteritems():
 				print(key + ': ' + str(val))
 			print
 			opt['y'] = run(opt)
 		
+<<<<<<< HEAD
 		save_name = './logs/hyperopt_stable/numpy/trial'+str(trial_num)+'.pkl'
+=======
+		save_name = './logs/cifar/numpy/trial'+str(trial_num)+'.pkl'
+>>>>>>> 2b4ea0d49e47df165f5e59a94a279a253cdf65f6
 		with open(save_name, 'w') as fp:
 			pkl.dump(opt, fp, protocol=pkl.HIGHEST_PROTOCOL)
 		if opt['y'] > y_best:
 			y_best = opt['y']
+<<<<<<< HEAD
 			best_params = opt.copy()
+=======
+			best_params = opt
+>>>>>>> 2b4ea0d49e47df165f5e59a94a279a253cdf65f6
 		
 		print
 		print
@@ -81,6 +122,10 @@ def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_com
 		print('Best params so far')	
 		for key, val in best_params.iteritems():
 			print('Best ' + key + ': ' + str(val))
+<<<<<<< HEAD
+		print
+		print
+=======
 		print
 		print
 		print
@@ -90,6 +135,38 @@ def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_com
 	print('Best params overall')	
 	for key, val in best_params.iteritems():
 		print('Best ' + key + ': ' + str(val))
+	
+	"""
+	y = []
+	best_params['combine_train_val'] = True
+	for i in xrange(5):
+		best_params['trial_num'] = 'T-'+str(i)
+		y.append(run(best_params))
+		print
+		print('Current y: %f' % (y[i],))
+>>>>>>> 2b4ea0d49e47df165f5e59a94a279a253cdf65f6
+		print
+	
+	print('Best y overall')
+	print y_best
+	print('Best params overall')	
+<<<<<<< HEAD
+	for key, val in best_params.iteritems():
+		print('Best ' + key + ': ' + str(val))
+=======
+	for key, val in opt.iteritems():
+		print('Best ' + key + ': ' + str(val))
+	# Compute statistics
+	print y
+	y = np.asarray(y)
+	save_name = './logs/hyperopt_mean_pooling/numpy/test.npz'
+	np.savez(save_name, y=y)
+	
+	mean = np.mean(y)
+	print('Mean: %f' % (mean,))
+	print('Std: %f' % (np.std(y),))
+	"""
+>>>>>>> 2b4ea0d49e47df165f5e59a94a279a253cdf65f6
 
 def uniform_rand(min_, max_):
 	gap = max_ - min_
@@ -107,9 +184,13 @@ def log_uniform_rand(min_, max_, size=1):
 
 #ENTRY POINT:
 if __name__ == '__main__':
+<<<<<<< HEAD
 	print("datasetIdx: ", int(sys.argv[1]))
 	deviceIdxs = [int(x.strip()) for x in sys.argv[2].split(',')]
 	print("deviceIdxs : ", deviceIdxs)
 	print("NetworkModel : ", sys.argv[3])
 	random_independent(n_trials=10, datasetIdx=int(sys.argv[1]), deviceIdxs=deviceIdxs, model=sys.argv[3]) #SWITCH MNIST/CIFAR
 	print("ALL FINISHED! :)")
+=======
+	random_independent(10)
+>>>>>>> 2b4ea0d49e47df165f5e59a94a279a253cdf65f6

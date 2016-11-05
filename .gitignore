@@ -1,6 +1,11 @@
 *.t7
+<<<<<<< HEAD
 logs/
 checkpoints/
+=======
+logs
+checkpoints
+>>>>>>> 2b4ea0d49e47df165f5e59a94a279a253cdf65f6
 pics/
 data/
 *.pyc
