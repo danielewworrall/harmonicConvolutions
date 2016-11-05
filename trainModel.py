@@ -71,15 +71,15 @@ def get_loss(opt, pred, y):
 
 def get_io_placeholders(opt):
 	"""Return placeholders for classification/regression"""
-	io = {}
-	n_input = opt['dim']*opt['dim']*opt['n_channels']
-	io['x'] = tf.placeholder(tf.float32, [opt['batch_size'], n_input], name='x')
+	size = opt['dim'] - 2*opt['crop_shape']
+	n_input = size*size*opt['n_channels']
+	io_x = tf.placeholder(tf.float32, [opt['batch_size'], n_input], name='x')
 	if opt['is_classification']:
-		io['y'] = tf.placeholder(tf.int64, [opt['batch_size']], name='y')
+		io_y = tf.placeholder(tf.int64, [opt['batch_size']], name='y')
 	else:
-		io['y'] = tf.placeholder(tf.float32, [opt['batch_size'],
+		io_y = tf.placeholder(tf.float32, [opt['batch_size'],
 											  opt['num_classes']], name='y')
-	return io
+	return io_x, io_y
 
 def build_optimizer(cost, lr, opt):
 	"""Apply the psi_precponditioner"""
@@ -104,192 +104,105 @@ def get_evaluation(pred, y, opt):
 		accuracy = cost
 	return accuracy
 
-def loop(mode, sess, io, opt, data, cost, acc, lr, lr_, optim, pt, step=0):
+def build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
+	'''Build a feed_dict appropriate to training regime'''
+	batch_x, batch_y = batch
+	fd = {lr : lr_, pt : pt_}
+	bs = opt['batch_size']
+	for g in xrange(len(opt['deviceIdxs'])):
+		fd[io['x'][g]] = batch_x[g*bs:(g+1)*bs,:]
+		fd[io['y'][g]] = batch_y[g*bs:(g+1)*bs]
+	return fd
+
+##### TRAINING LOOPS #####
+def loop(mode, sess, io, opt, data, cost, acc, lr, lr_, pt, optim=None, step=0):
 	"""Run a loop"""
 	X = data[mode+'_x']
 	Y = data[mode+'_y']
 	is_training = (mode=='train')
-	generator = minibatcher(X, Y, opt['batch_size'], shuffle=is_training)
+	n_GPUs = len(opt['deviceIdxs'])
+	generator = minibatcher(X, Y, n_GPUs*opt['batch_size'],
+							shuffle=is_training, augment=opt['augment'],
+							img_shape=(opt['dim'], opt['dim']),
+							crop_shape=opt['crop_shape'])
 	cost_total = 0.
 	acc_total = 0.
 	for i, batch in enumerate(generator):
-		batch_x, batch_y = batch
-		fd = {io['x']: batch_x, io['y']: batch_y, lr: lr_, pt: is_training}
+		fd = build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
 		if mode == 'train':
 			__, cost_, acc_ = sess.run([optim, cost, acc], feed_dict=fd)
 		else:
 			cost_, acc_ = sess.run([cost, acc], feed_dict=fd)
-			
 		if step % opt['display_step'] == 0:
 			print('  ' + mode + ' Acc.: %f' % acc_)
 		cost_total += cost_
 		acc_total += acc_
 		step += 1
 	return cost_total/(i+1.), acc_total/(i+1.), step
-	
 
-##### TRAINING LOOPS #####
-def trainSingleGPU(opt, data):
-	"""Train network on a single GPU
+def construct_model_and_optimizer(opt, io, lr, pt):
+	"""Build the model and an single/multi-GPU optimizer"""
+	if len(opt['deviceIdxs']) == 1:
+		pred = opt['model'](opt, io['x'][0], opt['batch_size'], pt)
+		loss = get_loss(opt, pred, io['y'][0])
+		accuracy = get_evaluation(pred, io['y'][0], opt)
+		train_op = build_optimizer(loss, lr, opt)
+	else:
+		# Multi_GPU Optimizer
+		mmtm = tf.train.MomentumOptimizer
+		optim = mmtm(learning_rate=lr, momentum=opt['momentum'], use_nesterov=True)
+		#setup model for each GPU
+		linearGPUIdx = 0
+		gradientsPerGPU = []
+		lossesPerGPU = []
+		accuracyPerGPU = []
+		for g in opt['deviceIdxs']:
+			with tf.device('/gpu:%d' % g):
+				print('Building Model on GPU: %d' % g)
+				with tf.name_scope('%s_%d' % (opt['model'].__name__, 0)) as scope:
+					# Forward pass
+					pred = opt['model'](opt, io['x'][linearGPUIdx], pt)
+					loss = get_loss(opt, pred, io['y'][linearGPUIdx])
+					accuracy = get_evaluation(pred, io['y'][linearGPUIdx], opt)
+					# Reuse variables for the next tower
+					tf.get_variable_scope().reuse_variables()
+					# Calculate gradients for minibatch on this tower
+					grads = optim.compute_gradients(loss)
+					# Keep track of gradients/losses/accuracies across all towers
+					gradientsPerGPU.append(grads)
+					lossesPerGPU.append(loss)
+					accuracyPerGPU.append(accuracy)
+			linearGPUIdx += 1
+		# CPU-side synchronisation 
+		grads = average_gradients(gradientsPerGPU)
+		apply_gradient_op = optim.apply_gradients(grads)
+		train_op = tf.group(apply_gradient_op)
+	return loss, accuracy, train_op
+
+def train_model(opt, data):
+	"""Generalized training function
 	
 	opt: dict of options
 	data: dict of numpy data
 	"""
-	# Placeholders
-	io = get_io_placeholders(opt)
+	n_GPUs = len(opt['deviceIdxs'])
+	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
+	# Make placeholders
+	io = {}
+	io['x'] = []
+	io['y'] = []
+	for g in opt['deviceIdxs']:
+		with tf.device('/gpu:%d' % g):
+			io_x, io_y = get_io_placeholders(opt)
+			io['x'].append(io_x)
+			io['y'].append(io_y)
 	lr = tf.placeholder(tf.float32, name='learning_rate')
 	pt = tf.placeholder(tf.bool, name='phase_train')
-
-	# Construct model
-	pred = opt['model'](opt, io['x'], opt['batch_size'], pt)
-	cost = get_loss(opt, pred, io['y'])
-	acc = get_evaluation(pred, io['y'], opt)
-	optim = build_optimizer(cost, lr, opt)
-			
+	
+	# Construct model and optimizer
+	loss, accuracy, train_op = construct_model_and_optimizer(opt, io, lr, pt)
+	
 	# Initializing the variables
-	init = tf.initialize_all_variables()
-	if opt['combine_train_val']:
-		data['train_x'] = np.vstack([data['train_x'], data['valid_x']])
-		data['train_y'] = np.hstack([data['train_y'], data['valid_y']])
-	
-	# Summary writers
-	tcost_ss = create_scalar_summary('training_cost')
-	vcost_ss = create_scalar_summary('validation_cost')
-	vacc_ss = create_scalar_summary('validation_accuracy')
-	lr_ss = create_scalar_summary('learning_rate')
-	
-	# Config options
-	config = config_init()
-	config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
-	sess = tf.Session(config=config)
-	summary = tf.train.SummaryWriter(opt['log_path'], sess.graph)
-	print('  Summaries constructed')
-	
-	# Main loop
-	sess.run(init)
-	saver = tf.train.Saver()
-	start = time.time()
-	lr_ = opt['lr']
-	epoch = 0
-	step = 0.
-	counter = 0
-	best = 0.
-	while epoch < opt['n_epochs']:
-		# Train
-		cost_total, acc_total, step = loop('train', sess, io, opt, data, cost,
-										   acc, lr, lr_, optim, pt, step)
-		# Validate
-		if not opt['combine_train_val']:
-			vloss_total, vacc_total, __ = loop('valid', sess, io, opt, data, cost,
-											   acc, lr, lr_, optim, pt)
-
-		fd = {tcost_ss[0]: cost_total, vcost_ss[0]: vloss_total,
-			  vacc_ss[0]: vacc_total, lr_ss[0]: lr_}
-		summaries = sess.run([tcost_ss[1], vcost_ss[1], vacc_ss[1], lr_ss[1]],
-			feed_dict=fd)
-		for summ in summaries:
-			summary.add_summary(summ, step)
-
-		best, counter, lr_ = get_learning_rate(vacc_total, best, counter,
-												lr_, delay=opt['delay'])
-		
-		print "[" + str(opt['trial_num']), str(epoch) + "] Time: " + \
-		"{:.1f}".format(time.time()-start) + ", Counter: " + \
-		"{:d}".format(counter) + ", Loss: " + \
-		"{:.4f}".format(cost_total) + ", Train Acc: " + \
-		"{:.5f}".format(acc_total) + ", Val acc: " + \
-		"{:.5f}".format(vacc_total)
-		epoch += 1
-				
-		if epoch % opt['save_step'] == 0:
-			save_path = saver.save(sess, opt['checkpoint_path'] + '/model.ckpt')
-			print("Model saved in file: %s" % save_path)
-			
-	if (opt['datasetIdx'] == 'plankton') or (opt['datasetIdx'] == 'galaxies'):
-		tacc_total = vacc_total
-	else:
-		print('Testing')
-		__, tacc_total, __ = loop('test', sess, io, opt, data, cost,
-								  acc, lr, lr_, optim, pt)
-		print('Test accuracy: %f' % (tacc_total,))
-	
-	# Save model and exit
-	save_path = saver.save(sess, opt['checkpoint_path'] + '/model.ckpt')
-	print("Model saved in file: %s" % save_path)
-	sess.close()
-	return tacc_total
-
-def trainMultiGPU(opt, data):
-	n_GPUs = len(opt['deviceIdxs'])
-	n_input = opt['dim'] * opt['dim'] * opt['n_channels']
-	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
-
-	#create some variables to use in training
-	lr = tf.placeholder(tf.float32, name='learning_rate')
-	phase_train = tf.placeholder(tf.bool, name='phase_train')
-
-	#create optimiser
-	optim = tf.train.MomentumOptimizer(learning_rate=lr,
-									   momentum=opt['momentum'],
-									   use_nesterov=True)
-	#create some placeholders
-	#one of x for each GPU
-	xs = []
-	ys = []
-	for g in opt['deviceIdxs']:
-		with tf.device('/gpu:%d' % g):
-			xs.append(tf.placeholder(tf.float32, [int(opt['batch_size'] / n_GPUs), n_input]))
-			if opt['is_classification']:
-				ys.append(tf.placeholder(tf.int64, [int(opt['batch_size'] / n_GPUs)]))
-			else:
-				ys.append(tf.placeholder(tf.float32, [int(opt['batch_size'] / n_GPUs), sm]))
-
-	#setup model for each GPU
-	linearGPUIdx = 0
-	gradientsPerGPU = []
-	lossesPerGPU = []
-	accuracyPerGPU = []
-	for g in opt['deviceIdxs']:
-		with tf.device('/gpu:%d' % g):
-			print('Building Model on GPU: %d' % g)
-			#if True:
-			with tf.name_scope('%s_%d' % (opt['model'], 0)) as scope:
-				#build model 
-				prediction = opt['model'](opt, xs[linearGPUIdx],
-										  int(opt['batch_size'] / n_GPUs),
-										  phase_train)
-				#define loss
-				if opt['is_classification']:
-					loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(prediction, ys[linearGPUIdx]))
-				else:
-					loss = tf.reduce_mean(tf.pow(y - prediction, 2)) / 2.
-				#define accuracy
-				correct_prediction = tf.equal(tf.argmax(prediction, 1), ys[linearGPUIdx])
-				accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-				#reuse variables for next # Reuse variables for the next tower.
-				tf.get_variable_scope().reuse_variables()
-				# Calculate the gradients for the batch of data on this CIFAR tower.
-				grads = optim.compute_gradients(loss)
-				# Keep track of the gradients across all towers.
-				gradientsPerGPU.append(grads)
-				# Keep track of losses per gpu
-				lossesPerGPU.append(loss)
-				# Keep track of accuracy per gpu
-				accuracyPerGPU.append(accuracy)
-
-
-		linearGPUIdx += 1
-	
-	#Now define the CPU-side synchronisation (occurs when gradients are averaged)
-	grads = average_gradients(gradientsPerGPU)
-	#Apply the gradients to adjust the shared variables.
-	apply_gradient_op = optim.apply_gradients(grads)
-	#in case we wanna add something here later, lets use a group
-	train_op = tf.group(apply_gradient_op)
-
-	avg_loss = loss
-	avg_accuracy = accuracy
-	#init all variables
 	init = tf.initialize_all_variables()
 	if opt['combine_train_val']:
 		data['train_x'] = np.vstack([data['train_x'], data['valid_x']])
@@ -303,67 +216,31 @@ def trainMultiGPU(opt, data):
 
 	# Configure tensorflow session
 	config = config_init()
+	if n_GPUs == 1:
+		config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
 	sess = tf.Session(config=config)
-	summary = tf.train.SummaryWriter('./logs/current', sess.graph)
+	summary = tf.train.SummaryWriter(opt['log_path'], sess.graph)
 	print('Summaries constructed...')
-
-	# GRAPH EXECUTION---------------------------------------------------
+	
 	sess.run(init)
-	saver = tf.train.Saver(tf.all_variables())
-	epoch = 0
+	saver = tf.train.Saver()
 	start = time.time()
-	step = 0.
 	lr_ = opt['lr']
+	epoch = 0
+	step = 0.
 	counter = 0
 	best = 0.
-	sizePerGPU = int(opt['batch_size'] / n_GPUs)
+	bs = opt['batch_size']
 	print('Starting training loop...')
-	# Keep training until reach max iterations
-	while epoch < opt['n_epochs']: # epoch loop
-		generator = minibatcher(data['train_x'], data['train_y'], opt['batch_size'], shuffle=True,
-								augment=opt['augment'])
-		cost_total = 0.
-		acc_total = 0.
-		vacc_total = 0.
-		vloss_total = 0.
-		# accumulate batches until we have enough
-		for i, batch in enumerate(generator): # batch loop
-			batch_x, batch_y = batch
-			#construct the feed_dictionary
-			fd = {lr : lr_, phase_train : True}
-			for g in xrange(n_GPUs):
-				fd[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
-				fd[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
-			# Optimize
-			__, cost_, acc_ = sess.run([train_op, avg_loss, avg_accuracy], feed_dict=fd)
-			if step % opt['display_step'] == 0:
-				print('  [%.4f] T Loss: %f, T Acc.: %f' %
-					  (time.time()-start, cost_, acc_))
-			cost_total += cost_
-			acc_total += acc_
-
-			step += 1
-
-		cost_total /=((i)+1.)
-		acc_total /=((i)+1.)
-
+	while epoch < opt['n_epochs']:
+		# Need batch_size*n_GPUs amount of data
+		cost_total, acc_total, step = loop('train', sess, io, opt, data, loss,
+										   accuracy, lr, lr_, pt, optim=train_op,
+										   step=step)
 		if not opt['combine_train_val']:
-			val_generator = minibatcher(data['valid_x'], data['valid_y'],
-										opt['batch_size'], shuffle=False,
-										augment=False)
-			for i, batch in enumerate(val_generator):
-				batch_x, batch_y = batch
-				#construct the feed_dictionary
-				fd = {lr : lr_, phase_train : True}
-				for g in xrange(n_GPUs):
-					fd[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
-					fd[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
-				#run session
-				vloss_, vacc_ = sess.run([avg_loss, avg_accuracy], feed_dict=fd)
-				vloss_total += vloss_
-				vacc_total += vacc_
-			vacc_total = vacc_total/(i+1.)
-			vloss_total = vloss_total/(i+1.)
+			vloss_total, vacc_total, __ = loop('valid', sess, io, opt, data,
+											   loss, accuracy, lr, lr_,
+											   pt, optim=train_op)
 
 		fd = {tcost_ss[0] : cost_total, vcost_ss[0] : vloss_total,
 			  vacc_ss[0] : vacc_total, lr_ss[0] : lr_}
@@ -372,7 +249,7 @@ def trainMultiGPU(opt, data):
 		for summ in summaries:
 			summary.add_summary(summ, step)
 
-		best, counter, lr_ = get_learning_rate(vacc_total, best, counter, lr_, delay=opt['delay'])
+		best, counter, lr_ = get_learning_rate(opt, vacc_total, best, counter, lr_)
 
 		print "[" + str(opt['trial_num']),str(epoch) + \
 		"] Time: " + \
@@ -384,37 +261,23 @@ def trainMultiGPU(opt, data):
 		"{:.5f}".format(vacc_total)
 		epoch += 1
 
-		if (epoch) % 50 == 0:
-			save_path = saver.save(sess, opt['checkpoint_path'] + '/model.ckpt')
+		if (epoch) % opt['save_step'] == 0:
+			save_path = saver.save(sess, opt['checkpoint_path'])
 			print("Model saved in file: %s" % save_path)
-
-	print "Testing"
+			
 	if (opt['datasetIdx'] == 'plankton') or (opt['datasetIdx'] == 'galaxies'):
-		print("Test labels not available for this dataset, relying on validation accuracy instead.")
-		print('Test accuracy: %f' % (vacc_total,))
-		save_path = saver.save(sess, opt['checkpoint_path'] + '/model.ckpt')
-		print("Model saved in file: %s" % save_path)
-		sess.close()
-		return vacc_total
+		tacc_total = vacc_total
 	else:
-		#run over test set
-		tacc_total = 0.
-		test_generator = minibatcher(data['test_x'], data['test_y'], opt['batch_size'], shuffle=False)
-		for i, batch in enumerate(test_generator):
-			batch_x, batch_y = batch
-			#construct the feed_dictionary
-			fd = {lr : lr_, phase_train : True}
-			for g in xrange(n_GPUs):
-				fd[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
-				fd[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
-			#run session
-			vacc_ = sess.run(avg_accuracy, feed_dict=fd)
-			vacc_total += vacc_
-		vacc_total = vacc_total/(i+1.)
+		print('Testing')
+		__, tacc_total, __ = loop('test', sess, io, opt, data, loss,
+								  accuracy, lr, lr_, pt)
 		print('Test accuracy: %f' % (tacc_total,))
-		save_path = saver.save(sess, opt['checkpoint_path'] + '/model.ckpt')
-		print("Model saved in file: %s" % save_path)
-		sess.close()
+	
+	# Save model and exit
+	save_path = saver.save(sess, opt['checkpoint_path'])
+	print("Model saved in file: %s" % save_path)
+	sess.close()
+	return tacc_total
 
 def load_dataset(dir_name, subdir_name):
 	"""Load dataset from subdirectory"""
@@ -425,7 +288,8 @@ def load_dataset(dir_name, subdir_name):
 	data['valid_x'] = np.load(data_dir + '/validX.npy')
 	data['valid_y'] = np.load(data_dir + '/validY.npy')
 	data['test_x'] = np.load(data_dir + '/testX.npy')
-	data['test_y'] = np.load(data_dir + '/testY.npy')
+	if os.path.exists(data_dir + '/testY.npy'):
+		data['test_y'] = np.load(data_dir + '/testY.npy')
 	return data
 
 def create_scalar_summary(name):
@@ -445,11 +309,30 @@ def config_init():
 ##### MAIN SCRIPT #####
 def run(opt):
 	# Parameters
-	model_dir = 'hyperopt_mean_pooling/trial'+str(opt['trial_num'])
 	data_dir = '/home/sgarbin/data'
 	tf.reset_default_graph()
 	
-	# Model specific config
+	# Default configuration
+	opt['save_step'] = 10
+	opt['display_step'] = 1e6
+	opt['lr'] = 3e-2
+	opt['batch_size'] = 50
+	opt['n_epochs'] = 100
+	opt['n_filters'] = 8
+	opt['trial_num'] = 'A'
+	opt['combine_train_val'] = False
+	opt['std_mult'] = 0.3
+	opt['filter_gain'] = 2
+	opt['momentum'] = 0.93
+	opt['psi_preconditioner'] = 3.4
+	opt['delay'] = 8
+	opt['lr_div'] = np.sqrt(10.)
+	opt['augment'] = False
+	opt['crop_shape'] = 0
+	opt['log_path'] = './logs/current'
+	opt['checkpoint_path'] = './checkpoints/current'	
+	
+	# Model specifics
 	if opt['datasetIdx'] == 'mnist':
 		# Load dataset
 		mnist_dir = data_dir + '/mnist_rotation_new'
@@ -468,6 +351,7 @@ def run(opt):
 		opt['display_step'] = 10000/(opt['batch_size']*3.)
 		opt['is_classification'] = True
 		opt['dim'] = 28
+		opt['crop_shape'] = 0
 		opt['n_channels'] = 1
 		opt['n_classes'] = 10
 	elif opt['datasetIdx'] == 'cifar10': 
@@ -475,17 +359,31 @@ def run(opt):
 		data = load_dataset(data_dir, 'cifar_numpy')
 		opt['is_classification'] = True
 		opt['dim'] = 32
+		opt['crop_shape'] = 0
 		opt['n_channels'] = 3
 		opt['n_classes'] = 10 
 	elif opt['datasetIdx'] == 'plankton': 
 		# Load dataset
 		data = load_dataset(data_dir, 'plankton_numpy')
+		opt['model'] = getattr(equivariant, 'deep_plankton')
+		opt['lr'] = 3e-1
+		opt['batch_size'] = 50
+		opt['std_mult'] = 1.
+		opt['momentum'] = 0.93
+		opt['psi_preconditioner'] = 3.4
+		opt['delay'] = 8
+		opt['display_step'] = 10
 		opt['is_classification'] = True
-		opt['dim'] = 75
+		opt['n_epochs'] = 150
+		opt['dim'] = 95
 		opt['n_channels'] = 1
 		opt['n_classes'] = 121
 		opt['n_filters'] = 32
+		opt['filter_gain'] = 2
 		opt['augment'] = True
+		opt['crop_shape'] = 10
+		opt['log_path'] = './logs/deep_plankton'
+		opt['checkpoint_path'] = './checkpoints/deep_plankton'
 	elif opt['datasetIdx'] == 'galaxies': 
 		# Load dataset
 		data = load_dataset(data_dir, 'galaxies_numpy')
@@ -498,38 +396,30 @@ def run(opt):
 		print('mnist, cifar10, plankton, galaxies')
 		sys.exit(1)
 	
+	# Check that save paths exist
+	opt['log_path'] = opt['log_path'] + '/trial' + str(opt['trial_num'])
+	opt['checkpoint_path'] = opt['checkpoint_path'] + '/trial' + \
+							str(opt['trial_num']) 
+	if not os.path.exists(opt['log_path']):
+		print('Creating log path')
+		os.mkdir(opt['log_path'])
+	if not os.path.exists(opt['checkpoint_path']):
+		print('Creating checkpoint path')
+		os.mkdir(opt['checkpoint_path'])
+	opt['checkpoint_path'] = opt['checkpoint_path'] + 'model.ckpt'
+	
 	# Print out options
 	for key, val in opt.iteritems():
 		print(key + ': ' + str(val))
-	if len(opt['deviceIdxs']) > 1:
-		print("Using Multi-GPU Training Loop")
-		return trainMultiGPU(opt, data)
-	else:
-		print("Using Single-GPU Training Loop")
-		return trainSingleGPU(opt, data)
-
+	return train_model(opt, data)
 
 
 if __name__ == '__main__':
 	deviceIdxs = [int(x.strip()) for x in sys.argv[2].split(',')]
 	opt = {}
 	opt['model'] = sys.argv[3]
-	opt['lr'] = 3e-2
-	opt['batch_size'] = 53
-	opt['n_epochs'] = 120
-	opt['n_filters'] = 8
-	opt['trial_num'] = 'O'
-	opt['combine_train_val'] = False
-	opt['std_mult'] = 0.3
-	opt['filter_gain'] = 3.7
-	opt['momentum'] = 0.93
-	opt['psi_preconditioner'] = 3.4
-	opt['delay'] = 8
-	opt['datasetIdx'] = int(sys.argv[1])
+	opt['datasetIdx'] = sys.argv[1]
 	opt['deviceIdxs'] = deviceIdxs
-	opt['displayStep'] = 10
-	opt['augment'] = False
-
 	'''
 	
 	opt = {}
@@ -547,7 +437,7 @@ if __name__ == '__main__':
 	opt['delay'] = 12
 	opt['datasetIdx'] = sys.argv[1]
 	opt['deviceIdxs'] = deviceIdxs
-	opt['displayStep'] = 10
+	opt['display_step'] = 10
 	opt['augment'] = False
 	opt['log_path'] = './logs/deep_stable2'
 	opt['checkpoint_path'] = './checkpoints/deep_stable2'
