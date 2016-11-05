@@ -284,6 +284,8 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 		modelFunc = fullyConvolutional_Dieleman
 	elif model == 'deep_stable':
 		modelFunc = deep_stable
+	elif model == 'deep_plankton':
+		modelFunc = deep_plankton
 	else:
 		print('Model unrecognized')
 		sys.exit(1)
@@ -431,12 +433,12 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 
 		if not combine_train_val:
 			val_generator = minibatcher(validx, validy, batch_size,
-										shuffle=False, augment=False)
+										shuffle=False, augment=augment)
 			for i, batch in enumerate(val_generator):
 				batch_x, batch_y = batch
 				#construct the feed_dictionary
 				feed_dict = {keep_prob: dropout, learning_rate : lr_current,
-							 phase_train : True}
+							 phase_train : False}
 				for g in xrange(numGPUs):
 					feed_dict[xs[g]] = batch_x[g*sizePerGPU:(g+1)*sizePerGPU,:]
 					feed_dict[ys[g]] = batch_y[g*sizePerGPU:(g+1)*sizePerGPU]
@@ -467,7 +469,8 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 		validationAccuracy = vacc_total
 
 		if (epoch) % 50 == 0:
-			save_model(saver, './', sess)
+			#save_model(saver, './', sess)
+			saver.save(sess, './checkpoints/model.ckpt', epoch)
 
 	print "Testing"
 	if datasetIdx == 2 or datasetIdx == 3:
@@ -493,7 +496,7 @@ def trainMultiGPU(model, lr, momentum, psi_preconditioner, batch_size, n_epochs,
 			vacc_total += vacc_
 		vacc_total = vacc_total/(i+1.)
 		print('Test accuracy: %f' % (tacc_total,))
-		save_model(saver, './', sess)
+		saver.save(sess, './checkpoints/model.ckpt', epoch)
 		sess.close()
 
 ##### MAIN SCRIPT #####
@@ -576,12 +579,13 @@ def run(opt):
 		testy = np.zeros(1) #symbolic only as not available
 
 		isClassification = True
+		model = 'deep_plankton'
 		n_rows = 95-20
 		n_cols = 95-20
 		n_channels = 1
 		n_input = n_rows * n_cols * n_channels
 		n_classes = 121
-		n_filters = 32
+		n_filters = 48
 		filter_gain = 2
 		size_after_conv = -1
 		augment = True
@@ -643,17 +647,19 @@ if __name__ == '__main__':
 	opt['batch_size'] = 53
 	opt['n_epochs'] = 120
 	opt['n_filters'] = 8
-	opt['trial_num'] = 'M'
+	opt['trial_num'] = 'O'
 	opt['combine_train_val'] = False
 	opt['std_mult'] = 0.3
 	opt['filter_gain'] = 3.7
 	opt['momentum'] = 0.93
 	opt['psi_preconditioner'] = 3.4
-	opt['delay'] = 13
+	opt['delay'] = 8
 	opt['datasetIdx'] = int(sys.argv[1])
 	opt['deviceIdxs'] = deviceIdxs
 	opt['displayStep'] = 10
 	opt['augment'] = False
+	opt['log_path'] = ''
+	opt['checkpoint_path'] = ''
 	#run
 	run(opt)
 	print("ALL FINISHED! :)")

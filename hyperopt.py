@@ -60,7 +60,7 @@ def random_independent(n_trials=3, datasetIdx=0, deviceIdxs=[0], model='deep_com
 			opt['displayStep'] = 10
 			opt['augment'] = False
 			opt['log_path'] = log_path
-			opt['checkpoint_path'] = checkpoint_path
+			opt['checkpoint_path'] = checkpoint_path + ''
 			print
 			for key, val in opt.iteritems():
 				print(key + ': ' + str(val))

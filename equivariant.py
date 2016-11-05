@@ -218,8 +218,8 @@ def deep_plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 	nf3 = int(n_filters*(filter_gain**2.))
 	with tf.device(device):
 		weights = {
-			'w1' : get_weights_dict([[6,],[5,]], n_channels, nf, std_mult=std_mult, name='W1', device=device),
-			'w2' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=std_mult, name='W2', device=device),
+			'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1', device=device),
+			'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2', device=device),
 			'w3' : get_weights_dict([[6,],[5,]], nf, nf2, std_mult=std_mult, name='W3', device=device),
 			'w4' : get_weights_dict([[6,],[5,]], nf2, nf2, std_mult=std_mult, name='W4', device=device),
 			'w5' : get_weights_dict([[6,],[5,]], nf2, nf3, std_mult=std_mult, name='W5', device=device),
@@ -228,16 +228,16 @@ def deep_plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 		}
 		
 		biases = {
-			'b1' : get_bias_dict(nf, order, name='b1', device=device),
-			'b2' : get_bias_dict(nf, order, name='b2', device=device),
+			'b1' : get_bias_dict(nf, order+1, name='b1', device=device),
+			'b2' : get_bias_dict(nf, order+1, name='b2', device=device),
 			'b3' : get_bias_dict(nf2, order, name='b3', device=device),
 			'b4' : get_bias_dict(nf2, order, name='b4', device=device),
 			'b5' : get_bias_dict(nf3, order, name='b5', device=device),
 			'b6' : get_bias_dict(nf3, order, name='b6', device=device),
 			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
 				initializer=tf.constant_initializer(1e-2)),
-			'psi1' : get_phase_dict(1, nf, order, name='psi1', device=device),
-			'psi2' : get_phase_dict(nf, nf, order, name='psi2', device=device),
+			'psi1' : get_phase_dict(1, nf, order+1, name='psi1', device=device),
+			'psi2' : get_phase_dict(nf, nf, order+1, name='psi2', device=device),
 			'psi3' : get_phase_dict(nf, nf2, order, name='psi3', device=device),
 			'psi4' : get_phase_dict(nf2, nf2, order, name='psi4', device=device),
 			'psi5' : get_phase_dict(nf2, nf3, order, name='psi5', device=device),
