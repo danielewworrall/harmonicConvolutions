@@ -408,7 +408,7 @@ def run(opt):
 	if not os.path.exists(opt['checkpoint_path']):
 		print('Creating checkpoint path')
 		os.mkdir(opt['checkpoint_path'])
-	opt['checkpoint_path'] = opt['checkpoint_path'] + 'model.ckpt'
+	opt['checkpoint_path'] = opt['checkpoint_path'] + '/model.ckpt'
 	
 	# Print out options
 	for key, val in opt.iteritems():
