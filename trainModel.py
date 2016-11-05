@@ -313,6 +313,7 @@ def run(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
+	opt['model'] = getattr(equivariant, opt['model'])
 	opt['save_step'] = 10
 	opt['display_step'] = 1e6
 	opt['lr'] = 3e-2
@@ -367,7 +368,6 @@ def run(opt):
 	elif opt['datasetIdx'] == 'plankton': 
 		# Load dataset
 		data = load_dataset(data_dir, 'plankton_numpy')
-		opt['model'] = getattr(equivariant, 'deep_plankton')
 		opt['lr'] = 1.
 		opt['batch_size'] = 32
 		opt['std_mult'] = 1.

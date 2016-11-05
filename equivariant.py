@@ -27,7 +27,7 @@ def checkFolder(dir):
 
 
 ##### MODELS #####
-def deep_stable(opt, x, bs, phase_train, device='/cpu:0'):
+def deep_stable(opt, x, phase_train, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 1
