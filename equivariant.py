@@ -27,26 +27,26 @@ def checkFolder(dir):
 
 
 ##### MODELS #####
-def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
-					  size_after_conv, n_classes, bs, phase_train, std_mult,
-					  filter_gain=2.0, device='/cpu:0'):
+def deep_complex_bias(opt, x, bs, phase_train, device='/cpu:0'):
 	"""The deep_complex_bias architecture. Current test time score on rot-MNIST
 	is 97.81%---state-of-the-art
 	"""
 	# Sure layers weight & bias
 	order = 3
-	nf = n_filters
-	nf2 = int(n_filters*filter_gain)
-	nf3 = int(n_filters*(filter_gain**2.))
+	nf = opt['n_filters']
+	nf2 = int(nf*opt['filter_gain'])
+	nf3 = int(nf*(opt['filter_gain']**2.))
+	
+	sm = opt['std_mult']
 	with tf.device(device):
 		weights = {
-			'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1', device=device),
-			'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2', device=device),
-			'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf2, std_mult=std_mult, name='W3', device=device),
-			'w4' : get_weights_dict([[6,],[5,],[5,]], nf2, nf2, std_mult=std_mult, name='W4', device=device),
-			'w5' : get_weights_dict([[6,],[5,],[5,]], nf2, nf3, std_mult=std_mult, name='W5', device=device),
-			'w6' : get_weights_dict([[6,],[5,],[5,]], nf3, nf3, std_mult=std_mult, name='W6', device=device),
-			'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, n_classes, std_mult=std_mult, name='W7', device=device),
+			'w1' : get_weights_dict([[6,],[5,],[5,]], opt['n_channels'], nf, std_mult=sm, name='W1', device=device),
+			'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=sm, name='W2', device=device),
+			'w3' : get_weights_dict([[6,],[5,],[5,]], nf, nf2, std_mult=sm, name='W3', device=device),
+			'w4' : get_weights_dict([[6,],[5,],[5,]], nf2, nf2, std_mult=sm, name='W4', device=device),
+			'w5' : get_weights_dict([[6,],[5,],[5,]], nf2, nf3, std_mult=sm, name='W5', device=device),
+			'w6' : get_weights_dict([[6,],[5,],[5,]], nf3, nf3, std_mult=sm, name='W6', device=device),
+			'w7' : get_weights_dict([[6,],[5,],[5,]], nf3, opt['n_classes'], std_mult=sm, name='W7', device=device),
 		}
 		
 		biases = {
@@ -56,7 +56,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 			'b4' : get_bias_dict(nf2, 2, name='b4', device=device),
 			'b5' : get_bias_dict(nf3, 2, name='b5', device=device),
 			'b6' : get_bias_dict(nf3, 2, name='b6', device=device),
-			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
+			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[opt['n_classes']],
 				initializer=tf.constant_initializer(1e-2)),
 			'psi1' : get_phase_dict(1, nf, 2, name='psi1', device=device),
 			'psi2' : get_phase_dict(nf, nf, 2, name='psi2', device=device),
@@ -66,7 +66,7 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 			'psi6' : get_phase_dict(nf3, nf3, 2, name='psi6', device=device)
 		}
 		# Reshape input picture
-		x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
+		x = tf.reshape(x, shape=[bs, opt['dim'], opt['dim'], opt['n_channels']])
 	
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
@@ -118,24 +118,24 @@ def deep_complex_bias(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
 
-def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
-				size_after_conv, n_classes, bs, phase_train, std_mult,
-				filter_gain=2.0, device='/cpu:0'):
+def deep_stable(opt, x, bs, phase_train, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 1
-	nf = n_filters
-	nf2 = int(n_filters*filter_gain)
-	nf3 = int(n_filters*(filter_gain**2.))
+	nf = opt['n_filters']
+	nf2 = int(nf*opt['filter_gain'])
+	nf3 = int(nf*(opt['filter_gain']**2.))
+	
+	sm = opt['std_mult']
 	with tf.device(device):
 		weights = {
-			'w1' : get_weights_dict([[6,],[5,]], n_channels, nf, std_mult=std_mult, name='W1', device=device),
-			'w2' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=std_mult, name='W2', device=device),
-			'w3' : get_weights_dict([[6,],[5,]], nf, nf2, std_mult=std_mult, name='W3', device=device),
-			'w4' : get_weights_dict([[6,],[5,]], nf2, nf2, std_mult=std_mult, name='W4', device=device),
-			'w5' : get_weights_dict([[6,],[5,]], nf2, nf3, std_mult=std_mult, name='W5', device=device),
-			'w6' : get_weights_dict([[6,],[5,]], nf3, nf3, std_mult=std_mult, name='W6', device=device),
-			'w7' : get_weights_dict([[6,],[5,]], nf3, n_classes, std_mult=std_mult, name='W7', device=device),
+			'w1' : get_weights_dict([[6,],[5,]], opt['n_channels'], nf, std_mult=sm, name='W1', device=device),
+			'w2' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=sm, name='W2', device=device),
+			'w3' : get_weights_dict([[6,],[5,]], nf, nf2, std_mult=sm, name='W3', device=device),
+			'w4' : get_weights_dict([[6,],[5,]], nf2, nf2, std_mult=sm, name='W4', device=device),
+			'w5' : get_weights_dict([[6,],[5,]], nf2, nf3, std_mult=sm, name='W5', device=device),
+			'w6' : get_weights_dict([[6,],[5,]], nf3, nf3, std_mult=sm, name='W6', device=device),
+			'w7' : get_weights_dict([[6,],[5,]], nf3, opt['n_classes'], std_mult=sm, name='W7', device=device),
 		}
 		
 		biases = {
@@ -145,7 +145,7 @@ def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 			'b4' : get_bias_dict(nf2, order, name='b4', device=device),
 			'b5' : get_bias_dict(nf3, order, name='b5', device=device),
 			'b6' : get_bias_dict(nf3, order, name='b6', device=device),
-			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
+			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[opt['n_classes']],
 				initializer=tf.constant_initializer(1e-2)),
 			'psi1' : get_phase_dict(1, nf, order, name='psi1', device=device),
 			'psi2' : get_phase_dict(nf, nf, order, name='psi2', device=device),
@@ -155,7 +155,7 @@ def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 			'psi6' : get_phase_dict(nf3, nf3, order, name='psi6', device=device)
 		}
 		# Reshape input picture
-		x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
+		x = tf.reshape(x, shape=[bs, opt['dim'], opt['dim'], opt['n_channels']])
 	
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
@@ -207,15 +207,15 @@ def deep_stable(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7'])
 
-def deep_plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
-				size_after_conv, n_classes, bs, phase_train, std_mult,
-				filter_gain=2.0, device='/cpu:0'):
+def deep_plankton(opt, x, bs, phase_train, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 1
-	nf = n_filters
-	nf2 = int(n_filters*filter_gain)
-	nf3 = int(n_filters*(filter_gain**2.))
+	nf = opt['n_filters']
+	nf2 = int(nf*opt['filter_gain'])
+	nf3 = int(nf*(opt['filter_gain']**2.))
+	
+	sm = opt['std_mult']
 	with tf.device(device):
 		weights = {
 			'w1' : get_weights_dict([[6,],[5,],[5,]], n_channels, nf, std_mult=std_mult, name='W1', device=device),
@@ -234,7 +234,7 @@ def deep_plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 			'b4' : get_bias_dict(nf2, order, name='b4', device=device),
 			'b5' : get_bias_dict(nf3, order, name='b5', device=device),
 			'b6' : get_bias_dict(nf3, order, name='b6', device=device),
-			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[n_classes],
+			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[opt['n_classes']],
 				initializer=tf.constant_initializer(1e-2)),
 			'psi1' : get_phase_dict(1, nf, order+1, name='psi1', device=device),
 			'psi2' : get_phase_dict(nf, nf, order+1, name='psi2', device=device),
@@ -244,7 +244,7 @@ def deep_plankton(x, drop_prob, n_filters, n_rows, n_cols, n_channels,
 			'psi6' : get_phase_dict(nf3, nf3, order, name='psi6', device=device)
 		}
 		# Reshape input picture
-		x = tf.reshape(x, shape=[bs, n_rows, n_cols, n_channels])
+		x = tf.reshape(x, shape=[bs, opt['dim'], opt['dim'], opt['n_channels']])
 	
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
