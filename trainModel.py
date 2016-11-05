@@ -143,7 +143,7 @@ def loop(mode, sess, io, opt, data, cost, acc, lr, lr_, pt, optim=None, step=0):
 def construct_model_and_optimizer(opt, io, lr, pt):
 	"""Build the model and an single/multi-GPU optimizer"""
 	if len(opt['deviceIdxs']) == 1:
-		pred = opt['model'](opt, io['x'][0], opt['batch_size'], pt)
+		pred = opt['model'](opt, io['x'][0], pt)
 		loss = get_loss(opt, pred, io['y'][0])
 		accuracy = get_evaluation(pred, io['y'][0], opt)
 		train_op = build_optimizer(loss, lr, opt)
@@ -242,23 +242,29 @@ def train_model(opt, data):
 											   loss, accuracy, lr, lr_,
 											   pt, optim=train_op)
 
-		fd = {tcost_ss[0] : cost_total, vcost_ss[0] : vloss_total,
-			  vacc_ss[0] : vacc_total, lr_ss[0] : lr_}
-		summaries = sess.run([tcost_ss[1], vcost_ss[1], vacc_ss[1], lr_ss[1]],
-			feed_dict=fd)
-		for summ in summaries:
-			summary.add_summary(summ, step)
-
-		best, counter, lr_ = get_learning_rate(opt, vacc_total, best, counter, lr_)
-
-		print "[" + str(opt['trial_num']),str(epoch) + \
-		"] Time: " + \
-		"{:.3f}".format(time.time()-start) + ", Counter: " + \
-		"{:d}".format(counter) + ", Loss: " + \
-		"{:.5f}".format(cost_total) + ", Val loss: " + \
-		"{:.5f}".format(vloss_total) + ", Train Acc: " + \
-		"{:.5f}".format(acc_total) + ", Val acc: " + \
-		"{:.5f}".format(vacc_total)
+			fd = {tcost_ss[0] : cost_total, vcost_ss[0] : vloss_total,
+				  vacc_ss[0] : vacc_total, lr_ss[0] : lr_}
+			summaries = sess.run([tcost_ss[1], vcost_ss[1], vacc_ss[1], lr_ss[1]],
+				feed_dict=fd)
+			for summ in summaries:
+				summary.add_summary(summ, step)
+			best, counter, lr_ = get_learning_rate(opt, vacc_total, best, counter, lr_)
+			print "[" + str(opt['trial_num']),str(epoch) + \
+			"] Time: " + \
+			"{:.3f}".format(time.time()-start) + ", Counter: " + \
+			"{:d}".format(counter) + ", Loss: " + \
+			"{:.5f}".format(cost_total) + ", Val loss: " + \
+			"{:.5f}".format(vloss_total) + ", Train Acc: " + \
+			"{:.5f}".format(acc_total) + ", Val acc: " + \
+			"{:.5f}".format(vacc_total)
+		else:
+			best, counter, lr_ = get_learning_rate(opt, acc_total, best, counter, lr_)
+			print "[" + str(opt['trial_num']),str(epoch) + \
+			"] Time: " + \
+			"{:.3f}".format(time.time()-start) + ", Counter: " + \
+			"{:d}".format(counter) + ", Loss: " + \
+			"{:.5f}".format(cost_total) + ", Train Acc: " + \
+			"{:.5f}".format(acc_total)
 		epoch += 1
 
 		if (epoch) % opt['save_step'] == 0:
@@ -309,10 +315,10 @@ def config_init():
 ##### MAIN SCRIPT #####
 def run(opt):
 	# Parameters
-	data_dir = '/home/sgarbin/data'
 	tf.reset_default_graph()
 	
 	# Default configuration
+	opt['data_dir'] = '/home/dworrall/data'
 	opt['model'] = getattr(equivariant, opt['model'])
 	opt['save_step'] = 10
 	opt['display_step'] = 1e6
@@ -336,7 +342,7 @@ def run(opt):
 	# Model specifics
 	if opt['datasetIdx'] == 'mnist':
 		# Load dataset
-		mnist_dir = data_dir + '/mnist_rotation_new'
+		mnist_dir = opt['data_dir'] + '/mnist_rotation_new'
 		train = np.load(mnist_dir + '/rotated_train.npz')
 		valid = np.load(mnist_dir + '/rotated_valid.npz')
 		test = np.load(mnist_dir + '/rotated_test.npz')
@@ -347,8 +353,15 @@ def run(opt):
 		data['valid_y'] = valid['y']
 		data['test_x'] = test['x']
 		data['test_y'] = test['y']
-		opt['lr']  = 3e-2
-		opt['std_mult'] = 1.
+		opt['n_epochs'] = 80
+		opt['batch_size'] = 46
+		opt['lr']  = 0.0076
+		opt['std_mult'] = 0.7
+		opt['delay'] = 12
+		opt['psi_preconditioner'] = 7.8
+		opt['filter_gain'] = 2.1
+		opt['n_filters'] = 8
+		opt['momentum'] = 0.93
 		opt['display_step'] = 10000/(opt['batch_size']*3.)
 		opt['is_classification'] = True
 		opt['dim'] = 28
@@ -359,7 +372,7 @@ def run(opt):
 		opt['checkpoint_path'] = './checkpoints/deep_mnist'
 	elif opt['datasetIdx'] == 'cifar10': 
 		# Load dataset
-		data = load_dataset(data_dir, 'cifar_numpy')
+		data = load_dataset(opt['data_dir'], 'cifar_numpy')
 		opt['is_classification'] = True
 		opt['dim'] = 32
 		opt['crop_shape'] = 0
@@ -367,7 +380,7 @@ def run(opt):
 		opt['n_classes'] = 10 
 	elif opt['datasetIdx'] == 'plankton': 
 		# Load dataset
-		data = load_dataset(data_dir, 'plankton_numpy')
+		data = load_dataset(opt['data_dir'], 'plankton_numpy')
 		opt['lr'] = 1e-1
 		opt['batch_size'] = 32
 		opt['std_mult'] = 1
@@ -388,7 +401,7 @@ def run(opt):
 		opt['checkpoint_path'] = './checkpoints/deep_plankton'
 	elif opt['datasetIdx'] == 'galaxies': 
 		# Load dataset
-		data = load_dataset(data_dir, 'galaxies_numpy')
+		data = load_dataset(opt['data_dir'], 'galaxies_numpy')
 		opt['is_classification'] = False
 		opt['dim'] = 64
 		opt['n_channels'] = 3
