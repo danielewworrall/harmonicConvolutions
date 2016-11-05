@@ -6,7 +6,7 @@ import time
 
 import cPickle as pkl
 
-pkl_dir = './logs/hyperopt_mean_pooling/numpy/'
+pkl_dir = './logs/hyperopt_stable/numpy/'
 for root, dir_, file_ in os.walk(pkl_dir):
 	for f in file_:
 		with open(pkl_dir + f, 'r') as fp:
