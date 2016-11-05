@@ -233,6 +233,97 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 		cv11 = tf.reduce_mean(sum_magnitudes(cv11), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv11, biases['b11'])
 
+def deep_cifar(opt, x, phase_train, device='/cpu:0'):
+	"""High frequency convolutions are unstable, so get rid of them"""
+	# Sure layers weight & bias
+	order = 1
+	nf = opt['n_filters']
+	nf2 = int(nf*opt['filter_gain'])
+	nf3 = int(nf*(opt['filter_gain']**2.))
+	bs = opt['batch_size']
+	
+	sm = opt['std_mult']
+	with tf.device(device):
+		weights = {
+			'w1' : get_weights_dict([[6,],[5,],[5,]], opt['n_channels'], nf, std_mult=sm, name='W1', device=device),
+			'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=sm, name='W2', device=device),
+			'w3' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=sm, name='W3', device=device),
+			'w4' : get_weights_dict([[6,],[5,]], nf, nf2, std_mult=sm, name='W4', device=device),
+			'w5' : get_weights_dict([[6,],[5,]], nf2, nf2, std_mult=sm, name='W5', device=device),
+			'w6' : get_weights_dict([[6,],[5,]], nf2, nf2, std_mult=sm, name='W6', device=device),
+			'w7' : get_weights_dict([[6,],[5,]], nf2, nf3, std_mult=sm, name='W7', device=device),
+			'w8' : get_weights_dict([[3,],[2,]], nf3, nf3, std_mult=sm, name='W8', device=device),
+			'w9' : get_weights_dict([[3,],[2,]], nf3, opt['n_classes'], std_mult=sm, name='W11', device=device),
+		}
+		
+		biases = {
+			'b1' : get_bias_dict(nf, order+1, name='b1', device=device),
+			'b2' : get_bias_dict(nf, order+1, name='b2', device=device),
+			'b3' : get_bias_dict(nf2, order, name='b3', device=device),
+			'b4' : get_bias_dict(nf2, order, name='b4', device=device),
+			'b5' : get_bias_dict(nf3, order, name='b5', device=device),
+			'b6' : get_bias_dict(nf3, order, name='b6', device=device),
+			'b7' : get_bias_dict(nf3, order, name='b7', device=device),
+			'b8' : get_bias_dict(nf3, order, name='b8', device=device),
+			'b9' : tf.get_variable('b9', dtype=tf.float32, shape=[opt['n_classes']],
+				initializer=tf.constant_initializer(1e-2)),
+			'psi1' : get_phase_dict(1, nf, order+1, name='psi1', device=device),
+			'psi2' : get_phase_dict(nf, nf, order+1, name='psi2', device=device),
+			'psi3' : get_phase_dict(nf, nf2, order, name='psi3', device=device),
+			'psi4' : get_phase_dict(nf2, nf2, order, name='psi4', device=device),
+			'psi5' : get_phase_dict(nf2, nf3, order, name='psi5', device=device),
+			'psi6' : get_phase_dict(nf3, nf3, order, name='psi6', device=device),
+			'psi7' : get_phase_dict(nf3, nf3, order, name='psi7', device=device),
+			'psi8' : get_phase_dict(nf3, nf3, order, name='psi8', device=device),
+		}
+		# Reshape input picture -- square inputs for now
+		size = opt['dim'] - 2*opt['crop_shape']
+		x = tf.reshape(x, shape=[bs,size,size,opt['n_channels']])
+	
+	# Convolutional Layers
+	with tf.name_scope('block1') as scope:
+		cv1 = real_input_rotated_conv(x, weights['w1'], biases['psi1'],
+									  filter_size=5, padding='SAME', name='1')
+		cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
+		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
+										 filter_size=5, output_orders=[0,1,2],
+										 padding='SAME', name='2')
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='bn1', device=device)	
+		cv3 = mean_pooling(cv2, ksize=(1,3,3,1), strides=(1,2,2,1))
+		cv3 = complex_input_rotated_conv(cv3, weights['w3'], biases['psi3'],
+										 filter_size=5, output_orders=[0,1],
+										 padding='SAME', name='3')
+		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
+
+	with tf.name_scope('block2') as scope:
+		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
+										 filter_size=5, output_orders=[0,1],
+										 padding='SAME', name='4')
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='bn2', device=device)
+		cv5 = complex_input_rotated_conv(cv5, weights['w5'], biases['psi5'],
+										 filter_size=5, output_orders=[0,1],
+										 padding='SAME', name='5')
+		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
+		cv5 = mean_pooling(cv5, ksize=(1,3,3,1), strides=(1,2,2,1))
+		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
+										 filter_size=5, output_orders=[0,1],
+										 padding='SAME', name='6')
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, name='bn3', device=device)
+
+	with tf.name_scope('block3') as scope:
+		cv7 = complex_input_rotated_conv(cv6, weights['w7'], biases['psi7'],
+										 filter_size=5, output_orders=[0,1],
+										 padding='SAME', name='7')
+		cv7 = complex_nonlinearity(cv7, biases['b7'], tf.nn.relu)
+		cv8 = complex_input_rotated_conv(cv8, weights['w8'], biases['psi8'],
+										 filter_size=5, output_orders=[0,1],
+										 padding='SAME', name='8')
+		cv8 = complex_batch_norm(cv8, tf.nn.relu, phase_train, name='bn4', device=device)
+		cv9 = complex_input_conv(cv8, weights['w9'], biases['psi9'], filter_size=5, output_orders=[0,1],
+										 padding='SAME', name='9')
+		cv9 = tf.reduce_mean(sum_magnitudes(cv9), reduction_indices=[1,2])
+		return tf.nn.bias_add(cv9, biases['b9'])
+
 def deep_complex_bias(x, n_filters, n_classes, bs, phase_train, std_mult,
 					  filter_gain):
 	"""The deep_complex_bias architecture. Current test time score is 94.7% for 7 layers 

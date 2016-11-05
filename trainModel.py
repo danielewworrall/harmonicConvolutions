@@ -378,6 +378,23 @@ def run(opt):
 		opt['crop_shape'] = 0
 		opt['n_channels'] = 3
 		opt['n_classes'] = 10 
+		opt['n_epochs'] = 80
+		opt['batch_size'] = 64
+		opt['lr']  = 0.01
+		opt['std_mult'] = 0.7
+		opt['delay'] = 8
+		opt['psi_preconditioner'] = 7.8
+		opt['filter_gain'] = 2.1
+		opt['n_filters'] = 32
+		opt['momentum'] = 0.93
+		opt['display_step'] = 25
+		opt['is_classification'] = True
+		opt['dim'] = 32
+		opt['crop_shape'] = 0
+		opt['n_channels'] = 3
+		opt['n_classes'] = 10
+		opt['log_path'] = './logs/deep_cifar'
+		opt['checkpoint_path'] = './checkpoints/deep_cifar'
 	elif opt['datasetIdx'] == 'plankton': 
 		# Load dataset
 		data = load_dataset(opt['data_dir'], 'plankton_numpy')
@@ -388,7 +405,7 @@ def run(opt):
 		opt['psi_preconditioner'] = 3.4
 		opt['delay'] = 8
 		opt['display_step'] = 10
-		opt['is_classification'] = True
+		pt['is_classification'] = True
 		opt['n_epochs'] = 150
 		opt['dim'] = 95
 		opt['n_channels'] = 1
