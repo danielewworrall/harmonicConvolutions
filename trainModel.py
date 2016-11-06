@@ -318,7 +318,7 @@ def run(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['data_dir'] = '/home/dworrall/data'
+	opt['data_dir'] = '/home/daniel/data'
 	opt['model'] = getattr(equivariant, opt['model'])
 	opt['save_step'] = 10
 	opt['display_step'] = 1e6
