@@ -333,7 +333,7 @@ def run(opt):
 	opt['momentum'] = 0.93
 	opt['psi_preconditioner'] = 3.4
 	opt['delay'] = 8
-	opt['lr_div'] = np.sqrt(10.)
+	opt['lr_div'] = 10.
 	opt['augment'] = False
 	opt['crop_shape'] = 0
 	opt['log_path'] = './logs/current'
