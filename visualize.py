@@ -17,23 +17,25 @@ import tensorflow as tf
 
 import input_data
 
+from equivariant import *
 from matplotlib import pyplot as plt
 from steer_conv import *
 
 ##### MODELS #####
+'''
 def deep_stable(x, n_filters, n_classes, bs, std_mult, phase_train):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	
 	filter_gain = 2.1
-	order = 1
+	order = 2
 	nf = n_filters
 	nf2 = int(n_filters*filter_gain)
 	nf3 = int(n_filters*(filter_gain**2.))
 	
 	weights = {
-		'w1' : get_weights_dict([[6,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
-		'w2' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
+		'w1' : get_weights_dict([[6,],[5,],[5,]], 1, nf, std_mult=std_mult, name='W1'),
+		'w2' : get_weights_dict([[6,],[5,],[5,]], nf, nf, std_mult=std_mult, name='W2'),
 		'w3' : get_weights_dict([[6,],[5,]], nf, nf2, std_mult=std_mult, name='W3'),
 		'w4' : get_weights_dict([[6,],[5,]], nf2, nf2, std_mult=std_mult, name='W4'),
 		'w5' : get_weights_dict([[6,],[5,]], nf2, nf3, std_mult=std_mult, name='W5'),
@@ -119,7 +121,7 @@ def deep_stable(x, n_filters, n_classes, bs, std_mult, phase_train):
 		features.append(cv7)
 		
 		return features, weights, biases
-	
+'''
 def deep_complex_bias(x, n_filters, n_classes, bs, std_mult):
 	"""The conv_so2 architecture, scatters first through an equi_real_conv
 	followed by phase-pooling then summation and a nonlinearity. Current
@@ -300,12 +302,13 @@ def restore_model(saver, saveDir, sess):
 	saver.restore(sess, saveDir + "checkpoints/model.ckpt")
 	print("Model restored from file: %s" % saveDir + "checkpoints/model.ckpt")
 
-def rotate_feature_maps(X, n_angles):
+def rotate_feature_maps(X, n_angles, order=1):
 	"""Rotate feature maps"""
 	X = np.reshape(X, [28,28])
 	X_ = []
 	for angle in np.linspace(0, 360, num=n_angles+1):
-		X_.append(sciint.rotate(X, angle, reshape=False))
+		#X_.append(sciint.rotate(X, angle, reshape=False))
+		X_.append(sktr.rotate(X, angle, order=order))
 	del X_[-1]
 	X_ = np.stack(X_, axis=0)
 	X_ = np.reshape(X_, [-1,784])
@@ -634,21 +637,33 @@ def equivariance_test(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
 	n_input = 784 				# MNIST data input (img shape: 28*28)
 	n_classes = 10 				# MNIST total classes (0-9 digits)
 	dropout = 0.75 				# Dropout, probability to keep units
-	n_filters = n_filters
+	n_filters = 8
 	dataset_size = 10000
 	
 	# tf Graph input
-	x = tf.placeholder(tf.float32, [batch_size, n_input])
-	y = tf.placeholder(tf.int64, [batch_size])
+	XX = tf.placeholder(tf.float32, [batch_size, n_input])
+	YY = tf.placeholder(tf.int64, [batch_size])
+	phase_train = tf.placeholder(tf.bool, [], name='phase_train')
 	
 	# Construct model
-	features, __, __ = deep_complex_bias(x, n_filters, n_classes, batch_size, std_mult)	
+	opt = {}
+	opt['n_filters'] = n_filters
+	opt['filter_gain'] = 2.1
+	opt['batch_size'] = batch_size
+	opt['n_channels'] = 1
+	opt['n_classes'] = 10
+	opt['std_mult'] = 0.3
+	opt['dim'] = 28
+	opt['crop_shape'] = 0
+	__, features = deep_stable(opt, XX, phase_train)
 	
 	with tf.Session() as sess:
 		# Launch the graph
 		init_op = tf.initialize_all_variables()
 		sess.run(init_op)
 		
+		saver = tf.train.Saver()
+		saver.restore(sess, './checkpoints/deep_mnist/trial0/model.ckpt')
 		#saver = tf.train.Saver()
 		#restore_model(saver, './', sess)
 
@@ -657,49 +672,52 @@ def equivariance_test(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
 		test_generator = minibatcher(mnist_testx, mnist_testy, batch_size,
 									 shuffle=False)
 		
-		input_ = mnist_trainx[54,:]
+		input_ = mnist_testx[np.random.randint(10000),:]
 		input_ = np.reshape(input_, (1,784))
 		input_ = rotate_feature_maps(input_, batch_size)
-		output = sess.run(features[layer], feed_dict={x : input_})
-		
-		plt.ion()
-		plt.show()
-		for k, v in output.iteritems():
-			if k > 0:
-				print v[0].shape
-				for i in xrange(v[0].shape[-1]):
-					# Original feature maps
-					plt.figure(1)
-					plt.clf()
-					for j in xrange(batch_size):
-						plt.subplot(2,batch_size,j+1)
-						r = np.sqrt(v[0][j,:,:,i]**2 + v[1][j,:,:,i]**2)
-						plt.imshow(r, cmap='jet', interpolation='nearest')
-						x, y = v[0][j,:,:,i]/r, v[1][j,:,:,i]/r
-						plt.quiver(x,y)
-					
-					# Back rotated images
-					#R0 = rotate_back_maps(v[0][...,i], batch_size)
-					#R1 = rotate_back_maps(v[1][...,i], batch_size)
-					R0 = rotate_back_90(v[0][...,i])
-					R1 = rotate_back_90(v[1][...,i])
-					R = []
-					for j in xrange(batch_size):
-						plt.subplot(2,batch_size,batch_size+j+1)
-						r = np.sqrt(R0[j,...]**2 + R1[j,...]**2)
-						plt.imshow(r, cmap='jet', interpolation='nearest')
-						x, y = R0[j,...]/r, R1[j,...]/r
-						plt.quiver(x,y)
-						R.append(r)
-					R = np.stack(R, axis=0)
-					deviation_map = np.std(R, axis=0)
-					plt.figure(3)
-					plt.imshow(deviation_map, interpolation='nearest')
-					MSE = np.sum(deviation_map)
-					print MSE, np.amax(deviation_map)
-					plt.draw()
-					raw_input(i)
-
+		for layer in xrange(6):
+			output = sess.run(features[layer], feed_dict={XX : input_, phase_train: False})
+			
+			plt.ion()
+			plt.show()
+			for k, v in output.iteritems():
+				if k ==  0:
+					print v[0].shape
+					for i in xrange(v[0].shape[-1]):
+						# Original feature maps
+						plt.figure(1)
+						plt.clf()
+						for j in xrange(batch_size):
+							plt.subplot(2,batch_size,j+1)
+							r = np.sqrt(v[0][j,:,:,i]**2 + v[1][j,:,:,i]**2)
+							plt.imshow(r, cmap='jet', interpolation='nearest')
+							x, y = v[0][j,:,:,i]/r, v[1][j,:,:,i]/r
+							plt.quiver(x,y)
+							plt.axis('off')
+						
+						# Back rotated images
+						#R0 = rotate_back_maps(v[0][...,i], batch_size)
+						#R1 = rotate_back_maps(v[1][...,i], batch_size)
+						R0 = rotate_back_90(v[0][...,i])
+						R1 = rotate_back_90(v[1][...,i])
+						R = []
+						for j in xrange(batch_size):
+							plt.subplot(2,batch_size,batch_size+j+1)
+							r = np.sqrt(R0[j,...]**2 + R1[j,...]**2)
+							plt.imshow(r, cmap='jet', interpolation='nearest')
+							x, y = R0[j,...]/r, R1[j,...]/r
+							plt.quiver(x,y)
+							plt.axis('off')
+							R.append(r)
+						R = np.stack(R, axis=0)
+						deviation_map = np.std(R, axis=0)
+						plt.figure(3)
+						plt.imshow(deviation_map, interpolation='nearest')
+						MSE = np.sum(deviation_map)
+						print MSE, np.amax(deviation_map)
+						plt.draw()
+						raw_input(i)
+	
 def equivariance_stability(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
 					  n_filters=8, bn_config=[False, False], trial_num='N',
 					  combine_train_val=False, std_mult=0.4, lr_decay=0.05):
@@ -728,25 +746,34 @@ def equivariance_stability(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=5
 	phase_train = tf.placeholder(tf.bool, [], 'phase_train')
 	
 	# Construct model
-	features, __, __ = deep_stable(X, n_filters, n_classes, batch_size, std_mult, phase_train)
+	opt = {}
+	opt['n_filters'] = n_filters
+	opt['filter_gain'] = 2.1
+	opt['batch_size'] = batch_size
+	opt['n_channels'] = 1
+	opt['n_classes'] = 10
+	opt['std_mult'] = 0.3
+	opt['dim'] = 28
+	opt['crop_shape'] = 0
+	__, features = deep_stable(opt, X, phase_train)
 	
 	plt.figure(figsize=(8,12))
 	plt.ion()
 	plt.show()
 	with tf.Session() as sess:
 		# Launch the graph
-		#init_op = tf.initialize_all_variables()
-		#sess.run(init_op)
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
 
 		saver = tf.train.Saver()
-		saver.restore(sess, './checkpoints/deep_stable/model.ckpt')
+		saver.restore(sess, './checkpoints/deep_mnist/trial0/model.ckpt')
 		for __ in xrange(100):						
 			plt.clf()
 			idx = np.random.randint(dataset_size)
 
 			input_ = mnist_trainx[idx,:]
 			input_ = np.reshape(input_, (1,784))
-			input_ = rotate_feature_maps(input_, batch_size)
+			input_ = rotate_feature_maps(input_, batch_size, order=4)
 			
 			plt.subplot(5,1,1)
 			plt.imshow(np.reshape(input_[0,:], (28,28)))
@@ -757,11 +784,10 @@ def equivariance_stability(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=5
 				
 				plt.subplot(5,1,layer+2)
 				for k, v in output.iteritems():
-					for i in xrange(v[0].shape[-1]):
-						x = np.sum(np.sum(v[0][...,i], axis=1), axis=1)
-						y = np.sum(np.sum(v[1][...,i], axis=1), axis=1)
-						r = np.sqrt(x**2 + y**2)
-						plt.plot(np.linspace(0.,360.,num=batch_size),r)
+					x = np.sum(v[0], axis=(1,2,3))
+					y = np.sum(v[1], axis=(1,2,3))
+					r = np.sqrt(x**2 + y**2)
+					plt.plot(np.linspace(0.,360.,num=batch_size),r)
 				plt.draw()
 			raw_input(idx)
 
@@ -878,12 +904,12 @@ if __name__ == '__main__':
 	#view_biases()
 	#count_feature_maps(model='deep_complex_bias', lr=2e-2, batch_size=200,
 	#				  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
-	#equivariance_test(model='deep_complex_bias', lr=2e-2, batch_size=200,
-	#				  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
-	#equivariance_stability(model='deep_complex_bias', lr=2e-2, batch_size=200,
+	equivariance_test(model='deep_complex_bias', lr=2e-2, batch_size=200,
+					  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
+	#equivariance_stability(model='deep_stable', lr=2e-2, batch_size=200,
 	#					   n_epochs=500, std_mult=0.3, n_filters=5,
 	#					   combine_train_val=False)
-	equivariance_caffe()
+	#equivariance_caffe()
 
 
 

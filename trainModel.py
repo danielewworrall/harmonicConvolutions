@@ -62,10 +62,14 @@ def average_gradients(tower_grads):
 
 def get_loss(opt, pred, y):
 	"""Return loss function for classification/regression"""
-	if opt['is_classification']:
-		cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
+	if opt['is_bsd']:
+		cost = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred, y, opt['pos_weight']))	
 	else:
-		cost = 0.5*tf.reduce_mean(tf.pow(y - pred, 2))
+		if opt['is_classification']:
+			cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
+		else:
+			cost = 0.5*tf.reduce_mean(tf.pow(y - pred, 2))
+	
 	print('  Constructed loss')
 	return cost
 
@@ -78,7 +82,10 @@ def get_io_placeholders(opt):
 		io_y = tf.placeholder(tf.int64, [opt['batch_size']], name='y')
 	else:
 		io_y = tf.placeholder(tf.float32, [opt['batch_size'],
-											  opt['num_classes']], name='y')
+						  opt['num_classes']], name='y')
+	if opt['is_bsd']:
+		io_x = tf.placeholder(tf.float32, [opt['batch_size'],opt['dim'],opt['dim2'],3])
+		io_y = tf.placeholder(tf.float32, [opt['batch_size'],opt['dim'],opt['dim2'],1], name='y')
 	return io_x, io_y
 
 def build_optimizer(cost, lr, opt):
@@ -97,11 +104,15 @@ def build_optimizer(cost, lr, opt):
 	return optimizer
 
 def get_evaluation(pred, y, opt):
-	if opt['is_classification']:
-		correct_pred = tf.equal(tf.argmax(pred, 1), y)
+	if opt['is_bsd']:
+		correct_pred = tf.equal(pred, y)
 		accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-	else:
-		accuracy = cost
+	else:		
+		if opt['is_classification']:
+			correct_pred = tf.equal(tf.argmax(pred, 1), y)
+			accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+		else:
+			accuracy = cost
 	return accuracy
 
 def build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
@@ -285,16 +296,16 @@ def train_model(opt, data):
 	sess.close()
 	return tacc_total
 
-def load_dataset(dir_name, subdir_name):
+def load_dataset(dir_name, subdir_name, prepend=''):
 	"""Load dataset from subdirectory"""
 	data_dir = dir_name + '/' + subdir_name
 	data = {}
-	data['train_x'] = np.load(data_dir + '/trainX.npy')
-	data['train_y'] = np.load(data_dir + '/trainY.npy')
-	data['valid_x'] = np.load(data_dir + '/validX.npy')
-	data['valid_y'] = np.load(data_dir + '/validY.npy')
-	data['test_x'] = np.load(data_dir + '/testX.npy')
-	if os.path.exists(data_dir + '/testY.npy'):
+	data['train_x'] = np.load(data_dir + '/' + prepend + 'trainX.npy')
+	data['train_y'] = np.load(data_dir + '/' + prepend + 'trainY.npy')
+	data['valid_x'] = np.load(data_dir + '/' + prepend + 'validX.npy')
+	data['valid_y'] = np.load(data_dir + '/' + prepend + 'validY.npy')
+	data['test_x'] = np.load(data_dir + '/' + prepend + 'testX.npy')
+	if os.path.exists(data_dir + '/' + prepend + 'testY.npy'):
 		data['test_y'] = np.load(data_dir + '/testY.npy')
 	return data
 
@@ -425,9 +436,39 @@ def run(opt):
 		opt['dim'] = 64
 		opt['n_channels'] = 3
 		opt['n_classes'] = 37
+	elif opt['datasetIdx'] == 'bsd':
+		data = load_dataset(opt['data_dir'], 'BSDS500_numpy', prepend='small_')
+		data['train_y'] = data['train_y'][...,np.newaxis]
+		data['valid_y'] = data['valid_y'][...,np.newaxis]
+		del data['test_x']
+		del data['test_y']
+		opt['pos_weight'] = 100
+		opt['model'] = getattr(equivariant, 'deep_bsd')
+		opt['is_bsd'] = True
+		opt['lr'] = 1e-1
+		opt['batch_size'] = 4
+		opt['std_mult'] = 1
+		opt['momentum'] = 0.95
+		opt['psi_preconditioner'] = 3.4
+		opt['delay'] = 8
+		opt['display_step'] = 10
+		opt['save_step'] = 10
+		opt['is_classification'] = True
+		opt['n_epochs'] = 250
+		opt['dim'] = 127
+		opt['dim2'] = 160
+		opt['n_channels'] = 3
+		opt['n_classes'] = 2
+		opt['n_filters'] = 32
+		opt['filter_gain'] = 2
+		opt['augment'] = False
+		opt['lr_div'] = np.sqrt(10.)
+		opt['crop_shape'] = 0
+		opt['log_path'] = './logs/deep_bsd'
+		opt['checkpoint_path'] = './checkpoints/deep_bsd'
 	else:
 		print('Dataset unrecognized, options are:')
-		print('mnist, cifar10, plankton, galaxies')
+		print('mnist, cifar10, plankton, galaxies, bsd')
 		sys.exit(1)
 	
 	# Check that save paths exist
