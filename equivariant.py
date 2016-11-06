@@ -144,16 +144,6 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 		}
 		
 		biases = {
-			'b1' : get_bias_dict(nf, order+1, name='b1', device=device),
-			'b2' : get_bias_dict(nf, order+1, name='b2', device=device),
-			'b3' : get_bias_dict(nf2, order, name='b3', device=device),
-			'b4' : get_bias_dict(nf2, order, name='b4', device=device),
-			'b5' : get_bias_dict(nf3, order, name='b5', device=device),
-			'b6' : get_bias_dict(nf3, order, name='b6', device=device),
-			'b7' : get_bias_dict(nf3, order, name='b7', device=device),
-			'b8' : get_bias_dict(nf3, order, name='b8', device=device),
-			'b9' : get_bias_dict(nf3, order, name='b9', device=device),
-			'b10' : get_bias_dict(nf3, order, name='b10', device=device),
 			'b11' : tf.get_variable('b11', dtype=tf.float32, shape=[opt['n_classes']],
 				initializer=tf.constant_initializer(1e-2)),
 			'psi1' : get_phase_dict(1, nf, order+1, name='psi1', device=device),
@@ -175,12 +165,11 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 	with tf.name_scope('block1') as scope:
 		cv1 = real_input_rotated_conv(x, weights['w1'], biases['psi1'],
 									  filter_size=5, padding='SAME', name='1')
-		cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
+		cv1 = complex_batch_norm(cv1, tf.nn.relu, phase_train, name='bn1', device=device)
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
-		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train,
-								 name='batchNorm1', device=device)
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='bn2', device=device)
 	
 	with tf.name_scope('block2') as scope:
 		cv3 = mean_pooling(cv2, ksize=(1,3,3,1), strides=(1,2,2,1))
@@ -188,44 +177,41 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 		cv3 = complex_input_rotated_conv(cv3, weights['w3'], biases['psi3'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='3')
-		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
+		cv3 = complex_batch_norm(cv3, tf.nn.relu, phase_train, name='bn3', device=device)
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='4')
-		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train,
-								 name='batchNorm2', device=device)
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='b4', device=device)
 	
 	with tf.name_scope('block3') as scope:
 		cv5 = mean_pooling(cv4, ksize=(1,3,3,1), strides=(1,2,2,1))
 		cv5 = complex_input_rotated_conv(cv5, weights['w5'], biases['psi5'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='5')
-		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
+		cv5 = complex_batch_norm(cv5, tf.nn.relu, phase_train, name='bn5', device=device)
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='6')
-		cv6 = complex_nonlinearity(cv6, biases['b6'], tf.nn.relu)
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, name='bn6', device=device)
 		cv7 = complex_input_rotated_conv(cv6, weights['w7'], biases['psi7'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='7')
-		cv7 = complex_batch_norm(cv7, tf.nn.relu, phase_train,
-								 name='batchNorm3', device=device)
+		cv7 = complex_batch_norm(cv7, tf.nn.relu, phase_train, name='bn7', device=device)
 	
 	with tf.name_scope('block4') as scope:
 		cv8 = mean_pooling(cv7, ksize=(1,3,3,1), strides=(1,2,2,1))
 		cv8 = complex_input_rotated_conv(cv8, weights['w8'], biases['psi8'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='8')
-		cv8 = complex_nonlinearity(cv8, biases['b8'], tf.nn.relu)
+		cv8 = complex_batch_norm(cv8, tf.nn.relu, phase_train, name='bn8', device=device)
 		cv9 = complex_input_rotated_conv(cv8, weights['w9'], biases['psi9'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='9')
-		cv9 = complex_nonlinearity(cv9, biases['b9'], tf.nn.relu)
+		cv9 = complex_batch_norm(cv9, tf.nn.relu, phase_train, name='bn9', device=device)
 		cv10 = complex_input_rotated_conv(cv9, weights['w10'], biases['psi10'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='10')
-		cv10 = complex_batch_norm(cv10, tf.nn.relu, phase_train,
-								 name='batchNorm4', device=device)
+		cv10 = complex_batch_norm(cv10, tf.nn.relu, phase_train, name='bn10', device=device)
 	
 	with tf.name_scope('block5') as scope:
 		cv11 = complex_input_conv(cv10, weights['w11'], filter_size=5,

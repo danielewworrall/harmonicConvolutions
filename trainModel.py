@@ -318,7 +318,7 @@ def run(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['data_dir'] = '/home/dworrall/data'
+	opt['data_dir'] = '/home/sgarbin/data'
 	opt['model'] = getattr(equivariant, opt['model'])
 	opt['save_step'] = 10
 	opt['display_step'] = 1e6
@@ -405,8 +405,9 @@ def run(opt):
 		opt['psi_preconditioner'] = 3.4
 		opt['delay'] = 8
 		opt['display_step'] = 10
-		pt['is_classification'] = True
-		opt['n_epochs'] = 150
+		opt['save_step'] = 1
+		opt['is_classification'] = True
+		opt['n_epochs'] = 250
 		opt['dim'] = 95
 		opt['n_channels'] = 1
 		opt['n_classes'] = 121
