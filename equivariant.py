@@ -322,9 +322,10 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	sm = opt['std_mult']
 	with tf.device(device):
 		weights = {
-			'w1' : get_weights_dict([[6,],[5,]], opt['n_channels'], nf, std_mult=sm, name='W1', device=device),
-			'w2' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=sm, name='W2', device=device),
-			'w3' : get_weights_dict([[6,],[5,],], nf, nf, std_mult=sm, name='W5', device=device)
+			'w1' : get_weights_dict([[3,],[2,]], opt['n_channels'], nf, std_mult=sm, name='W1', device=device),
+			'w2' : get_weights_dict([[3,],[2,]], nf, nf, std_mult=sm, name='W2', device=device),
+			'w3' : get_weights_dict([[3,],[2,],], nf, 2*nf, std_mult=sm, name='W3', device=device),
+			'w4' : get_weights_dict([[3,],[2,],], 2*nf, 2*nf, std_mult=sm, name='W4', device=device)
 		}
 		
 		biases = {
@@ -333,6 +334,8 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			'b2' : tf.get_variable('b2', dtype=tf.float32, shape=[1],
 				initializer=tf.constant_initializer(1e-2)),
 			'b3' : tf.get_variable('b3', dtype=tf.float32, shape=[1],
+				initializer=tf.constant_initializer(1e-2)),
+			'b4' : tf.get_variable('b4', dtype=tf.float32, shape=[1],
 				initializer=tf.constant_initializer(1e-2)),
 			'fuse' : tf.get_variable('fuse', dtype=tf.float32, shape=[1],
 				initializer=tf.constant_initializer(1e-2))
@@ -343,16 +346,19 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 				initializer=tf.constant_initializer(1e-2)),
 			'sw2' : tf.get_variable('sw2', dtype=tf.float32, shape=[1,1,(order+1)*nf,1],
 				initializer=tf.constant_initializer(1e-2)),
-			'sw3' : tf.get_variable('sw3', dtype=tf.float32, shape=[1,1,(order+1)*nf,1],
+			'sw3' : tf.get_variable('sw3', dtype=tf.float32, shape=[1,1,(order+1)*2*nf,1],
 				initializer=tf.constant_initializer(1e-2)),
-			'h1' : tf.get_variable('h1', dtype=tf.float32, shape=[1,1,3,1],
+			'sw4' : tf.get_variable('sw4', dtype=tf.float32, shape=[1,1,(order+1)*2*nf,1],
+				initializer=tf.constant_initializer(1e-2)),
+			'h1' : tf.get_variable('h1', dtype=tf.float32, shape=[1,1,4,1],
 				initializer=tf.constant_initializer(1e-2))
 		}
 		
 		psis = {
 			'psi1' : get_phase_dict(1, nf, order, name='psi1', device=device),
 			'psi2' : get_phase_dict(nf, nf, order, name='psi2', device=device),
-			'psi3' : get_phase_dict(nf, nf, order, name='psi3', device=device)
+			'psi3' : get_phase_dict(nf, 2*nf, order, name='psi3', device=device),
+			'psi4' : get_phase_dict(2*nf,2*nf, order, name='psi4', device=device)
 		}
 		
 		x = tf.reshape(x, tf.pack([opt['batch_size'],opt['dim']-opt['crop_shape'],opt['dim2']-opt['crop_shape'],3]))
@@ -361,25 +367,31 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	# Convolutional Layers
 	with tf.name_scope('layer1') as scope:
 		cv1 = real_input_rotated_conv(x, weights['w1'], psis['psi1'],
-				 filter_size=5, padding='SAME', name='1')
+				 filter_size=3, padding='SAME', name='1')
 		cv1 = complex_batch_norm(cv1, tf.nn.relu, phase_train, name='bn1', device=device)
 		fms[1] = conv2d(stack_magnitudes(cv1), side_weights['sw1'], b=biases['b1'])
 	
 	with tf.name_scope('layer2') as scope:
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], psis['psi2'],
-				 filter_size=5, output_orders=[0,1], padding='SAME', name='2')
+				 filter_size=3, output_orders=[0,1], padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='bn2', device=device)
 		fms[2] = conv2d(stack_magnitudes(cv2), side_weights['sw2'], b=biases['b2'])
 	
 	with tf.name_scope('layer3') as scope:
+		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], psis['psi3'],
-				 filter_size=5, output_orders=[0,1], padding='SAME', name='2')
+				 filter_size=3, output_orders=[0,1], padding='SAME', name='3')
 		fms[3] = conv2d(stack_magnitudes(cv3), side_weights['sw3'], b=biases['b3'])
-		
+	
+	with tf.name_scope('layer4') as scope:
+		cv4 = complex_input_rotated_conv(cv3, weights['w4'], psis['psi4'],
+				 filter_size=3, output_orders=[0,1], padding='SAME', name='4')
+		fms[4] = conv2d(stack_magnitudes(cv4), side_weights['sw4'], b=biases['b4'])
+	
 	with tf.name_scope('fusion') as scope:
 		side_preds = []
 		for key in fms.keys():
-				side_preds.append(tf.image.resize_images(fms[key],opt['dim'],opt['dim2']))
+			side_preds.append(tf.image.resize_images(fms[key],opt['dim'],opt['dim2']))
 		side_preds = tf.concat(3, side_preds)
 
 		fms['fuse'] = conv2d(side_preds, side_weights['h1'], b=biases['fuse'])

@@ -16,6 +16,7 @@ import numpy as np
 import scipy as sp
 import scipy.linalg as scilin
 import scipy.ndimage.interpolation as sciint
+import skimage.io as skio
 import tensorflow as tf
 
 import input_data
@@ -28,16 +29,18 @@ from steer_conv import *
 
 ###HELPER FUNCTIONS------------------------------------------------------------------
 def get_loss(opt, pred, y):
-    """Pred is a dist of feature maps and so is y"""
-    cost = 0.
-    for key in pred.keys():
-        y_ = y #[key]
-        pred_ = pred[key]
-        pw = 1-tf.reduce_mean(y_)
-        # side-weight/fusion loss
-        cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y_, pw))
-    print('  Constructed loss')
-    return cost
+	"""Pred is a dist of feature maps and so is y"""
+	cost = 0.
+	for key in pred.keys():
+		pred_ = pred[key]
+		predsh = pred_.get_shape()
+		y_ = tf.greater(tf.image.resize_images(y, predsh[1], predsh[2]), 0.)
+		y_ = tf.to_float(y_)
+		pw = 1-tf.reduce_mean(y_)
+		# side-weight/fusion loss
+		cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y_, pw))
+	print('  Constructed loss')
+	return cost
 
 def get_io_placeholders(opt):
 	"""Return placeholders for classification/regression"""
@@ -79,7 +82,7 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, optim=None, step=0):
 	n_GPUs = len(opt['deviceIdxs'])
 	generator = minibatcher(X, Y, n_GPUs*opt['batch_size'],
 							shuffle=is_training, augment=opt['augment'],
-							img_shape=(opt['dim'], opt['dim']),
+							img_shape=(opt['dim'], opt['dim2']),
 							crop_shape=opt['crop_shape'])
 	cost_total = 0.
 	for i, batch in enumerate(generator):
@@ -92,6 +95,7 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, optim=None, step=0):
 			print('  ' + mode + ' loss: %f' % cost_)
 		cost_total += cost_
 		step += 1
+	
 	return cost_total/(i+1.), step
 
 def construct_model_and_optimizer(opt, io, lr, pt):
@@ -100,89 +104,117 @@ def construct_model_and_optimizer(opt, io, lr, pt):
 		pred = opt['model'](opt, io['x'][0], pt)
 		loss = get_loss(opt, pred, io['y'][0])
 		train_op = build_optimizer(loss, lr, opt)
-	return loss, train_op
+	return loss, train_op, pred
+
+def save_predictions(sess, x, opt, pred, pt, data, epoch):
+	"""Save predictions to output folder"""
+	X = data['valid_x']
+	Y = data['valid_y']
+	save_path = opt['test_path'] + '/T_' + str(epoch)
+	if not os.path.exists(save_path):
+		os.mkdir(save_path)
+	generator = minibatcher(X, Y, opt['batch_size'], shuffle=False,
+							augment=False, img_shape=(opt['dim'], opt['dim2']),
+							crop_shape=0)
+	# Use sigmoid to map to [0,1]
+	bsd_map = tf.nn.sigmoid(pred['fuse'])
+	j = 0
+	for batch in generator:
+		batch_x, batch_y = batch
+		output = sess.run(bsd_map, feed_dict={x: batch_x, pt: False})
+		for i in xrange(output.shape[0]):
+			save_name = save_path + '/pred_' + str(j) + '.png'
+			im = output[i,:,:,0]
+			skio.imsave(save_name, im)
+			j += 1
+	print('Saved predictions to: %s' % (save_path,))
 
 def train_model(opt, data):
-    """Generalized training function
-    
-    opt: dict of options
-    data: dict of numpy data
-    """
-    n_GPUs = len(opt['deviceIdxs'])
-    print('Using Multi-GPU Model with %d devices.' % n_GPUs)
-    # Make placeholders
-    io = {}
-    io['x'] = []
-    io['y'] = []
-    for g in opt['deviceIdxs']:
-        with tf.device('/gpu:%d' % g):
-            io_x, io_y = get_io_placeholders(opt)
-            io['x'].append(io_x)
-            io['y'].append(io_y)
-    lr = tf.placeholder(tf.float32, name='learning_rate')
-    pt = tf.placeholder(tf.bool, name='phase_train')
-    
-    # Construct model and optimizer
-    loss, train_op = construct_model_and_optimizer(opt, io, lr, pt)
-    
-    # Initializing the variables
-    init = tf.initialize_all_variables()
-    
-    # Summary writers
-    tcost_ss = create_scalar_summary('training_cost')
-    vcost_ss = create_scalar_summary('validation_cost')
-    lr_ss = create_scalar_summary('learning_rate')
-    
-    # Configure tensorflow session
-    config = config_init()
-    if n_GPUs == 1:
-        config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
-    sess = tf.Session(config=config)
-    summary = tf.train.SummaryWriter(opt['log_path'], sess.graph)
-    print('Summaries constructed...')
-    
-    sess.run(init)
-    saver = tf.train.Saver()
-    start = time.time()
-    lr_ = opt['lr']
-    epoch = 0
-    step = 0.
-    counter = 0
-    best = -1e6
-    bs = opt['batch_size']
-    print('Starting training loop...')
-    while epoch < opt['n_epochs']:
-        # Need batch_size*n_GPUs amount of data
-        cost_total, step = loop('train', sess, io, opt, data, loss, lr, lr_, pt,
-                                optim=train_op, step=step)
-        
-        vloss_total, __ = loop('valid', sess, io, opt, data, loss, lr, lr_, pt,
-                               optim=train_op)
-        
-        fd = {tcost_ss[0] : cost_total, vcost_ss[0] : vloss_total,
-              lr_ss[0] : lr_}
-        summaries = sess.run([tcost_ss[1], vcost_ss[1], lr_ss[1]], feed_dict=fd)
-        for summ in summaries:
-            summary.add_summary(summ, step)
-        best, counter, lr_ = get_learning_rate(opt, -vloss_total, best, counter, lr_)
-        print "[" + str(opt['trial_num']),str(epoch) + \
-        "] Time: " + \
-        "{:.3f}".format(time.time()-start) + ", Counter: " + \
-        "{:d}".format(counter) + ", Loss: " + \
-        "{:.5f}".format(cost_total) + ", Val loss: " + \
-        "{:.5f}".format(vloss_total)
-    
-        epoch += 1
-    
-        if (epoch) % opt['save_step'] == 0:
-            save_path = saver.save(sess, opt['checkpoint_path'])
-            print("Model saved in file: %s" % save_path)
-            
-    # Save model and exit
-    save_path = saver.save(sess, opt['checkpoint_path'])
-    print("Model saved in file: %s" % save_path)
-    sess.close()
-    return tacc_total
+	"""Generalized training function
+	
+	opt: dict of options
+	data: dict of numpy data
+	"""
+	n_GPUs = len(opt['deviceIdxs'])
+	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
+	# Make placeholders
+	io = {}
+	io['x'] = []
+	io['y'] = []
+	for g in opt['deviceIdxs']:
+		with tf.device('/gpu:%d' % g):
+			io_x, io_y = get_io_placeholders(opt)
+			io['x'].append(io_x)
+			io['y'].append(io_y)
+	lr = tf.placeholder(tf.float32, name='learning_rate')
+	pt = tf.placeholder(tf.bool, name='phase_train')
+	
+	# Construct model and optimizer
+	loss, train_op, pred = construct_model_and_optimizer(opt, io, lr, pt)
+	
+	# Initializing the variables
+	init = tf.initialize_all_variables()
+	
+	# Summary writers
+	tcost_ss = create_scalar_summary('training_cost')
+	vcost_ss = create_scalar_summary('validation_cost')
+	lr_ss = create_scalar_summary('learning_rate')
+	
+	# Configure tensorflow session
+	config = config_init()
+	if n_GPUs == 1:
+		config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
+	sess = tf.Session(config=config)
+	summary = tf.train.SummaryWriter(opt['log_path'], sess.graph)
+	print('Summaries constructed...')
+	
+	sess.run(init)
+	saver = tf.train.Saver()
+	start = time.time()
+	lr_ = opt['lr']
+	epoch = 0
+	step = 0.
+	counter = 0
+	best = -1e6
+	bs = opt['batch_size']
+	print('Starting training loop...')
+	while epoch < opt['n_epochs']:
+		# Need batch_size*n_GPUs amount of data
+		cost_total, step = loop('train', sess, io, opt, data, loss, lr, lr_, pt,
+								optim=train_op, step=step)
+		
+		vloss_total, __ = loop('valid', sess, io, opt, data, loss, lr, lr_, pt,
+							   optim=train_op)
+		
+		fd = {tcost_ss[0] : cost_total, vcost_ss[0] : vloss_total,
+			  lr_ss[0] : lr_}
+		summaries = sess.run([tcost_ss[1], vcost_ss[1], lr_ss[1]], feed_dict=fd)
+		for summ in summaries:
+			summary.add_summary(summ, step)
+		best, counter, lr_ = get_learning_rate(opt, -vloss_total, best, counter, lr_)
+		
+		print "[" + str(opt['trial_num']),str(epoch) + \
+		"] Time: " + \
+		"{:.3f}".format(time.time()-start) + ", Counter: " + \
+		"{:d}".format(counter) + ", Loss: " + \
+		"{:.5f}".format(cost_total) + ", Val loss: " + \
+		"{:.5f}".format(vloss_total)
+		
+		# Write test time predictions to file
+		if epoch % opt['save_test_step'] == 0:
+			save_predictions(sess, io['x'][0], opt, pred, pt, data, epoch)
+	
+		epoch += 1
+	
+		if (epoch) % opt['save_step'] == 0:
+			save_path = saver.save(sess, opt['checkpoint_path'])
+			print("Model saved in file: %s" % save_path)
+			
+	# Save model and exit
+	save_path = saver.save(sess, opt['checkpoint_path'])
+	print("Model saved in file: %s" % save_path)
+	sess.close()
+	return tacc_total
 
 def load_dataset(dir_name, subdir_name, prepend=''):
     """Load dataset from subdirectory"""
@@ -210,56 +242,60 @@ def config_init():
 
 ##### MAIN SCRIPT #####
 def run(opt):
-    # Parameters
-    tf.reset_default_graph()
-    
-    # Default configuration
-    opt['data_dir'] = '/home/daniel/data'
-    opt['trial_num'] = 'A'
-    opt['combine_train_val'] = False	
-    
-    data = load_dataset(opt['data_dir'], 'BSDS500_numpy', prepend='small_')
-    opt['pos_weight'] = 100
-    opt['model'] = getattr(equivariant, 'deep_bsd')
-    opt['is_bsd'] = True
-    opt['lr'] = 1e-1
-    opt['batch_size'] = 4
-    opt['std_mult'] = 1
-    opt['momentum'] = 0.95
-    opt['psi_preconditioner'] = 3.4
-    opt['delay'] = 8
-    opt['display_step'] = 10
-    opt['save_step'] = 10
-    opt['is_classification'] = True
-    opt['n_epochs'] = 250
-    opt['dim'] = 127
-    opt['dim2'] = 160
-    opt['n_channels'] = 3
-    opt['n_classes'] = 2
-    opt['n_filters'] = 32
-    opt['filter_gain'] = 2
-    opt['augment'] = False
-    opt['lr_div'] = 10.
-    opt['crop_shape'] = 0
-    opt['log_path'] = './logs/deep_bsd'
-    opt['checkpoint_path'] = './checkpoints/deep_bsd'
-    
-    # Check that save paths exist
-    opt['log_path'] = opt['log_path'] + '/trial' + str(opt['trial_num'])
-    opt['checkpoint_path'] = opt['checkpoint_path'] + '/trial' + \
-                            str(opt['trial_num']) 
-    if not os.path.exists(opt['log_path']):
-        print('Creating log path')
-        os.mkdir(opt['log_path'])
-    if not os.path.exists(opt['checkpoint_path']):
-        print('Creating checkpoint path')
-        os.mkdir(opt['checkpoint_path'])
-    opt['checkpoint_path'] = opt['checkpoint_path'] + '/model.ckpt'
-    
-    # Print out options
-    for key, val in opt.iteritems():
-        print(key + ': ' + str(val))
-    return train_model(opt, data)
+	# Parameters
+	tf.reset_default_graph()
+	
+	# Default configuration
+	opt['data_dir'] = '/home/daniel/data'
+	opt['trial_num'] = 'A'
+	opt['combine_train_val'] = False	
+	
+	data = load_dataset(opt['data_dir'], 'BSDS500_numpy', prepend='')
+	opt['pos_weight'] = 100
+	opt['model'] = getattr(equivariant, 'deep_bsd')
+	opt['is_bsd'] = True
+	opt['lr'] = 1e-1
+	opt['batch_size'] = 4
+	opt['std_mult'] = 1
+	opt['momentum'] = 0.95
+	opt['psi_preconditioner'] = 3.4
+	opt['delay'] = 8
+	opt['display_step'] = 1e6
+	opt['save_step'] = 10
+	opt['is_classification'] = True
+	opt['n_epochs'] = 250
+	opt['dim'] = 321
+	opt['dim2'] = 481
+	opt['n_channels'] = 3
+	opt['n_classes'] = 2
+	opt['n_filters'] = 32
+	opt['filter_gain'] = 2
+	opt['augment'] = False
+	opt['lr_div'] = 10.
+	opt['crop_shape'] = 0
+	opt['log_path'] = './logs/deep_bsd'
+	opt['checkpoint_path'] = './checkpoints/deep_bsd'
+	opt['test_path'] = './bsd/trial' + opt['trial_num']
+	if not os.path.exists(opt['test_path']):
+		os.mkdir(opt['test_path'])
+	opt['save_test_step'] = 5
+	
+	# Check that save paths exist
+	opt['log_path'] = opt['log_path'] + '/trial' + str(opt['trial_num'])
+	opt['checkpoint_path'] = opt['checkpoint_path'] + '/trial' + \
+							str(opt['trial_num']) 
+	if not os.path.exists(opt['log_path']):
+		print('Creating log path')
+		os.mkdir(opt['log_path'])
+	if not os.path.exists(opt['checkpoint_path']):
+		print('Creating checkpoint path')
+		os.mkdir(opt['checkpoint_path'])
+	opt['checkpoint_path'] = opt['checkpoint_path'] + '/model.ckpt'
+	
+	# Print out options
+	for key, val in opt.iteritems():
+		print(key + ': ' + str(val))
+	return train_model(opt, data)
 
 
 if __name__ == '__main__':
