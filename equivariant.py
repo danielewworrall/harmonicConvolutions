@@ -391,7 +391,7 @@ def bm(x,y):
 	shy = y.get_shape()
 	x = tf.reshape(x, tf.pack([-1,tf.reduce_prod(shx[2:])]))
 	x = tf.matmul(x,y)
-	return x.reshape(x, tf.pack([shx[0],shx[1],shx[2],1]))
+	return tf.reshape(x, tf.pack([shx[0],shx[1],shx[2],1]))
 
 ##### CUSTOM BLOCKS FOR MODEL #####
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
