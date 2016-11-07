@@ -353,7 +353,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			'psi3' : get_phase_dict(nf, nf, order, name='psi3', device=device)
 		}
 		
-		h = tf.get_variable('h', dtype=tf.float32, shape=[1,1,(order+1)*nf,1],
+		h = tf.get_variable('h', dtype=tf.float32, shape=[1,1,3,1],
 				initializer=tf.constant_initializer(1e-2)),
 		x = tf.reshape(x, tf.pack([opt['batch_size'],opt['dim']-opt['crop_shape'],opt['dim2']-opt['crop_shape'],3]))
 		fms = {}
@@ -381,7 +381,6 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		for key in fms.keys():
 				side_preds.append(tf.image.resize_images(fms[key],opt['dim'],opt['dim2']))
 		side_preds = tf.concat(3, side_preds)
-		print side_preds
 		fms['fuse'] = conv2d(side_preds, h, b=biases['fuse'])
 		return fms
 
