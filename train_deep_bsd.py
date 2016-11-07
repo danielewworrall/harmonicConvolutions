@@ -60,11 +60,6 @@ def build_optimizer(cost, lr, opt):
 	print('  Optimizer built')
 	return optimizer
 
-def get_evaluation(pred, y, opt):
-	correct_pred = tf.equal(pred, y)
-	accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-	return accuracy
-
 def build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
 	'''Build a feed_dict appropriate to training regime'''
 	batch_x, batch_y = batch
@@ -76,7 +71,7 @@ def build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
 	return fd
 
 ##### TRAINING LOOPS #####
-def loop(mode, sess, io, opt, data, cost, acc, lr, lr_, pt, optim=None, step=0):
+def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, optim=None, step=0):
 	"""Run a loop"""
 	X = data[mode+'_x']
 	Y = data[mode+'_y']
@@ -87,28 +82,25 @@ def loop(mode, sess, io, opt, data, cost, acc, lr, lr_, pt, optim=None, step=0):
 							img_shape=(opt['dim'], opt['dim']),
 							crop_shape=opt['crop_shape'])
 	cost_total = 0.
-	acc_total = 0.
 	for i, batch in enumerate(generator):
 		fd = build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
 		if mode == 'train':
-			__, cost_, acc_ = sess.run([optim, cost, acc], feed_dict=fd)
+			__, cost_ = sess.run([optim, cost], feed_dict=fd)
 		else:
-			cost_, acc_ = sess.run([cost, acc], feed_dict=fd)
+			cost_ = sess.run(cost, feed_dict=fd)
 		if step % opt['display_step'] == 0:
 			print('  ' + mode + ' Acc.: %f' % acc_)
 		cost_total += cost_
-		acc_total += acc_
 		step += 1
-	return cost_total/(i+1.), acc_total/(i+1.), step
+	return cost_total/(i+1.), step
 
 def construct_model_and_optimizer(opt, io, lr, pt):
 	"""Build the model and an single/multi-GPU optimizer"""
 	if len(opt['deviceIdxs']) == 1:
 		pred = opt['model'](opt, io['x'][0], pt)
 		loss = get_loss(opt, pred, io['y'][0])
-		accuracy = get_evaluation(pred, io['y'][0], opt)
 		train_op = build_optimizer(loss, lr, opt)
-	return loss, accuracy, train_op
+	return loss, train_op
 
 def train_model(opt, data):
     """Generalized training function
@@ -131,7 +123,7 @@ def train_model(opt, data):
     pt = tf.placeholder(tf.bool, name='phase_train')
     
     # Construct model and optimizer
-    loss, accuracy, train_op = construct_model_and_optimizer(opt, io, lr, pt)
+    loss, train_op = construct_model_and_optimizer(opt, io, lr, pt)
     
     # Initializing the variables
     init = tf.initialize_all_variables()
@@ -142,7 +134,6 @@ def train_model(opt, data):
     # Summary writers
     tcost_ss = create_scalar_summary('training_cost')
     vcost_ss = create_scalar_summary('validation_cost')
-    vacc_ss = create_scalar_summary('validation_accuracy')
     lr_ss = create_scalar_summary('learning_rate')
     
     # Configure tensorflow session
@@ -160,34 +151,30 @@ def train_model(opt, data):
     epoch = 0
     step = 0.
     counter = 0
-    best = 0.
+    best = -1e6
     bs = opt['batch_size']
     print('Starting training loop...')
     while epoch < opt['n_epochs']:
         # Need batch_size*n_GPUs amount of data
-        cost_total, acc_total, step = loop('train', sess, io, opt, data, loss,
-                                           accuracy, lr, lr_, pt, optim=train_op,
-                                           step=step)
+        cost_total, step = loop('train', sess, io, opt, data, loss, lr, lr_, pt,
+                                optim=train_op, step=step)
         
-        vloss_total, vacc_total, __ = loop('valid', sess, io, opt, data,
-                                           loss, accuracy, lr, lr_,
-                                           pt, optim=train_op)
+        vloss_total, __ = loop('valid', sess, io, opt, data, loss, lr, lr_, pt,
+                               optim=train_op)
         
         fd = {tcost_ss[0] : cost_total, vcost_ss[0] : vloss_total,
-              vacc_ss[0] : vacc_total, lr_ss[0] : lr_}
+              lr_ss[0] : lr_}
         summaries = sess.run([tcost_ss[1], vcost_ss[1], vacc_ss[1], lr_ss[1]],
             feed_dict=fd)
         for summ in summaries:
             summary.add_summary(summ, step)
-        best, counter, lr_ = get_learning_rate(opt, vacc_total, best, counter, lr_)
+        best, counter, lr_ = get_learning_rate(opt, -vloss_total, best, counter, lr_)
         print "[" + str(opt['trial_num']),str(epoch) + \
         "] Time: " + \
         "{:.3f}".format(time.time()-start) + ", Counter: " + \
         "{:d}".format(counter) + ", Loss: " + \
         "{:.5f}".format(cost_total) + ", Val loss: " + \
-        "{:.5f}".format(vloss_total) + ", Train Acc: " + \
-        "{:.5f}".format(acc_total) + ", Val acc: " + \
-        "{:.5f}".format(vacc_total)
+        "{:.5f}".format(vloss_total)
     
         epoch += 1
     
