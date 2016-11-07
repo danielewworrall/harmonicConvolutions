@@ -364,6 +364,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		print stack_magnitudes(cv1)
 		print side_weights['sw1']
 		f1 = tf.batch_matmul(stack_magnitudes(cv1),side_weights['sw1'])
+		print f1
 		fm[1] = tf.nn.bias_add(f1,biases['b1'])
 	
 	with tf.name_scope('layer2') as scope:
