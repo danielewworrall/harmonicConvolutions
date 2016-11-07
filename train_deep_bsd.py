@@ -31,9 +31,9 @@ def get_loss(opt, pred, y):
     """Pred is a dist of feature maps and so is y"""
     cost = 0.
     for key in pred.keys():
-        y_ = y[key]
+        y_ = y #[key]
         pred_ = pred[key]
-        pw = tf.reduce_mean(y_)
+        pw = 1-tf.reduce_mean(y_)
         # side-weight/fusion loss
         cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred, y, pw))
     print('  Constructed loss')

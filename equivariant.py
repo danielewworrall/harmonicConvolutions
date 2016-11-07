@@ -383,7 +383,6 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		side_preds = tf.concat(3, side_preds)
 
 		fms['fuse'] = conv2d(side_preds, side_weights['h1'], b=biases['fuse'])
-		print fms['fuse'].get_shape()
 		return fms
 
 '''
