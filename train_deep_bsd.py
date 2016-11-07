@@ -246,7 +246,6 @@ def run(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['data_dir'] = '/home/daniel/data'
 	opt['trial_num'] = 'A'
 	opt['combine_train_val'] = False	
 	
@@ -302,6 +301,7 @@ if __name__ == '__main__':
 	deviceIdxs = [int(x.strip()) for x in sys.argv[1].split(',')]
 	opt = {}
 	opt['deviceIdxs'] = deviceIdxs
+	opt['data_dir'] = sys.argv[2]
 
 	run(opt)
 	print("ALL FINISHED! :)")
