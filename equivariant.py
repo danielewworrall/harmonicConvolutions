@@ -344,6 +344,8 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			'sw2' : tf.get_variable('sw2', dtype=tf.float32, shape=[1,1,(order+1)*nf,1],
 				initializer=tf.constant_initializer(1e-2)),
 			'sw3' : tf.get_variable('sw3', dtype=tf.float32, shape=[1,1,(order+1)*nf,1],
+				initializer=tf.constant_initializer(1e-2)),
+			'h1' : tf.get_variable('h1', dtype=tf.float32, shape=[1,1,3,1],
 				initializer=tf.constant_initializer(1e-2))
 		}
 		
@@ -353,7 +355,6 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			'psi3' : get_phase_dict(nf, nf, order, name='psi3', device=device)
 		}
 		
-		h1 = tf.get_variable('h1', dtype=tf.float32, shape=[1,1,3,1],initializer=tf.constant_initializer(1e-2))
 		x = tf.reshape(x, tf.pack([opt['batch_size'],opt['dim']-opt['crop_shape'],opt['dim2']-opt['crop_shape'],3]))
 		fms = {}
 		
@@ -382,7 +383,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		side_preds = tf.concat(3, side_preds)
 		
 		print side_preds.get_shape()
-		print h1.get_shape()
+		print side_weights['h1'].get_shape()
 		print biases['fuse'].get_shape()
 		fms['fuse'] = conv2d(side_preds, h1, b=biases['fuse'])
 		print fms['fuse'].get_shape()
