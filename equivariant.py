@@ -380,7 +380,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		side_preds = []
 		for key in fms.keys():
 				side_preds.append(tf.image.resize_images(fms[key],
-														 tf.pack([opt['dim'],opt['dim2']])
+														 tf.pack([opt['dim'],opt['dim2']]), 
 														 method=0))
 		side_preds = tf.concat(3, side_preds)
 		fms['fuse'] = conv2d(side_preds, h, b=biases['fuse'])
