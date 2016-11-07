@@ -216,14 +216,14 @@ def train_model(opt, data):
 	sess.close()
 	return tacc_total
 
-def load_dataset(dir_name, subdir_name, prepend=''):
+def load_pkl(dir_name, subdir_name, prepend=''):
     """Load dataset from subdirectory"""
     data_dir = dir_name + '/' + subdir_name
     data = {}
-    data['train_x'] = np.load(data_dir + '/' + prepend + 'trainX.npy')
-    data['train_y'] = np.load(data_dir + '/' + prepend + 'trainY.npy')[...,np.newaxis]
-    data['valid_x'] = np.load(data_dir + '/' + prepend + 'validX.npy')
-    data['valid_y'] = np.load(data_dir + '/' + prepend + 'validY.npy')[...,np.newaxis]
+    data['train_x'] = np.load(data_dir + '/' + prepend + 'train_images.npy')
+    data['train_y'] = np.load(data_dir + '/' + prepend + 'train_labels.npy')[...,np.newaxis]
+    data['valid_x'] = np.load(data_dir + '/' + prepend + 'valid_images.npy')
+    data['valid_y'] = np.load(data_dir + '/' + prepend + 'valid_labels.npy')[...,np.newaxis]
     return data
 
 def create_scalar_summary(name):
@@ -249,12 +249,12 @@ def run(opt):
 	opt['trial_num'] = 'A'
 	opt['combine_train_val'] = False	
 	
-	data = load_dataset(opt['data_dir'], 'BSDS500_numpy', prepend='')
+	data = load_pkl(opt['data_dir'], 'bsd_pkl', prepend='')
 	opt['pos_weight'] = 100
 	opt['model'] = getattr(equivariant, 'deep_bsd')
 	opt['is_bsd'] = True
-	opt['lr'] = 1e-1
-	opt['batch_size'] = 4
+	opt['lr'] = 1e0
+	opt['batch_size'] = 10
 	opt['std_mult'] = 1
 	opt['momentum'] = 0.95
 	opt['psi_preconditioner'] = 3.4
