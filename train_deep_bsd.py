@@ -186,15 +186,15 @@ def train_model(opt, data):
     return tacc_total
 
 def load_dataset(dir_name, subdir_name, prepend=''):
-	"""Load dataset from subdirectory"""
-	data_dir = dir_name + '/' + subdir_name
-	data = {}
-	data['train_x'] = np.load(data_dir + '/' + prepend + 'trainX.npy')
-	data['train_y'] = np.load(data_dir + '/' + prepend + 'trainY.npy')[:,np.newaxis]
+    """Load dataset from subdirectory"""
+    data_dir = dir_name + '/' + subdir_name
+    data = {}
+    data['train_x'] = np.load(data_dir + '/' + prepend + 'trainX.npy')
+    data['train_y'] = np.load(data_dir + '/' + prepend + 'trainY.npy')[:,np.newaxis]
     print data['train_y'].shape
-	data['valid_x'] = np.load(data_dir + '/' + prepend + 'validX.npy')
-	data['valid_y'] = np.load(data_dir + '/' + prepend + 'validY.npy')[:,np.newaxis]
-	return data
+    data['valid_x'] = np.load(data_dir + '/' + prepend + 'validX.npy')
+    data['valid_y'] = np.load(data_dir + '/' + prepend + 'validY.npy')[:,np.newaxis]
+    return data
 
 def create_scalar_summary(name):
 	"""Create a scalar summary placeholder and op"""
