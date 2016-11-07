@@ -362,7 +362,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 				 filter_size=5, padding='SAME', name='1')
 		cv1 = complex_batch_norm(cv1, tf.nn.relu, phase_train, name='bn1', device=device)
 		print stack_magnitudes(cv1)
-		print side_weights['sw1']
+		print side_weights['sw1'].get_shape()
 		f1 = tf.batch_matmul(stack_magnitudes(cv1),side_weights['sw1'])
 		print f1
 		fm[1] = tf.nn.bias_add(f1,biases['b1'])
