@@ -127,9 +127,6 @@ def train_model(opt, data):
     
     # Initializing the variables
     init = tf.initialize_all_variables()
-    if opt['combine_train_val']:
-        data['train_x'] = np.vstack([data['train_x'], data['valid_x']])
-        data['train_y'] = np.hstack([data['train_y'], data['valid_y']])
     
     # Summary writers
     tcost_ss = create_scalar_summary('training_cost')
@@ -194,6 +191,7 @@ def load_dataset(dir_name, subdir_name, prepend=''):
 	data = {}
 	data['train_x'] = np.load(data_dir + '/' + prepend + 'trainX.npy')
 	data['train_y'] = np.load(data_dir + '/' + prepend + 'trainY.npy')[:,np.newaxis]
+    print data['train_y'].shape
 	data['valid_x'] = np.load(data_dir + '/' + prepend + 'validX.npy')
 	data['valid_y'] = np.load(data_dir + '/' + prepend + 'validY.npy')[:,np.newaxis]
 	return data
