@@ -89,7 +89,7 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, optim=None, step=0):
 		else:
 			cost_ = sess.run(cost, feed_dict=fd)
 		if step % opt['display_step'] == 0:
-			print('  ' + mode + ' Acc.: %f' % acc_)
+			print('  ' + mode + ' loss: %f' % cost_)
 		cost_total += cost_
 		step += 1
 	return cost_total/(i+1.), step
