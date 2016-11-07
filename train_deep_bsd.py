@@ -280,10 +280,8 @@ def run(opt):
 
 
 if __name__ == '__main__':
-	deviceIdxs = [int(x.strip()) for x in sys.argv[2].split(',')]
+	deviceIdxs = [int(x.strip()) for x in sys.argv[1].split(',')]
 	opt = {}
-	opt['model'] = sys.argv[3]
-	opt['datasetIdx'] = sys.argv[1]
 	opt['deviceIdxs'] = deviceIdxs
 
 	run(opt)
