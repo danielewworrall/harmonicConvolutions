@@ -376,7 +376,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 				 filter_size=5, output_orders=[0,1], padding='SAME', name='2')
 		fms[3] = conv2d(stack_magnitudes(cv3), side_weights['sw3'], b=biases['b3'])	
 	
-	with tf.name_sceop('fusion') as scope:
+	with tf.name_scope('fusion') as scope:
 		side_preds = []
 		for key in fm.keys():
 				side_preds.append(tf.image.resize_images(fm[key], (opt['dim'],opt['dim2'])))
