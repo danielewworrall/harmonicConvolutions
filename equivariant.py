@@ -361,9 +361,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		cv1 = real_input_rotated_conv(x, weights['w1'], psis['psi1'],
 				 filter_size=5, padding='SAME', name='1')
 		cv1 = complex_batch_norm(cv1, tf.nn.relu, phase_train, name='bn1', device=device)
-		print stack_magnitudes(cv1)
-		print side_weights['sw1'].get_shape()
-		f1 = tf.batch_matmul(stack_magnitudes(cv1),side_weights['sw1'])
+		f1 = bm(stack_magnitudes(cv1),side_weights['sw1'])
 		print f1
 		fm[1] = tf.nn.bias_add(f1,biases['b1'])
 	
@@ -387,6 +385,13 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		side_preds = tf.concat(3, side_preds)
 		fm['fuse'] = append(tf.batch_matmul(side_preds, h1))
 		return fm
+	
+def bm(x,y):
+	shx = x.get_shape()
+	shy = y.get_shape()
+	x = tf.reshape(x, tf.pack([-1,tf.reduce_prod(shx[2:])]))
+	x = tf.matmul(x,y)
+	return x.reshape(x, tf.pack([shx[0],shx[1],shx[2],1]))
 
 ##### CUSTOM BLOCKS FOR MODEL #####
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
