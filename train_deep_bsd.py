@@ -35,7 +35,7 @@ def get_loss(opt, pred, y):
         pred_ = pred[key]
         pw = 1-tf.reduce_mean(y_)
         # side-weight/fusion loss
-        cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred, y, pw))
+        cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y_, pw))
     print('  Constructed loss')
     return cost
 
