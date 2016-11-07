@@ -361,20 +361,20 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		cv1 = real_input_rotated_conv(x, weights['w1'], psis['psi1'],
 				 filter_size=5, padding='SAME', name='1')
 		cv1 = complex_batch_norm(cv1, tf.nn.relu, phase_train, name='bn1', device=device)
-		f1 = tf.batch_matmul(stack_magnitudes(cv1),side_weights['s1'])
+		f1 = tf.batch_matmul(stack_magnitudes(cv1),side_weights['sw1'])
 		fm[1] = tf.nn.bias_add(f1,biases['b1'])
 	
 	with tf.name_scope('layer2') as scope:
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], psis['psi2'],
 				 filter_size=5, output_orders=[0,1], padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='bn2', device=device)
-		f2 = tf.batch_matmul(stack_magnitudes(cv2),side_weights['s2'])
+		f2 = tf.batch_matmul(stack_magnitudes(cv2),side_weights['sw2'])
 		fm[2] = tf.nn.bias_add(f2,biases['b2'])	
 	
 	with tf.name_scope('layer3') as scope:
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], psis['psi3'],
 				 filter_size=5, output_orders=[0,1], padding='SAME', name='2')
-		f3 = tf.batch_matmul(stack_magnitudes(cv3),side_weights['s3'])
+		f3 = tf.batch_matmul(stack_magnitudes(cv3),side_weights['sw3'])
 		fm[3] = tf.nn.bias_add(f3,biases['b3'])	
 	
 	with tf.name_sceop('fusion') as scope:
