@@ -353,8 +353,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			'psi3' : get_phase_dict(nf, nf, order, name='psi3', device=device)
 		}
 		
-		h1 = tf.get_variable('h1', dtype=tf.float32, shape=[1,1,3,1],
-				initializer=tf.constant_initializer(1e-2)),
+		h1 = tf.get_variable('h1', dtype=tf.float32, shape=[1,1,3,1],initializer=tf.constant_initializer(1e-2))
 		x = tf.reshape(x, tf.pack([opt['batch_size'],opt['dim']-opt['crop_shape'],opt['dim2']-opt['crop_shape'],3]))
 		fms = {}
 		
