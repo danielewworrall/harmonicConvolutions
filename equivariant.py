@@ -374,15 +374,14 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	with tf.name_scope('layer3') as scope:
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], psis['psi3'],
 				 filter_size=5, output_orders=[0,1], padding='SAME', name='2')
-		fms[3] = conv2d(stack_magnitudes(cv3), side_weights['sw3'], b=biases['b3'])	
-	print fms[1]
-	print fms[2]
-	print fms[3]
+		fms[3] = conv2d(stack_magnitudes(cv3), side_weights['sw3'], b=biases['b3'])
+		
 	with tf.name_scope('fusion') as scope:
 		side_preds = []
 		for key in fms.keys():
 				side_preds.append(tf.image.resize_images(fms[key],opt['dim'],opt['dim2']))
 		side_preds = tf.concat(3, side_preds)
+		print side_preds
 		fms['fuse'] = conv2d(side_preds, h, b=biases['fuse'])
 		return fms
 
