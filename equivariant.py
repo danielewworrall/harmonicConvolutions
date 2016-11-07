@@ -333,15 +333,17 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			'b2' : tf.get_variable('b2', dtype=tf.float32, shape=[1],
 				initializer=tf.constant_initializer(1e-2)),
 			'b3' : tf.get_variable('b3', dtype=tf.float32, shape=[1],
+				initializer=tf.constant_initializer(1e-2)),
+			'fuse' : tf.get_variable('fuse', dtype=tf.float32, shape=[1],
 				initializer=tf.constant_initializer(1e-2))
 		}
 		
 		side_weights = {
-			'sw1' : tf.get_variable('sw1', dtype=tf.float32, shape=[(order+1)*nf,1],
+			'sw1' : tf.get_variable('sw1', dtype=tf.float32, shape=[1,1,(order+1)*nf,1],
 				initializer=tf.constant_initializer(1e-2)),
-			'sw2' : tf.get_variable('sw2', dtype=tf.float32, shape=[(order+1)*nf,1],
+			'sw2' : tf.get_variable('sw2', dtype=tf.float32, shape=[1,1,(order+1)*nf,1],
 				initializer=tf.constant_initializer(1e-2)),
-			'sw3' : tf.get_variable('sw3', dtype=tf.float32, shape=[(order+1)*nf,1],
+			'sw3' : tf.get_variable('sw3', dtype=tf.float32, shape=[1,1,(order+1)*nf,1],
 				initializer=tf.constant_initializer(1e-2))
 		}
 		
@@ -351,7 +353,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			'psi3' : get_phase_dict(nf, nf, order, name='psi3', device=device)
 		}
 		
-		h = tf.get_variable('h', dtype=tf.float32, shape=[(order+1)*nf,1],
+		h = tf.get_variable('h', dtype=tf.float32, shape=[1,1,(order+1)*nf,1],
 				initializer=tf.constant_initializer(1e-2)),
 		x = tf.reshape(x, tf.pack([opt['batch_size'],opt['dim']-opt['crop_shape'],opt['dim2']-opt['crop_shape'],3]))
 		fms = {}
@@ -361,37 +363,35 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		cv1 = real_input_rotated_conv(x, weights['w1'], psis['psi1'],
 				 filter_size=5, padding='SAME', name='1')
 		cv1 = complex_batch_norm(cv1, tf.nn.relu, phase_train, name='bn1', device=device)
-		f1 = bm(stack_magnitudes(cv1),side_weights['sw1'])
-		print f1
-		fm[1] = tf.nn.bias_add(f1,biases['b1'])
+		fms[1] = conv2d(stack_magnitudes(cv1), side_weights['sw1'], b=biases['b1'])
 	
 	with tf.name_scope('layer2') as scope:
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], psis['psi2'],
 				 filter_size=5, output_orders=[0,1], padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='bn2', device=device)
-		f2 = tf.batch_matmul(stack_magnitudes(cv2),side_weights['sw2'])
-		fm[2] = tf.nn.bias_add(f2,biases['b2'])	
+		fms[2] = conv2d(stack_magnitudes(cv2), side_weights['sw2'], b=biases['b2'])
 	
 	with tf.name_scope('layer3') as scope:
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], psis['psi3'],
 				 filter_size=5, output_orders=[0,1], padding='SAME', name='2')
-		f3 = tf.batch_matmul(stack_magnitudes(cv3),side_weights['sw3'])
-		fm[3] = tf.nn.bias_add(f3,biases['b3'])	
+		fm[3] = conv2d(stack_magnitudes(cv3), side_weights['sw3'], b=biases['b3'])	
 	
 	with tf.name_sceop('fusion') as scope:
 		side_preds = []
 		for key in fm.keys():
 				side_preds.append(tf.image.resize_images(fm[key], (opt['dim'],opt['dim2'])))
 		side_preds = tf.concat(3, side_preds)
-		fm['fuse'] = append(tf.batch_matmul(side_preds, h1))
-		return fm
-	
+		fms['fuse'] = conv2d(side_preds, h, b=biases['fuse'])
+		return fms
+
+'''
 def bm(x,y):
 	shx = x.get_shape()
 	shy = y.get_shape()
 	x = tf.reshape(x, tf.pack([-1,tf.reduce_prod(shx[2:])]))
 	x = tf.matmul(x,y)
 	return tf.reshape(x, tf.pack([shx[0],shx[1],shx[2],1]))
+'''
 
 ##### CUSTOM BLOCKS FOR MODEL #####
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
