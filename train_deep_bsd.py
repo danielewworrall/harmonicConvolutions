@@ -161,8 +161,7 @@ def train_model(opt, data):
         
         fd = {tcost_ss[0] : cost_total, vcost_ss[0] : vloss_total,
               lr_ss[0] : lr_}
-        summaries = sess.run([tcost_ss[1], vcost_ss[1], vacc_ss[1], lr_ss[1]],
-            feed_dict=fd)
+        summaries = sess.run([tcost_ss[1], vcost_ss[1], lr_ss[1]], feed_dict=fd)
         for summ in summaries:
             summary.add_summary(summ, step)
         best, counter, lr_ = get_learning_rate(opt, -vloss_total, best, counter, lr_)
