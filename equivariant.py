@@ -394,7 +394,11 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	with tf.name_scope('fusion') as scope:
 		side_preds = []
 		for key in fms.keys():
-			side_preds.append(tf.image.resize_images(fms[key],opt['dim'],opt['dim2']))
+			if opt['machine'] == 'grumpy':
+				y_ = tf.image.resize_images(y, predsh[1], predsh[2]) 
+			else:
+				y_ = tf.image.resize_images(y, tf.pack([predsh[1], predsh[2]])) 
+			side_preds.append(y_)
 		side_preds = tf.concat(3, side_preds)
 
 		fms['fuse'] = conv2d(side_preds, side_weights['h1'], b=biases['fuse'])

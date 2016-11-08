@@ -35,7 +35,10 @@ def get_loss(opt, pred, y):
 	for key in pred.keys():
 		pred_ = pred[key]
 		predsh = pred_.get_shape()
-		y_ = tf.image.resize_images(y, predsh[1], predsh[2]) > 0.0
+		if opt['machine'] == 'grumpy':
+			y_ = tf.image.resize_images(y, tf.pack([predsh[1], predsh[2]])) > 0.0
+		else:
+			y_ = tf.image.resize_images(y, predsh[1], predsh[2]) > 0.0
 		y_ = tf.to_float(y_)
 		pw = 1-tf.reduce_mean(y_)
 		# side-weight/fusion loss
@@ -310,6 +313,7 @@ if __name__ == '__main__':
 	opt = {}
 	opt['deviceIdxs'] = deviceIdxs
 	opt['data_dir'] = sys.argv[2]
+	opt['machine'] = sys.argv[3]
 
 	run(opt)
 	print("ALL FINISHED! :)")
