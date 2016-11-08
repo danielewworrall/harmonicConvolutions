@@ -46,8 +46,8 @@ def get_loss(opt, pred, y):
 
 def get_io_placeholders(opt):
 	"""Return placeholders for classification/regression"""
-	size = int(opt['dim']-2*opt['crop_shape'])
-	size2 = int(opt['dim2']-2*opt['crop_shape'])
+	size = int(opt['dim'])
+	size2 = int(opt['dim2'])
 	io_x = tf.placeholder(tf.float32, [opt['batch_size'],size,size2,3])
 	io_y = tf.placeholder(tf.float32, [opt['batch_size'],size,size2,1], name='y')
 	return io_x, io_y
@@ -86,8 +86,7 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, optim=None, step=0):
 	n_GPUs = len(opt['deviceIdxs'])
 	generator = pklbatcher(X, Y, n_GPUs*opt['batch_size'], shuffle=is_training,
 						   augment=opt['augment'],
-						   img_shape=(opt['dim'], opt['dim2'], 3),
-						   crop_shape=opt['crop_shape'])
+						   img_shape=(opt['dim'], opt['dim2'], 3), crop_shape=0)
 	cost_total = 0.
 	for i, batch in enumerate(generator):
 		fd = build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
@@ -277,11 +276,11 @@ def run(opt):
 	opt['dim2'] = 481
 	opt['n_channels'] = 3
 	opt['n_classes'] = 2
-	opt['n_filters'] = 64
+	opt['n_filters'] = 16
 	opt['filter_gain'] = 2
-	opt['augment'] = True
+	opt['augment'] = False
+	opt['crop_shape'] = 0
 	opt['lr_div'] = 10.
-	opt['crop_shape'] = 50
 	opt['log_path'] = './logs/deep_bsd'
 	opt['checkpoint_path'] = './checkpoints/deep_bsd'
 	opt['test_path'] = './bsd/trial' + opt['trial_num']
