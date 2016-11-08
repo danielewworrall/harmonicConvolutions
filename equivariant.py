@@ -395,9 +395,9 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		side_preds = []
 		for key in fms.keys():
 			if opt['machine'] == 'grumpy':
-				y_ = tf.image.resize_images(fms[key], tf.pack([predsh[1], predsh[2]]))
+				y_ = tf.image.resize_images(fms[key], tf.pack([size, size2]))
 			else:
-				y_ = tf.image.resize_images(fms[key], predsh[1], predsh[2]) 
+				y_ = tf.image.resize_images(fms[key], size, size2) 
 			side_preds.append(y_)
 		side_preds = tf.concat(3, side_preds)
 
