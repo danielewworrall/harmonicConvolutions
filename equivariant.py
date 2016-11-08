@@ -514,7 +514,7 @@ def minibatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 					img = img[crop_shape:-crop_shape,crop_shape:-crop_shape]
 					img = np.reshape(img, [1,np.prod(img.shape)])
 			im.append(img)
-		im = concatenate(im, axis=0)
+		im = np.concatenate(im, axis=0)
 		yield im, targets[excerpt]
 
 def preprocess(im, im_shape, crop_margin):
