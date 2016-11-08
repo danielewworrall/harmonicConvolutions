@@ -46,8 +46,10 @@ def get_loss(opt, pred, y):
 
 def get_io_placeholders(opt):
 	"""Return placeholders for classification/regression"""
-	io_x = tf.placeholder(tf.float32, [opt['batch_size'],opt['dim'],opt['dim2'],3])
-	io_y = tf.placeholder(tf.float32, [opt['batch_size'],opt['dim'],opt['dim2'],1], name='y')
+	size = int(opt['dim']-2*opt['crop_shape'])
+	size2 = int(opt['dim2']-2*opt['crop_shape'])
+	io_x = tf.placeholder(tf.float32, [opt['batch_size'],size,size2,3])
+	io_y = tf.placeholder(tf.float32, [opt['batch_size'],size,size2,1], name='y')
 	return io_x, io_y
 
 def build_optimizer(cost, lr, opt):
@@ -84,7 +86,7 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, optim=None, step=0):
 	n_GPUs = len(opt['deviceIdxs'])
 	generator = pklbatcher(X, Y, n_GPUs*opt['batch_size'], shuffle=is_training,
 						   augment=opt['augment'],
-						   img_shape=(opt['dim'], opt['dim2']),
+						   img_shape=(opt['dim'], opt['dim2'], 3),
 						   crop_shape=opt['crop_shape'])
 	cost_total = 0.
 	for i, batch in enumerate(generator):
@@ -267,7 +269,7 @@ def run(opt):
 	opt['momentum'] = 0.95
 	opt['psi_preconditioner'] = 3.4
 	opt['delay'] = 8
-	opt['display_step'] = 1e6
+	opt['display_step'] = 8
 	opt['save_step'] = 10
 	opt['is_classification'] = True
 	opt['n_epochs'] = 100
@@ -277,9 +279,9 @@ def run(opt):
 	opt['n_classes'] = 2
 	opt['n_filters'] = 64
 	opt['filter_gain'] = 2
-	opt['augment'] = False
+	opt['augment'] = True
 	opt['lr_div'] = 10.
-	opt['crop_shape'] = 0
+	opt['crop_shape'] = 50
 	opt['log_path'] = './logs/deep_bsd'
 	opt['checkpoint_path'] = './checkpoints/deep_bsd'
 	opt['test_path'] = './bsd/trial' + opt['trial_num']

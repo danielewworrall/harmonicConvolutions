@@ -318,6 +318,8 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	nf = opt['n_filters']
 	nf2 = int(nf*opt['filter_gain'])
 	bs = opt['batch_size']
+	size = int(opt['dim']-2*opt['crop_shape'])
+	size2 = int(opt['dim2']-2*opt['crop_shape'])
 	
 	sm = opt['std_mult']
 	with tf.device(device):
@@ -361,7 +363,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			'psi4' : get_phase_dict(2*nf,2*nf, order, name='psi4', device=device)
 		}
 		
-		x = tf.reshape(x, tf.pack([opt['batch_size'],opt['dim']-opt['crop_shape'],opt['dim2']-opt['crop_shape'],3]))
+		x = tf.reshape(x, tf.pack([opt['batch_size'],size,size2,3]))
 		fms = {}
 		
 	# Convolutional Layers
@@ -459,7 +461,7 @@ def get_phase_dict(n_in, n_out, order, name='b',device='/cpu:0'):
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
 def pklbatcher(inputs, targets, batch_size, shuffle=False, augment=False,
-				img_shape=(95,95), crop_shape=10):
+				img_shape=(321,481,3), crop_shape=10):
 	"""Input and target are minibatched. Returns a generator"""
 	assert len(inputs) == len(targets)
 	indices = inputs.keys()
@@ -475,16 +477,18 @@ def pklbatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 		targ = []
 		for i in xrange(len(excerpt)):
 			img = inputs[excerpt[i]]['x']
+			tg = targets[excerpt[i]]['y']
+			img = np.reshape(img, img_shape)
+			tg = np.reshape(tg, img_shape[:2]+(1,))
 			if augment:
 				# We use shuffle as a proxy for training
 				if shuffle:
-					img = preprocess(img, img_shape, crop_shape)
+					img, tg = bsd_preprocess(img, tg, img_shape, crop_shape)
 				else:
-					img = np.reshape(img, img_shape)
-					img = img[crop_shape:-crop_shape,crop_shape:-crop_shape]
-					img = np.reshape(img, [1,np.prod(img.shape)])
+					img = img[crop_shape:-crop_shape,crop_shape:-crop_shape,:]
+					tg = tg[crop_shape:-crop_shape,crop_shape:-crop_shape,:]
 			im.append(img)
-			targ.append(targets[excerpt[i]]['y'])
+			targ.append(tg)
 		im = np.stack(im, axis=0)
 		targ = np.stack(targ, axis=0)
 		yield im, targ, excerpt
@@ -538,6 +542,16 @@ def preprocess(im, im_shape, crop_margin):
 	new_shape = np.asarray(im_shape) - 2.*np.asarray((crop_margin,)*2)
 	im = central_crop(im, new_shape)
 	return np.reshape(im, [1,np.prod(new_shape)])
+
+def bsd_preprocess(im, tg, im_shape, crop_margin):
+	'''Data normalizations and augmentations'''
+	new_translation = np.asarray((uniform_rand(-crop_margin,crop_margin),
+					   uniform_rand(-crop_margin,crop_margin)))
+	affine_matrix = sktr.AffineTransform(translation=new_translation)
+	im = sktr.warp(im, affine_matrix)
+	tg = sktr.warp(tg, affine_matrix)
+	new_shape = np.asarray(im_shape) - 2*np.asarray((crop_margin,)*2 + (3,))
+	return central_crop(im, new_shape), central_crop(tg, new_shape)
 
 def central_crop(im, new_shape):
 	im_shape = np.asarray(im.shape)
