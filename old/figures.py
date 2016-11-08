@@ -177,11 +177,29 @@ def radial_color(order=1, n=5):
     #plt.ylim([-0.5,4.5])
     plt.show()
     '''
+    
+def gaussian_filters(max_order, size):
+    lin = np.linspace((1.-size)/2., (size-1.)/2., size)
+    X, Y = np.meshgrid(lin, lin)
+    R = np.sqrt(X**2 + Y**2)
+    theta = np.arctan2(-Y, X)
+    
+    plt.ion()
+    plt.show()
+    for order in xrange(max_order+1):
+        mask = np.exp(-R**2/(size*100.))
+        real = mask*np.cos(order*theta)
+        
+        plt.imshow(real, interpolation='nearest', cmap='gray')
+        plt.axis('off')
+        plt.draw()
+        raw_input(order)
+
 
 if __name__ == '__main__':
     #radial_profile(1,5)
-    radial_color()
-
+    #radial_color()
+    gaussian_filters(7,601)
 
 
 

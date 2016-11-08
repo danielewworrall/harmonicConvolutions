@@ -8,6 +8,7 @@ import time
 import numpy as np
 import scipy.linalg as scilin
 import scipy.ndimage.interpolation as sciint
+import skimage.morphology as skmo
 import skimage.transform as sktr
 import tensorflow as tf
 
@@ -465,6 +466,7 @@ def pklbatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 	"""Input and target are minibatched. Returns a generator"""
 	assert len(inputs) == len(targets)
 	indices = inputs.keys()
+	disk = skmo.disk(2)
 	if shuffle:
 		np.random.shuffle(indices)
 	for start_idx in range(0, len(inputs) - batch_size + 1, batch_size):
@@ -478,8 +480,11 @@ def pklbatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 		for i in xrange(len(excerpt)):
 			img = inputs[excerpt[i]]['x']
 			tg = targets[excerpt[i]]['y']
-			img = np.reshape(img, img_shape)
-			tg = np.reshape(tg, img_shape[:2]+(1,))
+			#img = np.reshape(img, img_shape)
+			#tg = np.reshape(tg, img_shape[:2]+(1,))
+			#img = sktr.resize(img, (107,160,3))
+			tg = skmo.dilation(tg[...,0], disk)[...,np.newaxis]
+			#tg = (sktr.resize(tg, (107,160,1)) > 0).astype(np.float)
 			if augment:
 				# We use shuffle as a proxy for training
 				if shuffle:

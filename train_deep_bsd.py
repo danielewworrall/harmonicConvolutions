@@ -35,8 +35,7 @@ def get_loss(opt, pred, y):
 	for key in pred.keys():
 		pred_ = pred[key]
 		predsh = pred_.get_shape()
-		y_ = tf.image.resize_images(y, predsh[1], predsh[2],
-									method=tf.image.ResizeMethod.BICUBIC) > 0.01
+		y_ = tf.image.resize_images(y, predsh[1], predsh[2]) > 0.0
 		y_ = tf.to_float(y_)
 		pw = 1-tf.reduce_mean(y_)
 		# side-weight/fusion loss
@@ -219,7 +218,7 @@ def train_model(opt, data):
 	save_path = saver.save(sess, opt['checkpoint_path'])
 	print("Model saved in file: %s" % save_path)
 	sess.close()
-	return tacc_total
+	return 
 
 def load_pkl(dir_name, subdir_name, prepend=''):
 	"""Load dataset from subdirectory"""
@@ -255,7 +254,7 @@ def run(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'A'
+	opt['trial_num'] = 'B'
 	opt['combine_train_val'] = False	
 	
 	data = load_pkl(opt['data_dir'], 'bsd_pkl', prepend='')
@@ -263,7 +262,7 @@ def run(opt):
 	opt['model'] = getattr(equivariant, 'deep_bsd')
 	opt['is_bsd'] = True
 	opt['lr'] = 1e-2
-	opt['batch_size'] = 5
+	opt['batch_size'] = 2
 	opt['std_mult'] = 1
 	opt['momentum'] = 0.95
 	opt['psi_preconditioner'] = 3.4
