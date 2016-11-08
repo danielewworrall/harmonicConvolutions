@@ -348,7 +348,8 @@ def run(opt):
 	opt['augment'] = False
 	opt['crop_shape'] = 0
 	opt['log_path'] = './logs/current'
-	opt['checkpoint_path'] = './checkpoints/current'	
+	opt['checkpoint_path'] = './checkpoints/current'
+	opt['is_bsd'] = False
 	
 	# Model specifics
 	if opt['datasetIdx'] == 'mnist':
