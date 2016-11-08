@@ -410,6 +410,8 @@ def run(opt):
 	elif opt['datasetIdx'] == 'plankton': 
 		# Load dataset
 		data = load_dataset(opt['data_dir'], 'plankton_numpy')
+		data['train_x'] = np.squeeze(data['train_x'])
+		data['valid_x'] = np.squeeze(data['valid_x'])
 		opt['lr'] = 1e-1
 		opt['batch_size'] = 32
 		opt['std_mult'] = 1
