@@ -10,6 +10,7 @@ import os
 import sys
 import time
 
+import cPickle as pkl
 import cv2
 import equivariant
 import numpy as np
@@ -34,7 +35,8 @@ def get_loss(opt, pred, y):
 	for key in pred.keys():
 		pred_ = pred[key]
 		predsh = pred_.get_shape()
-		y_ = tf.greater(tf.image.resize_images(y, predsh[1], predsh[2]), 0.)
+		y_ = tf.image.resize_images(y, predsh[1], predsh[2],
+									method=tf.image.ResizeMethod.BICUBIC) > 0.01
 		y_ = tf.to_float(y_)
 		pw = 1-tf.reduce_mean(y_)
 		# side-weight/fusion loss
@@ -65,7 +67,7 @@ def build_optimizer(cost, lr, opt):
 
 def build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
 	'''Build a feed_dict appropriate to training regime'''
-	batch_x, batch_y = batch
+	batch_x, batch_y, __ = batch
 	fd = {lr : lr_, pt : pt_}
 	bs = opt['batch_size']
 	for g in xrange(len(opt['deviceIdxs'])):
@@ -80,10 +82,10 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, optim=None, step=0):
 	Y = data[mode+'_y']
 	is_training = (mode=='train')
 	n_GPUs = len(opt['deviceIdxs'])
-	generator = minibatcher(X, Y, n_GPUs*opt['batch_size'],
-							shuffle=is_training, augment=opt['augment'],
-							img_shape=(opt['dim'], opt['dim2']),
-							crop_shape=opt['crop_shape'])
+	generator = pklbatcher(X, Y, n_GPUs*opt['batch_size'], shuffle=is_training,
+						   augment=opt['augment'],
+						   img_shape=(opt['dim'], opt['dim2']),
+						   crop_shape=opt['crop_shape'])
 	cost_total = 0.
 	for i, batch in enumerate(generator):
 		fd = build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
@@ -113,18 +115,20 @@ def save_predictions(sess, x, opt, pred, pt, data, epoch):
 	save_path = opt['test_path'] + '/T_' + str(epoch)
 	if not os.path.exists(save_path):
 		os.mkdir(save_path)
-	generator = minibatcher(X, Y, opt['batch_size'], shuffle=False,
-							augment=False, img_shape=(opt['dim'], opt['dim2']),
-							crop_shape=0)
+	generator = pklbatcher(X, Y, opt['batch_size'], shuffle=False,
+						   augment=False, img_shape=(opt['dim'], opt['dim2']),
+						   crop_shape=0)
 	# Use sigmoid to map to [0,1]
 	bsd_map = tf.nn.sigmoid(pred['fuse'])
 	j = 0
 	for batch in generator:
-		batch_x, batch_y = batch
+		batch_x, batch_y, excerpt = batch
 		output = sess.run(bsd_map, feed_dict={x: batch_x, pt: False})
 		for i in xrange(output.shape[0]):
-			save_name = save_path + '/pred_' + str(j) + '.png'
+			save_name = save_path + '/' + str(excerpt[i]).replace('.jpg','.png')
 			im = output[i,:,:,0]
+			if data['valid_x'][excerpt[i]]['transposed']:
+				im = im.T
 			skio.imsave(save_name, im)
 			j += 1
 	print('Saved predictions to: %s' % (save_path,))
@@ -217,14 +221,18 @@ def train_model(opt, data):
 	return tacc_total
 
 def load_pkl(dir_name, subdir_name, prepend=''):
-    """Load dataset from subdirectory"""
-    data_dir = dir_name + '/' + subdir_name
-    data = {}
-    data['train_x'] = np.load(data_dir + '/' + prepend + 'train_images.npy')
-    data['train_y'] = np.load(data_dir + '/' + prepend + 'train_labels.npy')[...,np.newaxis]
-    data['valid_x'] = np.load(data_dir + '/' + prepend + 'valid_images.npy')
-    data['valid_y'] = np.load(data_dir + '/' + prepend + 'valid_labels.npy')[...,np.newaxis]
-    return data
+	"""Load dataset from subdirectory"""
+	data_dir = dir_name + '/' + subdir_name
+	data = {}
+	with open(data_dir + '/' + prepend + 'train_images.pkl') as fp:
+		data['train_x'] = pkl.load(fp)
+	with open(data_dir + '/' + prepend + 'train_labels.pkl') as fp:
+		data['train_y'] = pkl.load(fp)
+	with open(data_dir + '/' + prepend + 'valid_images.pkl') as fp:
+		data['valid_x'] = pkl.load(fp)
+	with open(data_dir + '/' + prepend + 'valid_labels.pkl') as fp:
+		data['valid_y'] = pkl.load(fp)
+	return data
 
 def create_scalar_summary(name):
 	"""Create a scalar summary placeholder and op"""
@@ -253,8 +261,8 @@ def run(opt):
 	opt['pos_weight'] = 100
 	opt['model'] = getattr(equivariant, 'deep_bsd')
 	opt['is_bsd'] = True
-	opt['lr'] = 1e0
-	opt['batch_size'] = 10
+	opt['lr'] = 1e-2
+	opt['batch_size'] = 5
 	opt['std_mult'] = 1
 	opt['momentum'] = 0.95
 	opt['psi_preconditioner'] = 3.4
@@ -262,12 +270,12 @@ def run(opt):
 	opt['display_step'] = 1e6
 	opt['save_step'] = 10
 	opt['is_classification'] = True
-	opt['n_epochs'] = 250
+	opt['n_epochs'] = 100
 	opt['dim'] = 321
 	opt['dim2'] = 481
 	opt['n_channels'] = 3
 	opt['n_classes'] = 2
-	opt['n_filters'] = 32
+	opt['n_filters'] = 64
 	opt['filter_gain'] = 2
 	opt['augment'] = False
 	opt['lr_div'] = 10.

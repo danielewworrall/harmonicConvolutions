@@ -173,7 +173,7 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='bn2', device=device)
 	
 	with tf.name_scope('block2') as scope:
-		cv3 = mean_pooling(cv2, ksize=(1,3,3,1), strides=(1,2,2,1))
+		cv3 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 3
 		cv3 = complex_input_rotated_conv(cv3, weights['w3'], biases['psi3'],
 										 filter_size=5, output_orders=[0,1],
@@ -185,7 +185,7 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='b4', device=device)
 	
 	with tf.name_scope('block3') as scope:
-		cv5 = mean_pooling(cv4, ksize=(1,3,3,1), strides=(1,2,2,1))
+		cv5 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv5 = complex_input_rotated_conv(cv5, weights['w5'], biases['psi5'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='5')
@@ -200,7 +200,7 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 		cv7 = complex_batch_norm(cv7, tf.nn.relu, phase_train, name='bn7', device=device)
 	
 	with tf.name_scope('block4') as scope:
-		cv8 = mean_pooling(cv7, ksize=(1,3,3,1), strides=(1,2,2,1))
+		cv8 = mean_pooling(cv7, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv8 = complex_input_rotated_conv(cv8, weights['w8'], biases['psi8'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='8')
@@ -458,6 +458,37 @@ def get_phase_dict(n_in, n_out, order, name='b',device='/cpu:0'):
 
 
 ##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
+def pklbatcher(inputs, targets, batch_size, shuffle=False, augment=False,
+				img_shape=(95,95), crop_shape=10):
+	"""Input and target are minibatched. Returns a generator"""
+	assert len(inputs) == len(targets)
+	indices = inputs.keys()
+	if shuffle:
+		np.random.shuffle(indices)
+	for start_idx in range(0, len(inputs) - batch_size + 1, batch_size):
+		if shuffle:
+			excerpt = indices[start_idx:start_idx + batch_size]
+		else:
+			excerpt = indices[start_idx:start_idx+batch_size]
+		# Data augmentation
+		im = []
+		targ = []
+		for i in xrange(len(excerpt)):
+			img = inputs[excerpt[i]]['x']
+			if augment:
+				# We use shuffle as a proxy for training
+				if shuffle:
+					img = preprocess(img, img_shape, crop_shape)
+				else:
+					img = np.reshape(img, img_shape)
+					img = img[crop_shape:-crop_shape,crop_shape:-crop_shape]
+					img = np.reshape(img, [1,np.prod(img.shape)])
+			im.append(img)
+			targ.append(targets[excerpt[i]]['y'])
+		im = np.stack(im, axis=0)
+		targ = np.stack(targ, axis=0)
+		yield im, targ, excerpt
+
 def minibatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 				img_shape=(95,95), crop_shape=10):
 	"""Input and target are minibatched. Returns a generator"""

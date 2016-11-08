@@ -425,7 +425,8 @@ def run(opt):
 		opt['n_filters'] = 32
 		opt['filter_gain'] = 2
 		opt['augment'] = True
-		opt['lr_div'] = np.sqrt(10.)
+		opt['lr_div'] = 10.
+		opt['trial_num'] = 'B'
 		opt['crop_shape'] = 10
 		opt['log_path'] = './logs/deep_plankton'
 		opt['checkpoint_path'] = './checkpoints/deep_plankton'
