@@ -6,3 +6,4 @@ data/
 *.pyc
 results/
 *.png
+deepboundaries/
