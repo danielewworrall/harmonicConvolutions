@@ -21,9 +21,11 @@ def run():
 				subfolder = file_name.split('/')[-1].split('_')[0]
 				im = skio.imread(file_name)
 				im_size = np.asarray(im.shape)
-				new_size = np.floor(im_size * (481./ np.amax(im_size))).astype(np.int)
-				im = sktr.resize(im, new_size)
-				skio.imsave(file_name, im)
+				#new_size = np.floor(im_size * (481./ np.amax(im_size))).astype(np.int)
+				#im = sktr.resize(im, new_size)
+				if im_size[0] > im_size[1]:
+					im = im.T
+					skio.imsave(file_name, im)
 				sys.stdout.write("%i\r" %(j,))
 				sys.stdout.flush()
 				j += 1

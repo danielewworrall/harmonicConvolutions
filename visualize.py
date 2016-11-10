@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-import caffe
+#import caffe
 import cv2
 import matplotlib as mpl
 import numpy as np
@@ -472,7 +472,7 @@ def view_filters(n_filters=5, std_mult=0.3):
 	
 	# Construct model
 	features, weights, biases = deep_complex_bias(x, n_filters, n_classes, batch_size, std_mult)
-	
+
 	import seaborn as sns
 	sns.set_style("white")
 	
@@ -717,6 +717,92 @@ def equivariance_test(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
 						print MSE, np.amax(deviation_map)
 						plt.draw()
 						raw_input(i)
+
+def equivariance_save(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
+					  n_filters=30, bn_config=[False, False], trial_num='N',
+					  combine_train_val=False, std_mult=0.4, lr_decay=0.05):
+	"""Save the results to a file"""
+	tf.reset_default_graph()
+	# Load dataset
+	mnist_train = np.load('./data/mnist_rotation_new/rotated_train.npz')
+	mnist_valid = np.load('./data/mnist_rotation_new/rotated_valid.npz')
+	mnist_test = np.load('./data/mnist_rotation_new/rotated_test.npz')
+	mnist_trainx, mnist_trainy = mnist_train['x'], mnist_train['y']
+	mnist_validx, mnist_validy = mnist_valid['x'], mnist_valid['y']
+	mnist_testx, mnist_testy = mnist_test['x'], mnist_test['y']
+
+	# Parameters
+	batch_size = 4
+	layer = 0
+	
+	# Network Parameters
+	n_input = 784 				# MNIST data input (img shape: 28*28)
+	n_classes = 10 				# MNIST total classes (0-9 digits)
+	dropout = 0.75 				# Dropout, probability to keep units
+	n_filters = 8
+	dataset_size = 10000
+	
+	# tf Graph input
+	XX = tf.placeholder(tf.float32, [batch_size, n_input])
+	YY = tf.placeholder(tf.int64, [batch_size])
+	phase_train = tf.placeholder(tf.bool, [], name='phase_train')
+	
+	# Construct model
+	opt = {}
+	opt['n_filters'] = n_filters
+	opt['filter_gain'] = 2.1
+	opt['batch_size'] = batch_size
+	opt['n_channels'] = 1
+	opt['n_classes'] = 10
+	opt['std_mult'] = 0.3
+	opt['dim'] = 28
+	opt['crop_shape'] = 0
+	__, features = deep_stable(opt, XX, phase_train)
+	
+	with tf.Session() as sess:
+		# Launch the graph
+		init_op = tf.initialize_all_variables()
+		sess.run(init_op)
+		
+		saver = tf.train.Saver()
+		saver.restore(sess, './checkpoints/deep_mnist/trial0/model.ckpt')
+		#saver = tf.train.Saver()
+		#restore_model(saver, './', sess)
+
+		# Test accuracy
+		tacc_total = 0.
+		test_generator = minibatcher(mnist_testx, mnist_testy, batch_size,
+									 shuffle=False)
+		idx = np.random.randint(10000)
+		idx = 8254
+		input_ = mnist_testx[idx,:]
+		print idx
+		plt.ion()
+		plt.show()
+		plt.figure(1)
+		plt.clf()
+		plt.imshow(np.reshape(input_, (28,28)), interpolation='nearest', cmap='gray')
+		plt.axis('off')
+		plt.draw()
+		plt.savefig('./visualizations/input.pdf')
+		
+		input_ = np.reshape(input_, (1,784))
+		input_ = rotate_feature_maps(input_, batch_size)
+		for layer in xrange(6):
+			output = sess.run(features[layer], feed_dict={XX : input_, phase_train: False})
+			for k, v in output.iteritems():
+				for i in xrange(v[0].shape[-1]):
+					# Original feature maps
+					plt.clf()
+					r = np.sqrt(v[0][0,:,:,i]**2 + v[1][0,:,:,i]**2)
+					plt.imshow(r, cmap='jet', interpolation='nearest')
+					x, y = v[0][0,:,:,i]/r, v[1][0,:,:,i]/r
+					plt.quiver(x,y)
+					plt.axis('off')
+					plt.draw()
+					fname = './visualizations/fm' + str(layer) + '_' + str(k) + '_' + str(i) + '.pdf'
+					plt.savefig(fname)
+					print fname
 	
 def equivariance_stability(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
 					  n_filters=8, bn_config=[False, False], trial_num='N',
@@ -790,7 +876,7 @@ def equivariance_stability(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=5
 					plt.plot(np.linspace(0.,360.,num=batch_size),r)
 				plt.draw()
 			raw_input(idx)
-
+'''
 def equivariance_caffe():
 	n_angles = 40
 	#load the model
@@ -896,16 +982,19 @@ def equivariance_caffe():
 		raw_input(k)
 	plt.show()
 	raw_input(k)
+'''
 
 if __name__ == '__main__':
 	#view_feature_maps(model='deep_complex_bias', lr=2e-2, batch_size=200,
 	#				  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
-	#view_filters()
+	view_filters()
 	#view_biases()
 	#count_feature_maps(model='deep_complex_bias', lr=2e-2, batch_size=200,
 	#				  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
-	equivariance_test(model='deep_complex_bias', lr=2e-2, batch_size=200,
-					  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
+	#equivariance_test(model='deep_complex_bias', lr=2e-2, batch_size=200,
+	#				  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
+	#equivariance_save(model='deep_complex_bias', lr=2e-2, batch_size=200,
+	#				  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
 	#equivariance_stability(model='deep_stable', lr=2e-2, batch_size=200,
 	#					   n_epochs=500, std_mult=0.3, n_filters=5,
 	#					   combine_train_val=False)
