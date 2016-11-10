@@ -29,20 +29,17 @@ from scipy import misc
 from steer_conv import *
 
 ###HELPER FUNCTIONS------------------------------------------------------------------
-def get_loss(opt, pred, y):
+def get_loss(opt, pred, y, sl=None):
 	"""Pred is a dist of feature maps and so is y"""
 	cost = 0.
 	for key in pred.keys():
 		pred_ = pred[key]
-		predsh = pred_.get_shape()
-		if opt['machine'] == 'grumpy':
-			y_ = tf.image.resize_images(y, tf.pack([predsh[1], predsh[2]])) > 0.0
-		else:
-			y_ = tf.image.resize_images(y, predsh[1], predsh[2]) > 0.0
-		y_ = tf.to_float(y_)
-		pw = 1-tf.reduce_mean(y_)
+		pw = 1-tf.reduce_mean(y)
 		# side-weight/fusion loss
-		cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y_, pw))
+		mult = 1.
+		if (sl is not None) and (key == 'fuse'):
+			mult = sl
+		cost += mult*tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y, pw))
 	print('  Constructed loss')
 	return cost
 
@@ -50,8 +47,8 @@ def get_io_placeholders(opt):
 	"""Return placeholders for classification/regression"""
 	size = int(opt['dim'])
 	size2 = int(opt['dim2'])
-	io_x = tf.placeholder(tf.float32, [opt['batch_size'],size,size2,3])
-	io_y = tf.placeholder(tf.float32, [opt['batch_size'],size,size2,1], name='y')
+	io_x = tf.placeholder(tf.float32, [opt['batch_size'],None,None,3])
+	io_y = tf.placeholder(tf.float32, [opt['batch_size'],None,None,1], name='y')
 	return io_x, io_y
 
 def build_optimizer(cost, lr, opt):
@@ -80,18 +77,20 @@ def build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
 	return fd
 
 ##### TRAINING LOOPS #####
-def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, optim=None, step=0):
+def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
+		 optim=None, step=0, anneal=0.):
 	"""Run a loop"""
 	X = data[mode+'_x']
 	Y = data[mode+'_y']
 	is_training = (mode=='train')
 	n_GPUs = len(opt['deviceIdxs'])
 	generator = pklbatcher(X, Y, n_GPUs*opt['batch_size'], shuffle=is_training,
-						   augment=opt['augment'],
-						   img_shape=(opt['dim'], opt['dim2'], 3), crop_shape=0)
+						   augment=opt['augment'], img_shape=(opt['dim'], opt['dim2'], 3))
 	cost_total = 0.
 	for i, batch in enumerate(generator):
 		fd = build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
+		if sl is not None:
+				fd[sl] = 1. - float(epoch)/100.
 		if mode == 'train':
 			__, cost_ = sess.run([optim, cost], feed_dict=fd)
 		else:
@@ -103,11 +102,13 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, optim=None, step=0):
 	
 	return cost_total/(i+1.), step
 
-def construct_model_and_optimizer(opt, io, lr, pt):
+def construct_model_and_optimizer(opt, io, lr, pt, sl=None):
 	"""Build the model and an single/multi-GPU optimizer"""
 	if len(opt['deviceIdxs']) == 1:
+		size = opt['dim']
+		size2 = opt['dim2']
 		pred = opt['model'](opt, io['x'][0], pt)
-		loss = get_loss(opt, pred, io['y'][0])
+		loss = get_loss(opt, pred, io['y'][0], sl=sl)
 		train_op = build_optimizer(loss, lr, opt)
 	return loss, train_op, pred
 
@@ -119,8 +120,7 @@ def save_predictions(sess, x, opt, pred, pt, data, epoch):
 	if not os.path.exists(save_path):
 		os.mkdir(save_path)
 	generator = pklbatcher(X, Y, opt['batch_size'], shuffle=False,
-						   augment=False, img_shape=(opt['dim'], opt['dim2']),
-						   crop_shape=0)
+						   augment=False, img_shape=(opt['dim'], opt['dim2']))
 	# Use sigmoid to map to [0,1]
 	bsd_map = tf.nn.sigmoid(pred['fuse'])
 	j = 0
@@ -155,9 +155,13 @@ def train_model(opt, data):
 			io['y'].append(io_y)
 	lr = tf.placeholder(tf.float32, name='learning_rate')
 	pt = tf.placeholder(tf.bool, name='phase_train')
+	if opt['anneal_sl']:
+		sl = tf.placeholder(tf.float32, [], name='side_loss_multiplier')
+	else:
+		sl = None
 	
 	# Construct model and optimizer
-	loss, train_op, pred = construct_model_and_optimizer(opt, io, lr, pt)
+	loss, train_op, pred = construct_model_and_optimizer(opt, io, lr, pt, sl=sl)
 	
 	# Initializing the variables
 	init = tf.initialize_all_variables()
@@ -187,11 +191,13 @@ def train_model(opt, data):
 	print('Starting training loop...')
 	while epoch < opt['n_epochs']:
 		# Need batch_size*n_GPUs amount of data
+		anneal = np.maximum(1. - (epoch/3.), 0.)
 		cost_total, step = loop('train', sess, io, opt, data, loss, lr, lr_, pt,
-								optim=train_op, step=step)
+								sl=sl, epoch=epoch, optim=train_op, step=step,
+								anneal=anneal)
 		
 		vloss_total, __ = loop('valid', sess, io, opt, data, loss, lr, lr_, pt,
-							   optim=train_op)
+							   sl=sl, epoch=epoch, optim=train_op, anneal=anneal)
 		
 		fd = {tcost_ss[0] : cost_total, vcost_ss[0] : vloss_total,
 			  lr_ss[0] : lr_}
@@ -257,15 +263,14 @@ def run(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'B'
+	opt['trial_num'] = 'C'
 	opt['combine_train_val'] = False	
 	
 	data = load_pkl(opt['data_dir'], 'bsd_pkl', prepend='')
-	opt['pos_weight'] = 100
 	opt['model'] = getattr(equivariant, 'deep_bsd')
 	opt['is_bsd'] = True
 	opt['lr'] = 1e-2
-	opt['batch_size'] = 2
+	opt['batch_size'] = 10
 	opt['std_mult'] = 1
 	opt['momentum'] = 0.95
 	opt['psi_preconditioner'] = 3.4
@@ -273,19 +278,19 @@ def run(opt):
 	opt['display_step'] = 8
 	opt['save_step'] = 10
 	opt['is_classification'] = True
-	opt['n_epochs'] = 100
+	opt['n_epochs'] = 250
 	opt['dim'] = 321
 	opt['dim2'] = 481
 	opt['n_channels'] = 3
 	opt['n_classes'] = 2
-	opt['n_filters'] = 16
+	opt['n_filters'] = 64
 	opt['filter_gain'] = 2
-	opt['augment'] = False
-	opt['crop_shape'] = 0
+	opt['augment'] = True
 	opt['lr_div'] = 10.
 	opt['log_path'] = './logs/deep_bsd'
 	opt['checkpoint_path'] = './checkpoints/deep_bsd'
 	opt['test_path'] = './bsd/trial' + opt['trial_num']
+	opt['anneal_sl'] = False
 	if not os.path.exists(opt['test_path']):
 		os.mkdir(opt['test_path'])
 	opt['save_test_step'] = 5
