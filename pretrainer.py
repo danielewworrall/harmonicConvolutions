@@ -184,7 +184,7 @@ def train_model(opt, data):
 								sl=sl, epoch=epoch, optim=train_op, step=step, saver=saver)
 		
 		epoch += 1
-		if epoch % 20 == 0:
+		if epoch % 5 == 0:
 			lr_ = lr_ / 10.
 	
 		if (epoch) % opt['save_step'] == 0:
@@ -226,7 +226,7 @@ def run(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'X'
+	opt['trial_num'] = 'Y'
 	opt['combine_train_val'] = False	
 	
 	with open('./image_net/imagenet_categories.pkl', 'r') as fp:

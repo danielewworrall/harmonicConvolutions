@@ -9,6 +9,7 @@ import numpy as np
 import scipy.linalg as scilin
 from scipy.ndimage import distance_transform_edt
 import scipy.ndimage.interpolation as sciint
+import skimage.color as skco
 import skimage.exposure as skiex
 import skimage.io as skio
 import skimage.morphology as skmo
@@ -409,7 +410,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		fm[1] = conv2d(stack_magnitudes(cv2), side_weights['sw1']) #, b=biases['b1_2'])
 	
 	with tf.name_scope('stage2') as scope:
-		#cv3 = mean_pooling(cv2, ksize=(1,3,3,1), strides=(1,2,2,1))
+		cv3 = mean_pooling(cv2, ksize=(1,3,3,1), strides=(1,2,2,1))
 		cv3 = complex_input_rotated_conv(cv2, weights['w2_1'], psis['psi2_1'],
 				 filter_size=3, strides=(1,2,2,1), output_orders=[0,1],
 				 padding='SAME', name='2_1')
@@ -720,9 +721,11 @@ def imagenet_batcher(data, batch_size, shuffle=False, augment=False):
 		# Data augmentation
 		im = []
 		targ = []
-		for i in xrange(len(excerpt)):
+		for i in excerpt:
 			img_address = image_dict[indices[i]]['x']
 			img = skio.imread(img_address)
+			if len(img.shape) == 2:
+				img = skco.gray2rgb(img)
 			tg = image_dict[indices[i]]['y']
 			if augment:
 				img = imagenet_preprocess(img)
@@ -832,9 +835,9 @@ def imagenet_preprocess(im):
 	im = sktr.resize(im, (256,256))
 	# Random numbers
 	fliplr = (np.random.rand() > 0.5)
-	gamma = np.minimum(np.maximum(1. + np.random.randn(), 0.5), 1.5)
+	gamma = np.minimum(np.maximum(1. + np.random.randn(), 0.8), 1.2)
 	angle = uniform_rand(0, 360.)
-	scale = np.asarray((log_uniform_rand(1/1.3, 1.3), log_uniform_rand(1/1.3, 1.3)))
+	scale = np.asarray((log_uniform_rand(1/1.1, 1.1), log_uniform_rand(1/1.1, 1.1)))
 	translation = np.asarray((uniform_rand(-15,15), uniform_rand(-15,15)))
 	# Flips
 	if fliplr:
