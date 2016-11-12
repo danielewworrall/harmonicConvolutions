@@ -32,14 +32,15 @@ from steer_conv import *
 def get_loss(opt, pred, y, sl=None):
 	"""Pred is a dist of feature maps and so is y"""
 	cost = 0.
+	beta = 1-tf.reduce_mean(y)
+	pw = beta / (1. - beta)
 	for key in pred.keys():
 		pred_ = pred[key]
-		pw = 1-tf.reduce_mean(y)
 		# side-weight/fusion loss
-		mult = 1.
-		if (sl is not None) and (key == 'fuse'):
-			mult = sl
-		cost += mult*tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y, pw))
+		#mult = 1.
+		#if (sl is not None) and (key == 'fuse'):
+		#	mult = sl
+		cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y, pw))
 	print('  Constructed loss')
 	return cost
 
@@ -54,7 +55,9 @@ def get_io_placeholders(opt):
 def build_optimizer(cost, lr, opt):
 	"""Apply the psi_precponditioner"""
 	mmtm = tf.train.MomentumOptimizer
+	#mmtm = tf.train.AdamOptimizer
 	optim = mmtm(learning_rate=lr, momentum=opt['momentum'], use_nesterov=True)
+	#optim = mmtm(learning_rate=lr)
 	
 	grads_and_vars = optim.compute_gradients(cost)
 	modified_gvs = []
@@ -84,8 +87,11 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
 	Y = data[mode+'_y']
 	is_training = (mode=='train')
 	n_GPUs = len(opt['deviceIdxs'])
-	generator = pklbatcher(X, Y, n_GPUs*opt['batch_size'], shuffle=is_training,
-						   augment=opt['augment'], img_shape=(opt['dim'], opt['dim2'], 3))
+	generator = pklbatcher(X, Y, n_GPUs*opt['batch_size'], anneal=anneal,
+						   shuffle=is_training, augment=opt['augment'],
+						   img_shape=(opt['dim'], opt['dim2'], 3))
+	#if is_training:
+	#	generator = threadedGen(generator)
 	cost_total = 0.
 	for i, batch in enumerate(generator):
 		fd = build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
@@ -98,9 +104,32 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
 		if step % opt['display_step'] == 0:
 			print('  ' + mode + ' loss: %f' % cost_)
 		cost_total += cost_
-		step += 1
-	
 	return cost_total/(i+1.), step
+
+def threadedGen(generator, num_cached=50):
+    '''Threaded generator to multithread the data loading pipeline'''
+    import Queue
+    queue = Queue.Queue(maxsize=num_cached)
+    sentinel = object()  # guaranteed unique reference
+
+    # define producer (putting items into queue)
+    def producer():
+        for item in generator:
+            queue.put(item)
+        queue.put(sentinel)
+
+    # start producer (in a background thread)
+    import threading
+    thread = threading.Thread(target=producer)
+    thread.daemon = True
+    thread.start()
+
+    # run as consumer (read items from queue, in current thread)
+    item = queue.get()
+    while item is not sentinel:
+        yield item
+        queue.task_done()
+        item = queue.get()
 
 def construct_model_and_optimizer(opt, io, lr, pt, sl=None):
 	"""Build the model and an single/multi-GPU optimizer"""
@@ -130,6 +159,7 @@ def save_predictions(sess, x, opt, pred, pt, data, epoch):
 		for i in xrange(output.shape[0]):
 			save_name = save_path + '/' + str(excerpt[i]).replace('.jpg','.png')
 			im = output[i,:,:,0]
+			im = (255*im).astype('uint8')
 			if data['valid_x'][excerpt[i]]['transposed']:
 				im = im.T
 			skio.imsave(save_name, im)
@@ -191,13 +221,13 @@ def train_model(opt, data):
 	print('Starting training loop...')
 	while epoch < opt['n_epochs']:
 		# Need batch_size*n_GPUs amount of data
-		anneal = np.maximum(1. - (epoch/3.), 0.)
+		anneal = 0.1 + np.minimum(epoch/30.,1.)
 		cost_total, step = loop('train', sess, io, opt, data, loss, lr, lr_, pt,
 								sl=sl, epoch=epoch, optim=train_op, step=step,
 								anneal=anneal)
 		
 		vloss_total, __ = loop('valid', sess, io, opt, data, loss, lr, lr_, pt,
-							   sl=sl, epoch=epoch, optim=train_op, anneal=anneal)
+							   sl=sl, epoch=epoch, optim=train_op, anneal=1.)
 		
 		fd = {tcost_ss[0] : cost_total, vcost_ss[0] : vloss_total,
 			  lr_ss[0] : lr_}
@@ -205,6 +235,7 @@ def train_model(opt, data):
 		for summ in summaries:
 			summary.add_summary(summ, step)
 		best, counter, lr_ = get_learning_rate(opt, -vloss_total, best, counter, lr_)
+		#lr_ = opt['lr'] / (1. + np.sqrt(epoch/2.))
 		
 		print "[" + str(opt['trial_num']),str(epoch) + \
 		"] Time: " + \
@@ -263,10 +294,10 @@ def run(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'C'
+	opt['trial_num'] = 'A'
 	opt['combine_train_val'] = False	
 	
-	data = load_pkl(opt['data_dir'], 'bsd_pkl', prepend='')
+	data = load_pkl(opt['data_dir'], 'bsd_pkl_float', prepend='')
 	opt['model'] = getattr(equivariant, 'deep_bsd')
 	opt['is_bsd'] = True
 	opt['lr'] = 1e-2
@@ -283,7 +314,7 @@ def run(opt):
 	opt['dim2'] = 481
 	opt['n_channels'] = 3
 	opt['n_classes'] = 2
-	opt['n_filters'] = 64
+	opt['n_filters'] = 16
 	opt['filter_gain'] = 2
 	opt['augment'] = True
 	opt['lr_div'] = 10.
