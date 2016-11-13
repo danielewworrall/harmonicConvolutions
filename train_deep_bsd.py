@@ -54,10 +54,10 @@ def get_io_placeholders(opt):
 
 def build_optimizer(cost, lr, opt):
 	"""Apply the psi_precponditioner"""
-	mmtm = tf.train.MomentumOptimizer
-	#mmtm = tf.train.AdamOptimizer
-	optim = mmtm(learning_rate=lr, momentum=opt['momentum'], use_nesterov=True)
-	#optim = mmtm(learning_rate=lr)
+	#mmtm = tf.train.MomentumOptimizer
+	mmtm = tf.train.AdamOptimizer
+	#optim = mmtm(learning_rate=lr, momentum=opt['momentum'], use_nesterov=True)
+	optim = mmtm(learning_rate=lr)
 	
 	grads_and_vars = optim.compute_gradients(cost)
 	modified_gvs = []
@@ -136,7 +136,7 @@ def construct_model_and_optimizer(opt, io, lr, pt, sl=None):
 	if len(opt['deviceIdxs']) == 1:
 		size = opt['dim']
 		size2 = opt['dim2']
-		pred = opt['model'](opt, io['x'][0], pt)
+		pred, __ = opt['model'](opt, io['x'][0], pt)
 		loss = get_loss(opt, pred, io['y'][0], sl=sl)
 		train_op = build_optimizer(loss, lr, opt)
 	return loss, train_op, pred
@@ -210,7 +210,8 @@ def train_model(opt, data):
 	print('Summaries constructed...')
 	
 	sess.run(init)
-	saver = tf.train.Saver()
+	saver = tf.train.Saver(tf.trainable_variables())
+	saver.restore(sess, './checkpoints/deep_bsd/trialY/model.ckpt')
 	start = time.time()
 	lr_ = opt['lr']
 	epoch = 0
@@ -294,13 +295,13 @@ def run(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'A'
+	opt['trial_num'] = 'E'
 	opt['combine_train_val'] = False	
 	
 	data = load_pkl(opt['data_dir'], 'bsd_pkl_float', prepend='')
 	opt['model'] = getattr(equivariant, 'deep_bsd')
 	opt['is_bsd'] = True
-	opt['lr'] = 1e-2
+	opt['lr'] = 1e-3
 	opt['batch_size'] = 10
 	opt['std_mult'] = 1
 	opt['momentum'] = 0.95
@@ -313,8 +314,8 @@ def run(opt):
 	opt['dim'] = 321
 	opt['dim2'] = 481
 	opt['n_channels'] = 3
-	opt['n_classes'] = 2
-	opt['n_filters'] = 16
+	opt['n_classes'] = 10
+	opt['n_filters'] = 16 #32
 	opt['filter_gain'] = 2
 	opt['augment'] = True
 	opt['lr_div'] = 10.
