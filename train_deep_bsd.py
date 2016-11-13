@@ -96,7 +96,7 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
 	for i, batch in enumerate(generator):
 		fd = build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
 		if sl is not None:
-				fd[sl] = 1. - float(epoch)/100.
+				fd[sl] = np.maximum(1. - float(epoch)/100.,0.)
 		if mode == 'train':
 			__, cost_ = sess.run([optim, cost], feed_dict=fd)
 		else:
@@ -211,7 +211,8 @@ def train_model(opt, data):
 	
 	sess.run(init)
 	saver = tf.train.Saver(tf.trainable_variables())
-	saver.restore(sess, './checkpoints/deep_bsd/trialY/model.ckpt')
+	if opt['load_pretrained']:
+		saver.restore(sess, './checkpoints/deep_bsd/trialY/model.ckpt')
 	start = time.time()
 	lr_ = opt['lr']
 	epoch = 0
@@ -235,7 +236,9 @@ def train_model(opt, data):
 		summaries = sess.run([tcost_ss[1], vcost_ss[1], lr_ss[1]], feed_dict=fd)
 		for summ in summaries:
 			summary.add_summary(summ, step)
-		best, counter, lr_ = get_learning_rate(opt, -vloss_total, best, counter, lr_)
+		#best, counter, lr_ = get_learning_rate(opt, -vloss_total, best, counter, lr_)
+		if epoch % 40 == 39:
+			lr_ = lr_ / 10.
 		#lr_ = opt['lr'] / (1. + np.sqrt(epoch/2.))
 		
 		print "[" + str(opt['trial_num']),str(epoch) + \
@@ -290,18 +293,18 @@ def config_init():
 	return config
 
 ##### MAIN SCRIPT #####
-def run(opt):
+def get_settings(opt):
 	# Parameters
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'E'
+	opt['trial_num'] = 'G'
 	opt['combine_train_val'] = False	
 	
 	data = load_pkl(opt['data_dir'], 'bsd_pkl_float', prepend='')
 	opt['model'] = getattr(equivariant, 'deep_bsd')
 	opt['is_bsd'] = True
-	opt['lr'] = 1e-3
+	opt['lr'] = 1e-2
 	opt['batch_size'] = 10
 	opt['std_mult'] = 1
 	opt['momentum'] = 0.95
@@ -315,14 +318,15 @@ def run(opt):
 	opt['dim2'] = 481
 	opt['n_channels'] = 3
 	opt['n_classes'] = 10
-	opt['n_filters'] = 16 #32
+	opt['n_filters'] = 8 #32
 	opt['filter_gain'] = 2
 	opt['augment'] = True
 	opt['lr_div'] = 10.
 	opt['log_path'] = './logs/deep_bsd'
 	opt['checkpoint_path'] = './checkpoints/deep_bsd'
 	opt['test_path'] = './bsd/trial' + opt['trial_num']
-	opt['anneal_sl'] = False
+	opt['anneal_sl'] = True
+	opt['load_pretrained'] = False
 	if not os.path.exists(opt['test_path']):
 		os.mkdir(opt['test_path'])
 	opt['save_test_step'] = 5
@@ -342,6 +346,10 @@ def run(opt):
 	# Print out options
 	for key, val in opt.iteritems():
 		print(key + ': ' + str(val))
+	return opt, data
+
+def run(opt):
+	opt, data = get_settings(opt)
 	return train_model(opt, data)
 
 
