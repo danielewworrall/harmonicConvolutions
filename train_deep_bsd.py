@@ -43,7 +43,7 @@ def get_loss(opt, pred, y, sl=None):
 		#	mult = sl
 		cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y, pw))
 		# Sparsity regularizer
-		cost += sparsity_coefficient*sparsity_regularizer(pred_, y)
+		cost += sparsity_coefficient*sparsity_regularizer(pred_, 1-beta)
 	print('  Constructed loss')
 	return cost
 
@@ -306,7 +306,7 @@ def get_settings(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'J'
+	opt['trial_num'] = 'L'
 	opt['combine_train_val'] = False	
 	
 	data = load_pkl(opt['data_dir'], 'bsd_pkl_float', prepend='')
