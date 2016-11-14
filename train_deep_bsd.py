@@ -34,6 +34,7 @@ def get_loss(opt, pred, y, sl=None):
 	cost = 0.
 	beta = 1-tf.reduce_mean(y)
 	pw = beta / (1. - beta)
+	sparsity_coefficient = opt['sparsity']
 	for key in pred.keys():
 		pred_ = pred[key]
 		# side-weight/fusion loss
@@ -41,8 +42,15 @@ def get_loss(opt, pred, y, sl=None):
 		#if (sl is not None) and (key == 'fuse'):
 		#	mult = sl
 		cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y, pw))
+		# Sparsity regularizer
+		cost += sparsity_coefficient*sparsity_regularizer(pred_, y)
 	print('  Constructed loss')
 	return cost
+
+def sparsity_regularizer(x, sparsity):
+	"""Define a sparsity regularizer"""
+	q = tf.reduce_mean(tf.nn.sigmoid(x), reduction_indices=[1,2,3])
+	return -sparsity*tf.log(q) - (1-sparsity)*tf.log(1-q)
 
 def get_io_placeholders(opt):
 	"""Return placeholders for classification/regression"""
@@ -298,7 +306,7 @@ def get_settings(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'G'
+	opt['trial_num'] = 'J'
 	opt['combine_train_val'] = False	
 	
 	data = load_pkl(opt['data_dir'], 'bsd_pkl_float', prepend='')
@@ -327,6 +335,7 @@ def get_settings(opt):
 	opt['test_path'] = './bsd/trial' + opt['trial_num']
 	opt['anneal_sl'] = True
 	opt['load_pretrained'] = False
+	opt['sparsity'] = 1.
 	if not os.path.exists(opt['test_path']):
 		os.mkdir(opt['test_path'])
 	opt['save_test_step'] = 5

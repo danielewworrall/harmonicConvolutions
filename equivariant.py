@@ -412,16 +412,14 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	with tf.name_scope('stage2') as scope:
 		cv3 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv3 = complex_input_rotated_conv(cv2, weights['w2_1'], psis['psi2_1'],
-				 filter_size=3, strides=(1,2,2,1), output_orders=[0,1],
-				 padding='SAME', name='2_1')
+				 filter_size=3, output_orders=[0,1], padding='SAME', name='2_1')
 		cv3 = complex_nonlinearity(cv3, biases['cb2_1'], tf.nn.relu)
 	
 		cv4 = complex_input_rotated_conv(cv3, weights['w2_2'], psis['psi2_2'],
 				 filter_size=3, output_orders=[0,1], padding='SAME', name='2_2')
 		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='bn2', device=device)
 		fm[2] = conv2d(stack_magnitudes(cv4), side_weights['sw2']) #, b=biases['b2_2'])
-	
-	
+		
 	with tf.name_scope('stage3') as scope:
 		cv5 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv5 = complex_input_rotated_conv(cv5, weights['w3_1'], psis['psi3_1'],
@@ -454,7 +452,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 				 filter_size=3, output_orders=[0,1], padding='SAME', name='5_2')
 		cv10 = complex_batch_norm(cv10, tf.nn.relu, phase_train, name='bn5', device=device)
 		fm[5] = conv2d(stack_magnitudes(cv10), side_weights['sw5']) #, b=biases['b5_2'])
-	
+		
 		out = 0
 	#with tf.name_scope('classifier') as scope:
 	#	out = conv2d(stack_magnitudes(cv10), weights['w_out'], biases['b6'])
