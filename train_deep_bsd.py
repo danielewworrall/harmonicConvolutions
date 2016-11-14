@@ -49,7 +49,7 @@ def get_loss(opt, pred, y, sl=None):
 
 def sparsity_regularizer(x, sparsity):
 	"""Define a sparsity regularizer"""
-	q = tf.reduce_mean(tf.nn.sigmoid(x), reduction_indices=[1,2,3])
+	q = tf.reduce_mean(tf.nn.sigmoid(x))
 	return -sparsity*tf.log(q) - (1-sparsity)*tf.log(1-q)
 
 def get_io_placeholders(opt):
