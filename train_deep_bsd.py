@@ -218,7 +218,7 @@ def train_model(opt, data):
 	print('Summaries constructed...')
 	
 	sess.run(init)
-	saver = tf.train.Saver(tf.trainable_variables())
+	saver = tf.train.Saver()
 	if opt['load_pretrained']:
 		saver.restore(sess, './checkpoints/deep_bsd/trialY/model.ckpt')
 	start = time.time()
@@ -306,7 +306,7 @@ def get_settings(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'L'
+	opt['trial_num'] = 'P'
 	opt['combine_train_val'] = False	
 	
 	data = load_pkl(opt['data_dir'], 'bsd_pkl_float', prepend='')
@@ -335,7 +335,7 @@ def get_settings(opt):
 	opt['test_path'] = './bsd/trial' + opt['trial_num']
 	opt['anneal_sl'] = True
 	opt['load_pretrained'] = False
-	opt['sparsity'] = 1.
+	opt['sparsity'] = 1
 	if not os.path.exists(opt['test_path']):
 		os.mkdir(opt['test_path'])
 	opt['save_test_step'] = 5
