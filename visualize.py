@@ -20,6 +20,7 @@ import input_data
 from equivariant import *
 from matplotlib import pyplot as plt
 from steer_conv import *
+from train_deep_bsd import *
 
 ##### MODELS #####
 '''
@@ -804,7 +805,7 @@ def equivariance_save(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
 					plt.savefig(fname)
 					print fname
 	
-def equivariance_stability(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
+def equivariance_stability(model='deep_stable', lr=1e-2, batch_size=250, n_epochs=500,
 					  n_filters=8, bn_config=[False, False], trial_num='N',
 					  combine_train_val=False, std_mult=0.4, lr_decay=0.05):
 	tf.reset_default_graph()
@@ -841,6 +842,7 @@ def equivariance_stability(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=5
 	opt['std_mult'] = 0.3
 	opt['dim'] = 28
 	opt['crop_shape'] = 0
+	opt['filter_size'] = 3
 	__, features = deep_stable(opt, X, phase_train)
 	
 	plt.figure(figsize=(8,12))
@@ -876,6 +878,59 @@ def equivariance_stability(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=5
 					plt.plot(np.linspace(0.,360.,num=batch_size),r)
 				plt.draw()
 			raw_input(idx)
+
+def equivariance_bsd(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8):
+	opt = {}
+	opt['deviceIdxs'] = [0,]
+	opt['data_dir'] = 'data'
+	opt['machine'] = 'daniel'
+	opt = get_settings(opt)
+	opt['batch_size'] = 1
+	
+	n_GPUs = 1
+	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
+	# Make placeholders
+	io = {}
+	io['x'] = []
+	for g in opt['deviceIdxs']:
+		with tf.device('/gpu:%d' % g):
+			io_x, __ = get_io_placeholders(opt)
+			io['x'].append(io_x)
+	pt = tf.placeholder(tf.bool, name='phase_train')
+	
+	# Construct model 
+	__, __, R, Psi = opt['model'](opt, io['x'][0], pt)
+	
+	# Configure tensorflow session
+	config = config_init()
+	config.inter_op_parallelism_threads = 1 
+	im = skio.imread('/home/daniel/Code/harmonicConvolutions/data/BSR/BSDS500/data/images/val/42049.jpg')
+	im = im[np.newaxis,...]
+	im = (im - np.mean(im))/np.std(im)
+	
+	plt.ion()
+	plt.show()
+	with tf.Session(config=config) as sess:
+		init = tf.initialize_all_variables()
+		sess.run(init)
+		saver = tf.train.Saver(tf.trainable_variables())
+		saver.restore(sess, './checkpoints/deep_bsd/trialE/model.ckpt')
+		bs = opt['batch_size']
+		fd = {io['x'][0]: im, pt: False}
+
+		for i in xrange(5):
+			Q = get_complex_rotated_filters(R['w' + str(i+1) + '_1'], Psi['psi' + str(i+1) + '_1'], filter_size=3)
+			w = sess.run(Q[1], feed_dict=fd)
+			for j in xrange(16):
+				plt.subplot(16,5,5*j+1)
+				w_ = w[0][...,j]/ 2. + 0.5
+				print np.amin(w_), np.amax(w_)
+				plt.imshow(w_, interpolation='nearest')
+				plt.axis('off')
+			plt.draw()
+		raw_input()
+
+
 '''
 def equivariance_caffe():
 	n_angles = 40
@@ -987,7 +1042,7 @@ def equivariance_caffe():
 if __name__ == '__main__':
 	#view_feature_maps(model='deep_complex_bias', lr=2e-2, batch_size=200,
 	#				  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
-	view_filters()
+	#view_filters()
 	#view_biases()
 	#count_feature_maps(model='deep_complex_bias', lr=2e-2, batch_size=200,
 	#				  n_epochs=500, std_mult=0.3, n_filters=5, combine_train_val=False)
@@ -999,9 +1054,7 @@ if __name__ == '__main__':
 	#					   n_epochs=500, std_mult=0.3, n_filters=5,
 	#					   combine_train_val=False)
 	#equivariance_caffe()
-
-
-
+	equivariance_bsd(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8)
 
 
 

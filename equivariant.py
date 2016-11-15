@@ -9,6 +9,7 @@ import numpy as np
 import scipy.linalg as scilin
 from scipy.ndimage import distance_transform_edt
 import scipy.ndimage.interpolation as sciint
+import skimage.color as skco
 import skimage.exposure as skiex
 import skimage.io as skio
 import skimage.morphology as skmo
@@ -31,6 +32,59 @@ def checkFolder(dir):
 
 
 ##### MODELS #####
+def deep_Z(opt, x, phase_train, device='/cpu:0'):
+	"""A standard neural net"""
+	# Sure layers weight & bias
+	nf = opt['n_filters']
+	bs = opt['batch_size']
+
+	with tf.device(device):
+		weights = {
+			'w1' : get_weights([3,3,1,nf], std_mult=1., name='W1', device=device),
+			'w2' : get_weights([3,3,nf,nf], std_mult=1., name='W2', device=device),
+			'w3' : get_weights([3,3,nf,nf], std_mult=1., name='W3', device=device),
+			'w4' : get_weights([3,3,nf,nf], std_mult=1., name='W4', device=device),
+			'w5' : get_weights([3,3,nf,nf], std_mult=1., name='W5', device=device),
+			'w6' : get_weights([3,3,nf,nf], std_mult=1., name='W6', device=device),
+			'w7' : get_weights([4,4,nf,opt['n_classes']], std_mult=1., name='W7', device=device)
+		}
+		
+		biases = {
+			'b1' : tf.get_variable('b1', dtype=tf.float32, shape=[nf],
+								   initializer=tf.constant_initializer(1e-2)),
+			'b2' : tf.get_variable('b2', dtype=tf.float32, shape=[nf],
+								   initializer=tf.constant_initializer(1e-2)),
+			'b3' : tf.get_variable('b3', dtype=tf.float32, shape=[nf],
+								   initializer=tf.constant_initializer(1e-2)),
+			'b4' : tf.get_variable('b4', dtype=tf.float32, shape=[nf],
+								   initializer=tf.constant_initializer(1e-2)),
+			'b5' : tf.get_variable('b5', dtype=tf.float32, shape=[nf],
+								   initializer=tf.constant_initializer(1e-2)),
+			'b6' : tf.get_variable('b6', dtype=tf.float32, shape=[nf],
+								   initializer=tf.constant_initializer(1e-2)),
+			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[opt['n_classes']],
+								   initializer=tf.constant_initializer(1e-2)),
+		}
+		# Reshape input picture -- square inputs for now
+		size = opt['dim'] - 2*opt['crop_shape']
+		x = tf.reshape(x, shape=[bs,size,size,opt['n_channels']])
+	
+	fms = []
+	# Convolutional Layers
+	with tf.name_scope('block1') as scope:
+		cv1 = conv2d(x, weights['w1'], biases['b1'], name='cv1')
+		cv2 = conv2d(tf.nn.relu(cv1), weights['w2'], biases['b2'], name='cv2')
+		cv2 = batch_norm(cv2, phase_train, name='bn2')
+		cv2 = maxpool2d(cv2, k=2)
+		cv3 = conv2d(tf.nn.relu(cv2), weights['w3'], biases['b3'], name='cv3')
+		cv4 = conv2d(tf.nn.relu(cv3), weights['w4'], biases['b4'], name='cv4')
+		cv4 = batch_norm(cv4, phase_train, name='bn4')
+		cv5 = conv2d(tf.nn.relu(cv4), weights['w5'], biases['b5'], name='cv5')
+		cv6 = conv2d(tf.nn.relu(cv5), weights['w6'], biases['b6'], name='cv6')
+		cv6 = batch_norm(cv6, phase_train, name='bn6')
+		cv7 = conv2d(tf.nn.relu(cv6), weights['w7'], biases['b7'], name='cv7')
+		return tf.squeeze(cv7)
+
 def deep_stable(opt, x, phase_train, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
@@ -39,17 +93,20 @@ def deep_stable(opt, x, phase_train, device='/cpu:0'):
 	nf2 = int(nf*opt['filter_gain'])
 	nf3 = int(nf*(opt['filter_gain']**2.))
 	bs = opt['batch_size']
+	n = ((opt['filter_size']+1)/2)
+	tr1 = (n*(n+1))/2
+	tr2 = tr1 - 1
 	
 	sm = opt['std_mult']
 	with tf.device(device):
 		weights = {
-			'w1' : get_weights_dict([[6,],[5,]], opt['n_channels'], nf, std_mult=sm, name='W1', device=device),
-			'w2' : get_weights_dict([[6,],[5,]], nf, nf, std_mult=sm, name='W2', device=device),
-			'w3' : get_weights_dict([[6,],[5,]], nf, nf2, std_mult=sm, name='W3', device=device),
-			'w4' : get_weights_dict([[6,],[5,]], nf2, nf2, std_mult=sm, name='W4', device=device),
-			'w5' : get_weights_dict([[6,],[5,]], nf2, nf3, std_mult=sm, name='W5', device=device),
-			'w6' : get_weights_dict([[6,],[5,]], nf3, nf3, std_mult=sm, name='W6', device=device),
-			'w7' : get_weights_dict([[6,],[5,]], nf3, opt['n_classes'], std_mult=sm, name='W7', device=device),
+			'w1' : get_weights_dict([[tr1,],[tr2,]], opt['n_channels'], nf, std_mult=sm, name='W1', device=device),
+			'w2' : get_weights_dict([[tr1,],[tr2,]], nf, nf, std_mult=sm, name='W2', device=device),
+			'w3' : get_weights_dict([[tr1,],[tr2,]], nf, nf2, std_mult=sm, name='W3', device=device),
+			'w4' : get_weights_dict([[tr1,],[tr2,]], nf2, nf2, std_mult=sm, name='W4', device=device),
+			'w5' : get_weights_dict([[tr1,],[tr2,]], nf2, nf3, std_mult=sm, name='W5', device=device),
+			'w6' : get_weights_dict([[tr1,],[tr2,]], nf3, nf3, std_mult=sm, name='W6', device=device),
+			'w7' : get_weights_dict([[tr1,],[tr2,]], nf3, opt['n_classes'], std_mult=sm, name='W7', device=device),
 		}
 		
 		biases = {
@@ -76,12 +133,12 @@ def deep_stable(opt, x, phase_train, device='/cpu:0'):
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
 		cv1 = real_input_rotated_conv(x, weights['w1'], biases['psi1'],
-									  filter_size=5, padding='SAME', name='1')
+									  filter_size=opt['filter_size'], padding='SAME', name='1')
 		cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
 		fms.append(cv1)	
 		# LAYER 2
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
-										 filter_size=5, output_orders=[0,1],
+										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train,
 								 name='batchNorm1', device=device)
@@ -90,13 +147,13 @@ def deep_stable(opt, x, phase_train, device='/cpu:0'):
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 3
 		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
-										 filter_size=5, output_orders=[0,1],
+										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='3')
 		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
 		fms.append(cv3)
 		# LAYER 4
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
-										 filter_size=5, output_orders=[0,1],
+										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='4')
 		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train,
 								 name='batchNorm2', device=device)
@@ -105,23 +162,23 @@ def deep_stable(opt, x, phase_train, device='/cpu:0'):
 		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 5
 		cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
-										 filter_size=5, output_orders=[0,1],
+										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='5')
 		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
 		fms.append(cv5)
 		# LAYER 6
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
-										 filter_size=5, output_orders=[0,1],
+										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='4')
 		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train,
 								 name='batchNorm3', device=device)
 		fms.append(cv6)
 	# LAYER 7
 	with tf.name_scope('block4') as scope:
-		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=5,
+		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=opt['filter_size'],
 								 padding='SAME', name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
-		return tf.nn.bias_add(cv7, biases['b7']), fms
+		return tf.nn.bias_add(cv7, biases['b7']) #, fms
 
 def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
@@ -340,8 +397,8 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			'w4_2' : get_weights_dict([[3,],[2,],], nf4, nf4, std_mult=sm, name='W4_2', device=device),
 			'w5_1' : get_weights_dict([[3,],[2,],], nf4, nf4, std_mult=sm, name='W5_1', device=device),
 			'w5_2' : get_weights_dict([[3,],[2,],], nf4, nf4, std_mult=sm, name='W5_2', device=device),
-			'w_out' : tf.get_variable('w_out', dtype=tf.float32, shape=[1,1,(order+1)*nf4,opt['n_classes']],
-									  initializer=tf.constant_initializer(1e-2))
+			#'w_out' : tf.get_variable('w_out', dtype=tf.float32, shape=[1,1,(order+1)*nf4,opt['n_classes']],
+			#						  initializer=tf.constant_initializer(1e-2))
 		}
 		
 		biases = {
@@ -355,8 +412,8 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 				initializer=tf.constant_initializer(1e-2)),
 			'b5_2' : tf.get_variable('b5_1', dtype=tf.float32, shape=[1],
 				initializer=tf.constant_initializer(1e-2)),
-			'b6' : tf.get_variable('b6', dtype=tf.float32, shape=[opt['n_classes']],
-								   initializer=tf.constant_initializer(1e-2)),
+			#'b6' : tf.get_variable('b6', dtype=tf.float32, shape=[opt['n_classes']],
+			#					   initializer=tf.constant_initializer(1e-2)),
 			'cb1_1' : get_bias_dict(nf, order, name='cb1_1', device=device),
 			'cb2_1' : get_bias_dict(nf2, order, name='cb2_1', device=device),
 			'cb3_1' : get_bias_dict(nf3, order, name='cb3_1', device=device),
@@ -454,9 +511,10 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		cv10 = complex_batch_norm(cv10, tf.nn.relu, phase_train, name='bn5', device=device)
 		fm[5] = conv2d(stack_magnitudes(cv10), side_weights['sw5']) #, b=biases['b5_2'])
 	
-	with tf.name_scope('classifier') as scope:
-		out = conv2d(stack_magnitudes(cv10), weights['w_out'], biases['b6'])
-		out = tf.reduce_mean(out, reduction_indices=[1,2])
+	#with tf.name_scope('classifier') as scope:
+	#	out = conv2d(stack_magnitudes(cv10), weights['w_out'], biases['b6'])
+	#	out = tf.reduce_mean(out, reduction_indices=[1,2])
+	out = 0.
 	
 	fms = {}
 	side_preds = []
@@ -707,7 +765,8 @@ def pklbatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 
 def imagenet_batcher(data, batch_size, shuffle=False, augment=False):
 	"""Input and target are minibatched. Returns a generator"""
-	image_dict = dict_to_list(data)
+	#image_dict = dict_to_list(data)
+	image_dict = lines_to_dict(data)
 	num_items = len(image_dict.keys())
 	indices = np.arange(num_items)
 	if shuffle:
@@ -720,9 +779,11 @@ def imagenet_batcher(data, batch_size, shuffle=False, augment=False):
 		# Data augmentation
 		im = []
 		targ = []
-		for i in xrange(len(excerpt)):
+		for i in excerpt:
 			img_address = image_dict[indices[i]]['x']
 			img = skio.imread(img_address)
+			if len(img.shape) == 2:
+				img = skco.gray2rgb(img)
 			tg = image_dict[indices[i]]['y']
 			if augment:
 				img = imagenet_preprocess(img)
@@ -746,6 +807,18 @@ def dict_to_list(my_dict):
 			i += 1
 	return image_dict
 
+def lines_to_dict(lines):
+	image_dict = {}
+	i = 0
+	for line in lines:
+		address, code = line.split('\t')
+		code = int(code.replace('\n',''))
+		image_dict[i] = {}
+		image_dict[i]['x'] = '/media/daniel/HDD/ImageNet/ILSVRC2012_img_val/' + address
+		image_dict[i]['y'] = code
+		i += 1
+	return image_dict
+	
 def watershed(edge_stack, anneal):
     ''' edge_stack is a HxWxC tensor of all the labels '''
     tmp = distance_transform_edt(1.0 - edge_stack)
@@ -773,34 +846,36 @@ def minibatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 				if shuffle:
 					img = preprocess(img, img_shape, crop_shape)
 				else:
-					img = np.reshape(img, img_shape)
-					img = img[crop_shape:-crop_shape,crop_shape:-crop_shape]
-					img = np.reshape(img, [1,np.prod(img.shape)])
+					#img = np.reshape(img, img_shape)
+					#img = img[crop_shape:-crop_shape,crop_shape:-crop_shape]
+					#img = np.reshape(img, [1,np.prod(img.shape)])
+					pass
 			im.append(img)
-		im = np.concatenate(im, axis=0)
+		im = np.stack(im, axis=0)
 		yield im, targets[excerpt]
 
 def preprocess(im, im_shape, crop_margin):
 	'''Data normalizations and augmentations'''
 	# Random fliplr
 	im = np.reshape(im, im_shape)
-	if np.random.rand() > 0.5:
-		im = im[:,::-1]
+	#if np.random.rand() > 0.5:
+	#	im = im[:,::-1]
 	# Random affine transformation: rotation, scale, stretch, shift and shear
-	rdm_scale = log_uniform_rand(1./1.6,1.6)
-	new_scale = (rdm_scale*log_uniform_rand(1./1.3,1.3),
-				 rdm_scale*log_uniform_rand(1./1.3,1.3))
-	new_shear = uniform_rand(-np.pi/9.,np.pi/9.)
+	#rdm_scale = log_uniform_rand(1./1.6,1.6)
+	#new_scale = (rdm_scale*log_uniform_rand(1./1.3,1.3),
+	#			 rdm_scale*log_uniform_rand(1./1.3,1.3))
+	#new_shear = uniform_rand(-np.pi/9.,np.pi/9.)
 	new_angle = uniform_rand(-np.pi, np.pi)
-	new_translation = np.asarray((uniform_rand(-crop_margin,crop_margin),
-					   uniform_rand(-crop_margin,crop_margin)))
-	affine_matrix = sktr.AffineTransform(scale=new_scale, shear=new_shear,
-										 translation=new_translation)
+	#new_translation = np.asarray((uniform_rand(-crop_margin,crop_margin),
+	#				   uniform_rand(-crop_margin,crop_margin)))
+	#affine_matrix = sktr.AffineTransform(scale=new_scale, shear=new_shear,
+	#									 translation=new_translation)
 	im = sktr.rotate(im, new_angle)
-	im = sktr.warp(im, affine_matrix)
+	#im = sktr.warp(im, affine_matrix)
 	new_shape = np.asarray(im_shape) - 2.*np.asarray((crop_margin,)*2)
-	im = central_crop(im, new_shape)
-	return np.reshape(im, [1,np.prod(new_shape)])
+	#im = central_crop(im, new_shape)
+	#return np.reshape(im, [1,np.prod(new_shape)])
+	return np.reshape(im, [np.prod(new_shape),])
 
 def bsd_preprocess(im, tg):
 	'''Data normalizations and augmentations'''
@@ -832,9 +907,9 @@ def imagenet_preprocess(im):
 	im = sktr.resize(im, (256,256))
 	# Random numbers
 	fliplr = (np.random.rand() > 0.5)
-	gamma = np.minimum(np.maximum(1. + np.random.randn(), 0.5), 1.5)
+	gamma = np.minimum(np.maximum(1. + np.random.randn(), 0.8), 1.2)
 	angle = uniform_rand(0, 360.)
-	scale = np.asarray((log_uniform_rand(1/1.3, 1.3), log_uniform_rand(1/1.3, 1.3)))
+	scale = np.asarray((log_uniform_rand(1/1.1, 1.1), log_uniform_rand(1/1.1, 1.1)))
 	translation = np.asarray((uniform_rand(-15,15), uniform_rand(-15,15)))
 	# Flips
 	if fliplr:

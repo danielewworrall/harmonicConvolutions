@@ -289,12 +289,12 @@ def config_init():
 	return config
 
 ##### MAIN SCRIPT #####
-def run(opt):
+def get_settings(opt):
 	# Parameters
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'A'
+	opt['trial_num'] = 'Y'
 	opt['combine_train_val'] = False	
 	
 	data = load_pkl(opt['data_dir'], 'bsd_pkl_float', prepend='')
@@ -313,15 +313,16 @@ def run(opt):
 	opt['dim'] = 321
 	opt['dim2'] = 481
 	opt['n_channels'] = 3
-	opt['n_classes'] = 2
-	opt['n_filters'] = 16
+	opt['n_classes'] = 10
+	opt['n_filters'] = 16 #32
 	opt['filter_gain'] = 2
 	opt['augment'] = True
 	opt['lr_div'] = 10.
 	opt['log_path'] = './logs/deep_bsd'
 	opt['checkpoint_path'] = './checkpoints/deep_bsd'
 	opt['test_path'] = './bsd/trial' + opt['trial_num']
-	opt['anneal_sl'] = False
+	opt['anneal_sl'] = True
+	opt['load_pretrained'] = False
 	if not os.path.exists(opt['test_path']):
 		os.mkdir(opt['test_path'])
 	opt['save_test_step'] = 5
@@ -341,6 +342,10 @@ def run(opt):
 	# Print out options
 	for key, val in opt.iteritems():
 		print(key + ': ' + str(val))
+	return opt
+
+def run(opt):
+	opt = get_settings(opt)
 	return train_model(opt, data)
 
 

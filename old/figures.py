@@ -188,7 +188,7 @@ def gaussian_filters(max_order, size):
     plt.show()
     for order in xrange(max_order+1):
         mask = np.exp(-R**2/(size*100.))
-        real = mask*np.cos(order*theta)
+        real = mask*np.sin(order*theta)
         
         plt.imshow(real, interpolation='nearest', cmap='gray')
         plt.axis('off')

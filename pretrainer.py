@@ -66,8 +66,8 @@ def build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
 	return fd
 
 ##### TRAINING LOOPS #####
-def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
-		 optim=None, step=0, anneal=0., saver=None):
+def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, acc=None, sl=None,
+		 epoch=0, optim=None, step=0, anneal=0., saver=None, pred=None):
 	"""Run a loop"""
 	is_training = (mode=='train')
 	n_GPUs = len(opt['deviceIdxs'])
@@ -76,19 +76,31 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
 	#if is_training:
 	#	generator = threadedGen(generator)
 	cost_total = 0.
-	for i, batch in enumerate(generator):
-		batch_x, batch_y, __ = batch
-		#print batch_y
-		fd = {lr: lr_, pt: is_training, io['x'][0]: batch_x, io['y'][0]: batch_y}
-		__, cost_ = sess.run([optim, cost], feed_dict=fd)
-		if step % opt['display_step'] == 0:
-			print('  [%i, %i] loss: %f' % (epoch, i, cost_))
-		if step % opt['save_step'] == 0:
-			save_path = saver.save(sess, opt['checkpoint_path'])
-			print("Model saved in file: %s" % save_path)
-		step += 1 
-		cost_total += cost_
-	return cost_total/(i+1.), step
+	acc_total = 0.
+	p = tf.argmax(pred, 1)
+	if is_training:
+		for i, batch in enumerate(generator):
+			batch_x, batch_y, __ = batch
+			fd = {lr: lr_, pt: True, io['x'][0]: batch_x, io['y'][0]: batch_y}
+			__, cost_ = sess.run([optim, cost], feed_dict=fd)
+			if step % opt['display_step'] == 0:
+				print('  [%i, %i] loss: %f' % (epoch, i, cost_))
+			if step % opt['save_step'] == 0:
+				save_path = saver.save(sess, opt['checkpoint_path'])
+				print("Model saved in file: %s" % save_path)
+			step += 1 
+			cost_total += cost_
+	else:
+		for i, batch in enumerate(generator):
+			batch_x, batch_y, __ = batch
+			fd = {lr: lr_, pt: False, io['x'][0]: batch_x, io['y'][0]: batch_y}
+			
+			p_, cost_, acc_ = sess.run([p, cost, acc], feed_dict=fd)
+			print('  Loss: %f\tAcc: %f' % (cost_, acc_))
+			step += 1 
+			cost_total += cost_
+			acc_total += acc_
+	return cost_total/(i+1.), step, acc_total/(i+1.)
 
 def threadedGen(generator, num_cached=50):
     '''Threaded generator to multithread the data loading pipeline'''
@@ -123,7 +135,9 @@ def construct_model_and_optimizer(opt, io, lr, pt, sl=None):
 	loss = tf.nn.sparse_softmax_cross_entropy_with_logits(pred, io['y'][0], name='loss')
 	loss = tf.reduce_mean(loss)
 	train_op = build_optimizer(loss, lr, opt)
-	return loss, train_op, pred
+	acc = tf.equal(tf.to_int32(tf.argmax(pred, 1)),io['y'][0])
+	acc = tf.reduce_mean(tf.to_float(acc))
+	return loss, train_op, pred, acc
 
 def train_model(opt, data):
 	"""Generalized training function
@@ -150,10 +164,7 @@ def train_model(opt, data):
 		sl = None
 	
 	# Construct model and optimizer
-	loss, train_op, pred = construct_model_and_optimizer(opt, io, lr, pt, sl=sl)
-	
-	# Initializing the variables
-	init = tf.initialize_all_variables()
+	loss, train_op, pred, acc = construct_model_and_optimizer(opt, io, lr, pt, sl=sl)
 	
 	# Summary writers
 	tcost_ss = create_scalar_summary('training_cost')
@@ -168,8 +179,15 @@ def train_model(opt, data):
 	summary = tf.train.SummaryWriter(opt['log_path'], sess.graph)
 	print('Summaries constructed...')
 	
-	sess.run(init)
-	saver = tf.train.Saver()
+	if opt['valid']:
+		saver = tf.train.Saver()
+		saver.restore(sess, opt['checkpoint_path'])
+	else:
+		# Initializing the variables
+		init = tf.initialize_all_variables()
+		sess.run(init)
+	
+		
 	start = time.time()
 	lr_ = opt['lr']
 	epoch = 0
@@ -177,20 +195,28 @@ def train_model(opt, data):
 	counter = 0
 	best = -1e6
 	bs = opt['batch_size']
-	print('Starting training loop...')
-	while epoch < opt['n_epochs']:
-		# Need batch_size*n_GPUs amount of data
-		cost_total, step = loop('train', sess, io, opt, data, loss, lr, lr_, pt,
-								sl=sl, epoch=epoch, optim=train_op, step=step, saver=saver)
+	if not opt['valid']:
+		print('Starting training loop...')
+		while epoch < opt['n_epochs']:
+			# Need batch_size*n_GPUs amount of data
+			cost_total, step, __ = loop('train', sess, io, opt, data, loss, lr,
+										lr_, pt, sl=sl, epoch=epoch,
+										optim=train_op, step=step, saver=saver)
+			epoch += 1
+			if epoch % 5 == 0:
+				lr_ = lr_ / 10.
 		
-		epoch += 1
-		if epoch % 20 == 0:
-			lr_ = lr_ / 10.
+			if (epoch) % opt['save_step'] == 0:
+				save_path = saver.save(sess, opt['checkpoint_path'])
+				print("Model saved in file: %s" % save_path)
+	else:
+		cost_total, step, acc_total = loop('valid', sess, io, opt, data,
+										   loss, lr, lr_, pt, acc=acc,
+										   sl=sl, epoch=epoch,
+										   optim=train_op, step=step,
+										   saver=saver, pred=pred)
 	
-		if (epoch) % opt['save_step'] == 0:
-			save_path = saver.save(sess, opt['checkpoint_path'])
-			print("Model saved in file: %s" % save_path)
-			
+	print('Total Accuracy: %f' % (acc_total,))
 
 def load_pkl(dir_name, subdir_name, prepend=''):
 	"""Load dataset from subdirectory"""
@@ -226,15 +252,15 @@ def run(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'X'
+	opt['trial_num'] = 'Y'
 	opt['combine_train_val'] = False	
-	
-	with open('./image_net/imagenet_categories.pkl', 'r') as fp:
-		data = pkl.load(fp)
+	opt['valid'] = True
+	with open('./image_net/valid_map.txt', 'r') as fp:
+		data = fp.readlines()
 	opt['model'] = getattr(equivariant, 'deep_bsd')
 	opt['is_bsd'] = True
-	opt['lr'] = 1e-2
-	opt['batch_size'] = 32
+	opt['lr'] = 1e-1
+	opt['batch_size'] = 25
 	opt['std_mult'] = 1
 	opt['momentum'] = 0.95
 	opt['psi_preconditioner'] = 3.4
@@ -246,10 +272,10 @@ def run(opt):
 	opt['dim'] = 227
 	opt['dim2'] = 227
 	opt['n_channels'] = 3
-	opt['n_classes'] = len(data.keys())
+	opt['n_classes'] = 1000 #len(data.keys())
 	opt['n_filters'] = 16
 	opt['filter_gain'] = 2
-	opt['augment'] = True
+	opt['augment'] = not opt['valid']
 	opt['lr_div'] = 10.
 	opt['log_path'] = './logs/deep_bsd'
 	opt['checkpoint_path'] = './checkpoints/deep_bsd'

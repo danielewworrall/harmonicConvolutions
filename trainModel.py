@@ -90,8 +90,10 @@ def get_io_placeholders(opt):
 
 def build_optimizer(cost, lr, opt):
 	"""Apply the psi_precponditioner"""
-	mmtm = tf.train.MomentumOptimizer
-	optim = mmtm(learning_rate=lr, momentum=opt['momentum'], use_nesterov=True)
+	#mmtm = tf.train.MomentumOptimizer
+	#optim = mmtm(learning_rate=lr, momentum=opt['momentum'], use_nesterov=True)
+	mmtm = tf.train.AdamOptimizer
+	optim = mmtm(learning_rate=lr)
 	
 	grads_and_vars = optim.compute_gradients(cost)
 	modified_gvs = []
@@ -365,23 +367,25 @@ def run(opt):
 		data['valid_y'] = valid['y']
 		data['test_x'] = test['x']
 		data['test_y'] = test['y']
-		opt['n_epochs'] = 80
+		opt['n_epochs'] = 200
 		opt['batch_size'] = 46
 		opt['lr']  = 0.0076
 		opt['std_mult'] = 0.7
 		opt['delay'] = 12
 		opt['psi_preconditioner'] = 7.8
-		opt['filter_gain'] = 2.1
+		opt['filter_gain'] = 2
+		opt['filter_size'] = 3
 		opt['n_filters'] = 8
 		opt['momentum'] = 0.93
 		opt['display_step'] = 10000/(opt['batch_size']*3.)
 		opt['is_classification'] = True
+		opt['combine_train_val'] = True
 		opt['dim'] = 28
 		opt['crop_shape'] = 0
 		opt['n_channels'] = 1
 		opt['n_classes'] = 10
-		opt['log_path'] = './logs/deep_mnist'
-		opt['checkpoint_path'] = './checkpoints/deep_mnist'
+		opt['log_path'] = './logs/deep_mnist/trialA'
+		opt['checkpoint_path'] = './checkpoints/deep_mnist/trialA'
 	elif opt['datasetIdx'] == 'cifar10': 
 		# Load dataset
 		data = load_dataset(opt['data_dir'], 'cifar_numpy')
