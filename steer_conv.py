@@ -281,7 +281,7 @@ def batch_norm(X, phase_train, decay=0.99, name='batchNorm', device='/cpu:0'):
 	ema = tf.train.ExponentialMovingAverage(decay=decay)
 
 	def mean_var_with_update():
-		ema_apply_op = self.ema.apply([batch_mean, batch_var])
+		ema_apply_op = ema.apply([batch_mean, batch_var])
 		#self.ema_mean, self.ema_var = self.ema.average(batch_mean), self.ema.average(batch_var)
 		pop_mean_op = tf.assign(pop_mean, ema.average(batch_mean))
 		pop_var_op = tf.assign(pop_var, ema.average(batch_var))
