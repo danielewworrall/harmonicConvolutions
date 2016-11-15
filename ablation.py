@@ -92,7 +92,7 @@ def ablation_runs(n=5):
 		acc.append(run(frac, model))
 		fracs.append(frac)
 		print acc
-		np.savez('./ablation_M', acc=acc, fracs=fracs)
+		np.savez('./ablation_O', acc=acc, fracs=fracs)
 	
 
 if __name__ == '__main__':
