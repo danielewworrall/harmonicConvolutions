@@ -376,10 +376,10 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 1
-	nf = opt['n_filters']
-	nf2 = 2*nf
-	nf3 = 4*nf
-	nf4 = 8*nf
+	nf = int(opt['n_filters'])
+	nf2 = int((opt['filter_gain'])*nf)
+	nf3 = int((opt['filter_gain']**2)*nf)
+	nf4 = int((opt['filter_gain']**3)*nf)
 	bs = opt['batch_size']
 	size = opt['dim']
 	size2 = opt['dim2']
@@ -451,70 +451,66 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			'psi5_2' : get_phase_dict(nf4, nf4, order, name='psi5_2', device=device),
 		}
 		
+		nonlin = tf.nn.relu
 		x = tf.reshape(x, tf.pack([opt['batch_size'],size,size2,3]))
 		fm = {}
 		
 	# Convolutional Layers
 	with tf.name_scope('stage1') as scope:
 		cv1 = real_input_rotated_conv(x, weights['w1_1'], psis['psi1_1'],
-				 filter_size=3, padding='SAME', name='1_1')
-		cv1 = complex_nonlinearity(cv1, biases['cb1_1'], tf.nn.relu)
+				 filter_size=3, padding='VALID', name='1_1')
+		cv1 = complex_nonlinearity(cv1, biases['cb1_1'], nonlin)
 	
 		cv2 = complex_input_rotated_conv(cv1, weights['w1_2'], psis['psi1_2'],
-				 filter_size=3, output_orders=[0,1], padding='SAME', name='1_2')
-		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='bn1', device=device)
+				 filter_size=3, output_orders=[0,1], padding='VALID', name='1_2')
+		cv2 = complex_batch_norm(cv2, nonlin, phase_train, name='bn1', device=device)
 		fm[1] = conv2d(stack_magnitudes(cv2), side_weights['sw1']) #, b=biases['b1_2'])
 	
 	with tf.name_scope('stage2') as scope:
-		#cv3 = mean_pooling(cv2, ksize=(1,3,3,1), strides=(1,2,2,1))
+		cv3 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv3 = complex_input_rotated_conv(cv2, weights['w2_1'], psis['psi2_1'],
-				 filter_size=3, strides=(1,2,2,1), output_orders=[0,1],
-				 padding='SAME', name='2_1')
-		cv3 = complex_nonlinearity(cv3, biases['cb2_1'], tf.nn.relu)
+				 filter_size=3, output_orders=[0,1], padding='VALID', name='2_1')
+		cv3 = complex_nonlinearity(cv3, biases['cb2_1'], nonlin)
 	
 		cv4 = complex_input_rotated_conv(cv3, weights['w2_2'], psis['psi2_2'],
-				 filter_size=3, output_orders=[0,1], padding='SAME', name='2_2')
-		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='bn2', device=device)
+				 filter_size=3, output_orders=[0,1], padding='VALID', name='2_2')
+		cv4 = complex_batch_norm(cv4, nonlin, phase_train, name='bn2', device=device)
 		fm[2] = conv2d(stack_magnitudes(cv4), side_weights['sw2']) #, b=biases['b2_2'])
-	
-	
+		
 	with tf.name_scope('stage3') as scope:
-		cv5 = mean_pooling(cv4, ksize=(1,3,3,1), strides=(1,2,2,1))
+		cv5 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv5 = complex_input_rotated_conv(cv5, weights['w3_1'], psis['psi3_1'],
-				 filter_size=3, output_orders=[0,1], padding='SAME', name='3_1')
-		cv5 = complex_nonlinearity(cv5, biases['cb3_1'], tf.nn.relu)
+				 filter_size=3, output_orders=[0,1], padding='VALID', name='3_1')
+		cv5 = complex_nonlinearity(cv5, biases['cb3_1'], nonlin)
 	
 		cv6 = complex_input_rotated_conv(cv5, weights['w3_2'], psis['psi3_2'],
-				 filter_size=3, output_orders=[0,1], padding='SAME', name='3_2')
-		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, name='bn3', device=device)
+				 filter_size=3, output_orders=[0,1], padding='VALID', name='3_2')
+		cv6 = complex_batch_norm(cv6, nonlin, phase_train, name='bn3', device=device)
 		fm[3] = conv2d(stack_magnitudes(cv6), side_weights['sw3']) #, b=biases['b3_2'])
 		
 	with tf.name_scope('stage4') as scope:
-		cv7 = mean_pooling(cv6, ksize=(1,3,3,1), strides=(1,2,2,1))
+		cv7 = mean_pooling(cv6, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv7 = complex_input_rotated_conv(cv7, weights['w4_1'], psis['psi4_1'],
-				 filter_size=3, output_orders=[0,1], padding='SAME', name='4_1')
-		cv7 = complex_nonlinearity(cv7, biases['cb4_1'], tf.nn.relu)
+				 filter_size=3, output_orders=[0,1], padding='VALID', name='4_1')
+		cv7 = complex_nonlinearity(cv7, biases['cb4_1'], nonlin)
 	
 		cv8 = complex_input_rotated_conv(cv7, weights['w4_2'], psis['psi4_2'],
-				 filter_size=3, output_orders=[0,1], padding='SAME', name='4_2')
-		cv8 = complex_batch_norm(cv8, tf.nn.relu, phase_train, name='bn4', device=device)
+				 filter_size=3, output_orders=[0,1], padding='VALID', name='4_2')
+		cv8 = complex_batch_norm(cv8, nonlin, phase_train, name='bn4', device=device)
 		fm[4] = conv2d(stack_magnitudes(cv8), side_weights['sw4']) #, b=biases['b4_2'])
 		
 	with tf.name_scope('stage5') as scope:
-		cv9 = mean_pooling(cv8, ksize=(1,3,3,1), strides=(1,2,2,1))
+		cv9 = mean_pooling(cv8, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv9 = complex_input_rotated_conv(cv9, weights['w5_1'], psis['psi5_1'],
-				 filter_size=3, output_orders=[0,1], padding='SAME', name='5_1')
-		cv9 = complex_nonlinearity(cv9, biases['cb5_1'], tf.nn.relu)
+				 filter_size=3, output_orders=[0,1], padding='VALID', name='5_1')
+		cv9 = complex_nonlinearity(cv9, biases['cb5_1'], nonlin)
 	
 		cv10 = complex_input_rotated_conv(cv9, weights['w5_2'], psis['psi5_2'],
-				 filter_size=3, output_orders=[0,1], padding='SAME', name='5_2')
-		cv10 = complex_batch_norm(cv10, tf.nn.relu, phase_train, name='bn5', device=device)
+				 filter_size=3, output_orders=[0,1], padding='VALID', name='5_2')
+		cv10 = complex_batch_norm(cv10, nonlin, phase_train, name='bn5', device=device)
 		fm[5] = conv2d(stack_magnitudes(cv10), side_weights['sw5']) #, b=biases['b5_2'])
-	
-	#with tf.name_scope('classifier') as scope:
-	#	out = conv2d(stack_magnitudes(cv10), weights['w_out'], biases['b6'])
-	#	out = tf.reduce_mean(out, reduction_indices=[1,2])
-	out = 0.
+		
+		out = 0
 	
 	fms = {}
 	side_preds = []
@@ -527,9 +523,120 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 			side_preds.append(fms[key])
 		side_preds = tf.concat(3, side_preds)
 
-		fms['fuse'] = conv2d(side_preds, side_weights['h1'], b=biases['fuse'])
+		fms['fuse'] = conv2d(side_preds, side_weights['h1'], b=biases['fuse'], padding='SAME')
 		return fms, out
 
+def deep_unet(opt, x, phase_train, device='/cpu:0'):
+	"""High frequency convolutions are unstable, so get rid of them"""
+	# Sure layers weight & bias
+	order = 1
+	nf = int(opt['n_filters'])
+	nf2 = int((opt['filter_gain'])*nf)
+	nf3 = int((opt['filter_gain']**2)*nf)
+	nf4 = int((opt['filter_gain']**3)*nf)
+	bs = opt['batch_size']
+	size = opt['dim']
+	size2 = opt['dim2']
+	
+	sm = opt['std_mult']
+	with tf.device(device):
+		weights = {
+			'd1_1' : get_weights_dict([[3,],[2,]], opt['n_channels'], nf, std_mult=sm, name='d1_1', device=device),
+			'd1_2' : get_weights_dict([[3,],[2,]], nf, nf, std_mult=sm, name='d1_2', device=device),
+			'd2_1' : get_weights_dict([[3,],[2,],], nf, nf2, std_mult=sm, name='d2_1', device=device),
+			'd2_2' : get_weights_dict([[3,],[2,],], nf2, nf2, std_mult=sm, name='d2_2', device=device),
+			'd3_1' : get_weights_dict([[3,],[2,],], nf2, nf3, std_mult=sm, name='d3_1', device=device),
+			'd3_2' : get_weights_dict([[3,],[2,],], nf3, nf3, std_mult=sm, name='d3_2', device=device),
+			'd4_1' : get_weights_dict([[3,],[2,],], nf3, nf4, std_mult=sm, name='d4_1', device=device),
+			'd4_2' : get_weights_dict([[3,],[2,],], nf4, nf4, std_mult=sm, name='d4_2', device=device)
+		}
+		
+		psis = {
+			'd1_1' : get_phase_dict(1, nf, order, name='d1_1', device=device),
+			'd1_2' : get_phase_dict(nf, nf, order, name='d1_2', device=device),
+			'd2_1' : get_phase_dict(nf, nf2, order, name='d2_1', device=device),
+			'd2_2' : get_phase_dict(nf2, nf2, order, name='d2_2', device=device),
+			'd3_1' : get_phase_dict(nf2, nf3, order, name='d3_1', device=device),
+			'd3_2' : get_phase_dict(nf3, nf3, order, name='d3_2', device=device),
+			'd4_1' : get_phase_dict(nf3, nf4, order, name='d4_1', device=device),
+			'd4_2' : get_phase_dict(nf4, nf4, order, name='d4_2', device=device),
+			'u1_1' : get_phase_dict(nf4, nf4, order, name='u1_1', device=device),
+			'u1_2' : get_phase_dict(nf4, nf4, order, name='u1_2', device=device),
+			'u2_1' : get_phase_dict(nf, nf2, order, name='u2_1', device=device),
+			'u2_2' : get_phase_dict(nf2, nf2, order, name='u2_2', device=device),
+			'u3_1' : get_phase_dict(nf3, nf2, order, name='u3_1', device=device),
+			'u3_2' : get_phase_dict(nf2, nf, order, name='u3_2', device=device),
+			'u4_1' : get_phase_dict(nf2, nf, order, name='u4_1', device=device),
+			'u4_2' : get_phase_dict(nf, nf, order, name='u4_2', device=device)
+		}
+		
+		biases = {
+			'b1' : get_bias_dict(nf, order, name='b1', device=device)
+		}
+		
+		x = tf.reshape(x, tf.pack([opt['batch_size'],size,size2,3]))
+		fm = {}
+		
+	# Convolutional Layers
+	out, d1 =  down_block(True, x, weights['d1_1'], weights['d1_2'],
+						  psis['psi1_1'], psis['psi1_2'], biases['b1'],
+						  phase_train, name='down1', device=device)
+	out, d2 =  down_block(False, out, weights['d2_1'], weights['d2_2'],
+						  psis['psi2_1'], psis['psi2_2'], biases['b2'],
+						  phase_train, name='down2', device=device)
+	out, d3 =  down_block(False, out, weights['d3_1'], weights['d3_2'],
+						  psis['psi3_1'], psis['psi3_2'], biases['b3'],
+						  phase_train, name='down3', device=device)
+	out, d4 =  down_block(False, out, weights['d4_1'], weights['d4_2'],
+						  psis['psi4_1'], psis['psi4_2'], biases['b4'],
+						  phase_train, name='down4', device=device)
+	
+	out =  up_block(out, d4, weights['u4_1'], weights['u4_2'], psis['u4_1'],
+					psis['u4_2'], biases['u4'], phase_train, name='up4', device=device)
+	out =  up_block(out, d3, weights['u3_1'], weights['u3_2'], psis['u3_1'],
+					psis['u3_2'], biases['u3'], phase_train, name='up3', device=device)
+	out =  up_block(out, d2, weights['u2_1'], weights['u2_2'], psis['u2_1'],
+					psis['u2_2'], biases['u2'], phase_train, name='up2', device=device)
+	out =  up_block(out, d1, weights['u1_1'], weights['u1_2'], psis['u1_1'],
+					psis['u1_2'], biases['u1'], phase_train, name='up1', device=device)
+
+
+def down_block(in_, x, w1, w2, p1, p2, b, pt, name, device):
+	'''Downsampling block'''
+	with tf.name_scope(name) as scope:
+		if in_:
+			cv1 = real_input_rotated_conv(x, w1, p1, filter_size=3,
+										  padding='SAME', name=name+'_1')
+		else:
+			cv1 = complex_input_rotated_conv(x, w1, p1, filter_size=3,
+											 output_orders=[0,1],
+											 padding='SAME', name=name+'_1')
+		cv1 = complex_nonlinearity(cv1, b, tf.nn.relu)
+	
+		cv2 = complex_input_rotated_conv(cv1, w2, p2, filter_size=3,
+										 output_orders=[0,1], padding='SAME',
+										 name=name+'_2')
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, pt, name=name+'_bn',
+								 device=device)
+		out = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+		return out, cv2
+
+def up_block(x, d, w1, w2, p1, p2, b, pt, name, device):
+	'''Upsampling block'''
+	with tf.name_scope(name) as scope:
+		x = tf.image.resize_bilinear(x, size, align_corners=True)
+		x = tf.concat(3, [x,d])
+		cv1 = complex_input_rotated_conv(x, w1, p1, filter_size=3,
+											 output_orders=[0,1],
+											 padding='SAME', name=name+'_1')
+		cv1 = complex_nonlinearity(cv1, b, tf.nn.relu)
+	
+		cv2 = complex_input_rotated_conv(cv1, w2, p2, filter_size=3,
+										 output_orders=[0,1], padding='SAME',
+										 name=name+'_2')
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, pt, name=name+'_bn',
+								 device=device)
+		return out
 
 '''
 def deep_bsd(opt, x, phase_train, device='/cpu:0'):
@@ -749,6 +856,7 @@ def pklbatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 		for i in xrange(len(excerpt)):
 			img = inputs[excerpt[i]]['x']
 			tg = targets[excerpt[i]]['y'] > 2
+			#tg = tg / np.amax(tg)
 			#tg = watershed(tg, anneal)
 			if augment:
 				# We use shuffle as a proxy for training

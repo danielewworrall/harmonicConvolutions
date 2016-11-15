@@ -215,6 +215,9 @@ def train_model(opt, data):
 										   sl=sl, epoch=epoch,
 										   optim=train_op, step=step,
 										   saver=saver, pred=pred)
+		epoch += 1
+		if epoch % 5 == 0:
+			lr_ = lr_ / 10.
 	
 	print('Total Accuracy: %f' % (acc_total,))
 

@@ -34,6 +34,7 @@ def get_loss(opt, pred, y, sl=None):
 	cost = 0.
 	beta = 1-tf.reduce_mean(y)
 	pw = beta / (1. - beta)
+	sparsity_coefficient = opt['sparsity']
 	for key in pred.keys():
 		pred_ = pred[key]
 		# side-weight/fusion loss
@@ -41,8 +42,15 @@ def get_loss(opt, pred, y, sl=None):
 		#if (sl is not None) and (key == 'fuse'):
 		#	mult = sl
 		cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y, pw))
+		# Sparsity regularizer
+		cost += sparsity_coefficient*sparsity_regularizer(pred_, 1-beta)
 	print('  Constructed loss')
 	return cost
+
+def sparsity_regularizer(x, sparsity):
+	"""Define a sparsity regularizer"""
+	q = tf.reduce_mean(tf.nn.sigmoid(x))
+	return -sparsity*tf.log(q) - (1-sparsity)*tf.log(1-q)
 
 def get_io_placeholders(opt):
 	"""Return placeholders for classification/regression"""
@@ -54,10 +62,10 @@ def get_io_placeholders(opt):
 
 def build_optimizer(cost, lr, opt):
 	"""Apply the psi_precponditioner"""
-	mmtm = tf.train.MomentumOptimizer
-	#mmtm = tf.train.AdamOptimizer
-	optim = mmtm(learning_rate=lr, momentum=opt['momentum'], use_nesterov=True)
-	#optim = mmtm(learning_rate=lr)
+	#mmtm = tf.train.MomentumOptimizer
+	mmtm = tf.train.AdamOptimizer
+	#optim = mmtm(learning_rate=lr, momentum=opt['momentum'], use_nesterov=True)
+	optim = mmtm(learning_rate=lr)
 	
 	grads_and_vars = optim.compute_gradients(cost)
 	modified_gvs = []
@@ -96,7 +104,7 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
 	for i, batch in enumerate(generator):
 		fd = build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
 		if sl is not None:
-				fd[sl] = 1. - float(epoch)/100.
+				fd[sl] = np.maximum(1. - float(epoch)/100.,0.)
 		if mode == 'train':
 			__, cost_ = sess.run([optim, cost], feed_dict=fd)
 		else:
@@ -136,7 +144,7 @@ def construct_model_and_optimizer(opt, io, lr, pt, sl=None):
 	if len(opt['deviceIdxs']) == 1:
 		size = opt['dim']
 		size2 = opt['dim2']
-		pred = opt['model'](opt, io['x'][0], pt)
+		pred, __ = opt['model'](opt, io['x'][0], pt)
 		loss = get_loss(opt, pred, io['y'][0], sl=sl)
 		train_op = build_optimizer(loss, lr, opt)
 	return loss, train_op, pred
@@ -211,6 +219,8 @@ def train_model(opt, data):
 	
 	sess.run(init)
 	saver = tf.train.Saver()
+	if opt['load_pretrained']:
+		saver.restore(sess, './checkpoints/deep_bsd/trialY/model.ckpt')
 	start = time.time()
 	lr_ = opt['lr']
 	epoch = 0
@@ -234,7 +244,9 @@ def train_model(opt, data):
 		summaries = sess.run([tcost_ss[1], vcost_ss[1], lr_ss[1]], feed_dict=fd)
 		for summ in summaries:
 			summary.add_summary(summ, step)
-		best, counter, lr_ = get_learning_rate(opt, -vloss_total, best, counter, lr_)
+		#best, counter, lr_ = get_learning_rate(opt, -vloss_total, best, counter, lr_)
+		if epoch % 40 == 39:
+			lr_ = lr_ / 10.
 		#lr_ = opt['lr'] / (1. + np.sqrt(epoch/2.))
 		
 		print "[" + str(opt['trial_num']),str(epoch) + \
@@ -294,7 +306,7 @@ def get_settings(opt):
 	tf.reset_default_graph()
 	
 	# Default configuration
-	opt['trial_num'] = 'Y'
+	opt['trial_num'] = 'R'
 	opt['combine_train_val'] = False	
 	
 	data = load_pkl(opt['data_dir'], 'bsd_pkl_float', prepend='')
@@ -314,7 +326,7 @@ def get_settings(opt):
 	opt['dim2'] = 481
 	opt['n_channels'] = 3
 	opt['n_classes'] = 10
-	opt['n_filters'] = 16 #32
+	opt['n_filters'] = 8 #32
 	opt['filter_gain'] = 2
 	opt['augment'] = True
 	opt['lr_div'] = 10.
@@ -323,6 +335,7 @@ def get_settings(opt):
 	opt['test_path'] = './bsd/trial' + opt['trial_num']
 	opt['anneal_sl'] = True
 	opt['load_pretrained'] = False
+	opt['sparsity'] = 1
 	if not os.path.exists(opt['test_path']):
 		os.mkdir(opt['test_path'])
 	opt['save_test_step'] = 5
@@ -342,10 +355,10 @@ def get_settings(opt):
 	# Print out options
 	for key, val in opt.iteritems():
 		print(key + ': ' + str(val))
-	return opt
+	return opt, data
 
 def run(opt):
-	opt = get_settings(opt)
+	opt, data = get_settings(opt)
 	return train_model(opt, data)
 
 
