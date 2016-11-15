@@ -272,17 +272,25 @@ def batch_norm(X, phase_train, decay=0.99, name='batchNorm', device='/cpu:0'):
 			initializer=tf.constant_initializer(0.0))
 		gamma = tf.get_variable(name+'_gamma', dtype=tf.float32, shape=[n_out],
 			initializer=tf.constant_initializer(1.0))
-	batch_mean, batch_var = tf.nn.moments(X, [0,1,2],
+		pop_mean = tf.get_variable(name+'_pop_mean', dtype=tf.float32, shape=[n_out],
+			trainable=False)
+		pop_var = tf.get_variable(name+'_pop_var', dtype=tf.float32, shape=[n_out],
+			trainable=False)
+		batch_mean, batch_var = tf.nn.moments(X, [0,1,2],
 										  name=name + 'moments')
 	ema = tf.train.ExponentialMovingAverage(decay=decay)
 
 	def mean_var_with_update():
-		ema_apply_op = ema.apply([batch_mean, batch_var])
-		with tf.control_dependencies([ema_apply_op]):
+		ema_apply_op = self.ema.apply([batch_mean, batch_var])
+		#self.ema_mean, self.ema_var = self.ema.average(batch_mean), self.ema.average(batch_var)
+		pop_mean_op = tf.assign(pop_mean, ema.average(batch_mean))
+		pop_var_op = tf.assign(pop_var, ema.average(batch_var))
+
+		with tf.control_dependencies([ema_apply_op, pop_mean_op, pop_var_op]):
 			return tf.identity(batch_mean), tf.identity(batch_var)
 
 	mean, var = tf.cond(phase_train, mean_var_with_update,
-				lambda: (ema.average(batch_mean), ema.average(batch_var)))
+				lambda: (pop_mean, pop_var))
 	normed = tf.nn.batch_normalization(X, mean, var, beta, gamma, 1e-3)
 	return normed
 
@@ -356,28 +364,6 @@ def get_complex_filters(R, filter_size):
 		ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
 		usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
 		filters[m] = (ucos, usin)
-	return filters
-
-def get_complex_rotated_filters(R, psi, filter_size):
-	"""Return a complex filter of the form $u(r,t,psi) = R(r)e^{im(t-psi)}"""
-	filters = {}
-	k = filter_size
-	for m, r in R.iteritems():
-		rsh = r.get_shape().as_list()
-		# Get the basis matrices
-		cmasks, smasks = get_complex_basis_matrices(filter_size, order=m)
-		# Reshape and project taps on to basis
-		cosine = tf.reshape(cmasks, tf.pack([k*k, rsh[0]]))
-		sine = tf.reshape(smasks, tf.pack([k*k, rsh[0]]))
-		# Project taps on to rotational basis
-		r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
-		ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
-		usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
-		print ucos.get_shape(), psi[m].get_shape()
-		# Rotate basis matrices
-		cosine = tf.cos(psi[m])*ucos + tf.sin(psi[m])*usin
-		sine = -tf.sin(psi[m])*ucos + tf.cos(psi[m])*usin
-		filters[m] = (cosine, sine)
 	return filters
 
 def get_complex_rotated_filters(R, psi, filter_size):
