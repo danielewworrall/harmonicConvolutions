@@ -12,13 +12,13 @@ sns.set_style('whitegrid')
 
 def run():
 	data_dir = './'
-	for pend in ['U', 'V', 'rot', 'W']:
+	for pend in ['rot', 'W', 'M','O','Z']:
 		data_Z = np.load(data_dir + 'ablation_' + pend + '.npz')
 		n = data_Z['acc'].shape[0]
-		plt.plot(12000*np.linspace(1./6,n/6.,n), 100.*(1-data_Z['acc'])) #/np.amax(data_Z['acc']))
-	plt.legend(['CNN-20','H-Net-10','H-Net (ours)', 'H-Net-10+DA'], fontsize=20)
+		plt.plot(12000*np.linspace(1./6,n/6.,n), data_Z['acc']/np.amax(data_Z['acc']))
+	plt.legend(['H-Net (ours)', 'H-Net10DA', 'CNN20DA' 'CNN20'], fontsize=20)
 	plt.xlabel('Training size', fontsize=20)
-	plt.ylabel('Normalized test error', fontsize=20)
+	plt.ylabel('Test error', fontsize=20)
 	plt.tick_params(axis='both', which='major', labelsize=20)
 	plt.tight_layout()
 	plt.show()

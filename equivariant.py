@@ -381,8 +381,6 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	nf3 = int((opt['filter_gain']**2)*nf)
 	nf4 = int((opt['filter_gain']**3)*nf)
 	bs = opt['batch_size']
-	size = opt['dim']
-	size2 = opt['dim2']
 	
 	sm = opt['std_mult']
 	with tf.device(device):
@@ -452,8 +450,8 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		}
 		
 		nonlin = tf.nn.relu
-		x = tf.reshape(x, tf.pack([opt['batch_size'],size,size2,3]))
 		fm = {}
+		cv = {}
 		
 	# Convolutional Layers
 	with tf.name_scope('stage1') as scope:
@@ -465,10 +463,11 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='1_2')
 		cv2 = complex_batch_norm(cv2, nonlin, phase_train, name='bn1', device=device)
 		fm[1] = conv2d(stack_magnitudes(cv2), side_weights['sw1']) #, b=biases['b1_2'])
+		cv[1] = cv2
 	
 	with tf.name_scope('stage2') as scope:
 		cv3 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv3 = complex_input_rotated_conv(cv2, weights['w2_1'], psis['psi2_1'],
+		cv3 = complex_input_rotated_conv(cv3, weights['w2_1'], psis['psi2_1'],
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='2_1')
 		cv3 = complex_nonlinearity(cv3, biases['cb2_1'], nonlin)
 	
@@ -476,6 +475,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='2_2')
 		cv4 = complex_batch_norm(cv4, nonlin, phase_train, name='bn2', device=device)
 		fm[2] = conv2d(stack_magnitudes(cv4), side_weights['sw2']) #, b=biases['b2_2'])
+		cv[2] = cv4
 		
 	with tf.name_scope('stage3') as scope:
 		cv5 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
@@ -487,6 +487,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='3_2')
 		cv6 = complex_batch_norm(cv6, nonlin, phase_train, name='bn3', device=device)
 		fm[3] = conv2d(stack_magnitudes(cv6), side_weights['sw3']) #, b=biases['b3_2'])
+		cv[3] = cv6
 		
 	with tf.name_scope('stage4') as scope:
 		cv7 = mean_pooling(cv6, ksize=(1,2,2,1), strides=(1,2,2,1))
@@ -498,6 +499,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='4_2')
 		cv8 = complex_batch_norm(cv8, nonlin, phase_train, name='bn4', device=device)
 		fm[4] = conv2d(stack_magnitudes(cv8), side_weights['sw4']) #, b=biases['b4_2'])
+		cv[4] = cv8
 		
 	with tf.name_scope('stage5') as scope:
 		cv9 = mean_pooling(cv8, ksize=(1,2,2,1), strides=(1,2,2,1))
@@ -509,22 +511,24 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='5_2')
 		cv10 = complex_batch_norm(cv10, nonlin, phase_train, name='bn5', device=device)
 		fm[5] = conv2d(stack_magnitudes(cv10), side_weights['sw5']) #, b=biases['b5_2'])
+		cv[5] = cv10
 		
 		out = 0
 	
 	fms = {}
 	side_preds = []
+	xsh = tf.shape(x)
 	with tf.name_scope('fusion') as scope:
 		for key in fm.keys():
 			if opt['machine'] == 'grumpy':
-				fms[key] = tf.image.resize_images(fm[key], tf.pack([size, size2]))
+				fms[key] = tf.image.resize_images(fm[key], tf.pack([xsh[1], xsh[2]]))
 			else:
-				fms[key] = tf.image.resize_images(fm[key], size, size2)
+				fms[key] = tf.image.resize_images(fm[key], xsh[1], xsh[2])
 			side_preds.append(fms[key])
 		side_preds = tf.concat(3, side_preds)
 
 		fms['fuse'] = conv2d(side_preds, side_weights['h1'], b=biases['fuse'], padding='SAME')
-		return fms, out
+		return fms, out, weights, psis, cv
 
 def deep_unet(opt, x, phase_train, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
@@ -773,12 +777,10 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		for key in fm.keys():
 			if opt['machine'] == 'grumpy':
 				#fms[key] = tf.image.resize_images(fm[key], tf.pack([size, size2]))
-				fms[key] = tf.image.resize_bilinear(fm[key], tf.pack([size,size2]),
-													align_corners=True)
+				fms[key] = tf.image.resize_images(fm[key], tf.pack([size,size2]))
 			else:
 				#ms[key] = tf.image.resize_images(fm[key], size, size2)
-				fms[key] = tf.image.resize_bilinear(fm[key], size, size2,
-													align_corners=True)
+				fms[key] = tf.image.resize_images(fm[key], size, size2)
 			side_preds.append(fms[key])
 		side_preds = tf.concat(3, side_preds)
 

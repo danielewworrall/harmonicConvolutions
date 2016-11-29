@@ -11,7 +11,9 @@ import numpy as np
 import seaborn as sns
 import scipy.linalg as scilin
 import scipy.ndimage.interpolation as sciint
+import skimage.color as skco
 import skimage.draw as skdr
+import skimage.morphology as skmo
 import skimage.transform as sktr
 import tensorflow as tf
 
@@ -802,7 +804,8 @@ def equivariance_save(model='conv_so2', lr=1e-2, batch_size=250, n_epochs=500,
 					plt.axis('off')
 					plt.draw()
 					fname = './visualizations/fm' + str(layer) + '_' + str(k) + '_' + str(i) + '.pdf'
-					plt.savefig(fname)
+					#plt.savefig(fname)
+					raw_input()
 					print fname
 	
 def equivariance_stability(model='deep_stable', lr=1e-2, batch_size=250, n_epochs=500,
@@ -825,7 +828,7 @@ def equivariance_stability(model='deep_stable', lr=1e-2, batch_size=250, n_epoch
 	n_input = 784 				# MNIST data input (img shape: 28*28)
 	n_classes = 10 				# MNIST total classes (0-9 digits)
 	dropout = 0.75 				# Dropout, probability to keep units
-	n_filters = 8
+	n_filters = 20
 	dataset_size = 10000
 	
 	# tf Graph input
@@ -835,7 +838,7 @@ def equivariance_stability(model='deep_stable', lr=1e-2, batch_size=250, n_epoch
 	# Construct model
 	opt = {}
 	opt['n_filters'] = n_filters
-	opt['filter_gain'] = 2.1
+	opt['filter_gain'] = 1
 	opt['batch_size'] = batch_size
 	opt['n_channels'] = 1
 	opt['n_classes'] = 10
@@ -843,8 +846,14 @@ def equivariance_stability(model='deep_stable', lr=1e-2, batch_size=250, n_epoch
 	opt['dim'] = 28
 	opt['crop_shape'] = 0
 	opt['filter_size'] = 3
-	__, features = deep_stable(opt, X, phase_train)
+	#features = deep_stable(opt, X, phase_train)
+	features = deep_Z(opt, X, phase_train)
 	
+	num_params = 0
+	for var in tf.trainable_variables():
+		num_params += int(np.prod(var.get_shape()))
+	print num_params
+	'''
 	plt.figure(figsize=(8,12))
 	plt.ion()
 	plt.show()
@@ -878,14 +887,17 @@ def equivariance_stability(model='deep_stable', lr=1e-2, batch_size=250, n_epoch
 					plt.plot(np.linspace(0.,360.,num=batch_size),r)
 				plt.draw()
 			raw_input(idx)
+	'''
 
 def equivariance_bsd(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8):
 	opt = {}
 	opt['deviceIdxs'] = [0,]
 	opt['data_dir'] = 'data'
 	opt['machine'] = 'daniel'
-	opt = get_settings(opt)
+	opt, __ = get_settings(opt)
+	opt['n_filters'] = 8
 	opt['batch_size'] = 1
+	opt['trial_num'] ='L'
 	
 	n_GPUs = 1
 	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
@@ -907,32 +919,138 @@ def equivariance_bsd(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8):
 	im = skio.imread('/home/daniel/Code/harmonicConvolutions/data/BSR/BSDS500/data/images/val/42049.jpg')
 	im = im[np.newaxis,...]
 	im = (im - np.mean(im))/np.std(im)
-	
 	plt.ion()
 	plt.show()
+	
+	t = np.linspace(0,2.*np.pi, 100)
+	xx = np.cos(t)
+	yy = np.sin(t)
 	with tf.Session(config=config) as sess:
-		init = tf.initialize_all_variables()
-		sess.run(init)
+		#init = tf.initialize_all_variables()
+		#sess.run(init)
 		saver = tf.train.Saver(tf.trainable_variables())
-		saver.restore(sess, './checkpoints/deep_bsd/trialE/model.ckpt')
+		saver.restore(sess, './checkpoints/deep_bsd/trialL/model.ckpt')
 		bs = opt['batch_size']
 		fd = {io['x'][0]: im, pt: False}
 
 		for i in xrange(5):
-			Q = get_complex_rotated_filters(R['w' + str(i+1) + '_1'], Psi['psi' + str(i+1) + '_1'], filter_size=3)
-			w = sess.run(Q[1], feed_dict=fd)
-			for j in xrange(16):
-				plt.subplot(16,5,5*j+1)
+			P = Psi['psi' + str(i+1) + '_1']
+			Q = get_complex_rotated_filters(R['w' + str(i+1) + '_1'], P, filter_size=3)
+			init = tf.initialize_all_variables()
+			sess.run(init)
+			w, p = sess.run([Q[0],P[0]], feed_dict=fd)
+			for j in xrange(0,4):
+				plt.subplot(8,10,10*j+1+2*i)
 				w_ = w[0][...,j]/ 2. + 0.5
+				
+				print w_.shape
 				print np.amin(w_), np.amax(w_)
-				plt.imshow(w_, interpolation='nearest')
+				if w_.shape[2] == 3:
+					plt.imshow(w_, interpolation='nearest')
+				else:
+					plt.imshow(w_[...,j], interpolation='nearest', cmap='gray')
+				plt.axis('off')
+				if p.shape[2] > 1:
+					p_ = np.squeeze(p[0,0,j,j])
+				else:
+					p_ = np.squeeze(p[0,0,0,j])
+				#p_ = np.squeeze(p_[j])
+				x_ = np.cos(p_)
+				y_ = np.sin(p_)
+				plt.subplot(8,10,10*j+2+2*i)
+				plt.plot(xx, yy, 'r')
+				plt.arrow(0, 0, x_, y_, width=0.15, head_width=0., head_length=0., fc='r', ec='r')
+				plt.xlim([-1.1,1.1])
+				plt.ylim([-1.1,1.1])
+				plt.axis('equal')
+				plt.axis('off')
+				P = Psi['psi' + str(i+1) + '_1']
+			
+			w, p = sess.run([Q[1],P[1]], feed_dict=fd)
+			for j in xrange(4,8):
+				plt.subplot(8,10,10*j+1+2*i)
+				w_ = w[0][...,j]/ 2. + 0.5
+				
+				print w_.shape
+				print np.amin(w_), np.amax(w_)
+				if w_.shape[2] == 3:
+					plt.imshow(w_, interpolation='nearest')
+				else:
+					plt.imshow(w_[...,j], interpolation='nearest', cmap='gray')
+				plt.axis('off')
+				if p.shape[2] > 1:
+					p_ = np.squeeze(p[0,0,j,j])
+				else:
+					p_ = np.squeeze(p[0,0,0,j])
+				#p_ = np.squeeze(p_[j])
+				x_ = np.cos(p_)
+				y_ = np.sin(p_)
+				plt.subplot(8,10,10*j+2+2*i)
+				plt.plot(xx, yy, 'r')
+				plt.arrow(0, 0, x_, y_, width=0.15, head_width=0., head_length=0., fc='r', ec='r')
+				plt.xlim([-1.1,1.1])
+				plt.ylim([-1.1,1.1])
+				plt.axis('equal')
 				plt.axis('off')
 			plt.draw()
-		raw_input()
+			raw_input()
 
+def phase_histogram(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8):
+	opt = {}
+	opt['deviceIdxs'] = [0,]
+	opt['data_dir'] = 'data'
+	opt['machine'] = 'daniel'
+	opt, __ = get_settings(opt)
+	opt['n_filters'] = 8
+	opt['batch_size'] = 1
+	opt['trial_num'] ='L'
+	
+	n_GPUs = 1
+	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
+	# Make placeholders
+	io = {}
+	io['x'] = []
+	for g in opt['deviceIdxs']:
+		with tf.device('/gpu:%d' % g):
+			io_x, __ = get_io_placeholders(opt)
+			io['x'].append(io_x)
+	pt = tf.placeholder(tf.bool, name='phase_train')
+	
+	# Construct model 
+	__, __, R, Psi = opt['model'](opt, io['x'][0], pt)
+	
+	# Configure tensorflow session
+	config = config_init()
+	config.inter_op_parallelism_threads = 1 
+	
+	plt.ion()
+	plt.show()
+	with tf.Session(config=config) as sess:
+		sns.set_style('white')
+		saver = tf.train.Saver(tf.trainable_variables())
+		saver.restore(sess, './checkpoints/deep_bsd/trialL/model.ckpt')
+		bs = opt['batch_size']
+		fd = {pt: False}
+		for i in xrange(5):
+			P = Psi['psi' + str(i+1) + '_1']
+			init = tf.initialize_all_variables()
+			sess.run(init)
+			for j in xrange(2):
+				ax = plt.subplot(2,5,1+5*j+i)
+				p = sess.run(P[j], feed_dict=fd)
+				p_ = np.reshape(p, [-1])
+				sns.distplot(p_, kde=False)
+				plt.xlim([0.,2.*np.pi])
+				ax.set_yticks([])
+				ax.set_xticks([0,2,4,6])
+				plt.tick_params(axis='both', which='major', labelsize=15)
+				#plt.axis('off')
+				plt.draw()
+			raw_input()
 
-'''
 def equivariance_caffe():
+	import caffe
+	
 	n_angles = 40
 	#load the model
 	root_dir = '../caffe/'
@@ -1037,7 +1155,258 @@ def equivariance_caffe():
 		raw_input(k)
 	plt.show()
 	raw_input(k)
-'''
+
+def bsd_fm(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8):
+	opt = {}
+	opt['deviceIdxs'] = [0,]
+	opt['data_dir'] = 'data'
+	opt['machine'] = 'daniel'
+	opt, __ = get_settings(opt)
+	opt['n_filters'] = 8
+	opt['batch_size'] = 1
+	opt['trial_num'] ='S'
+	
+	n_GPUs = 1
+	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
+	# Make placeholders
+	io = {}
+	io['x'] = []
+	for g in opt['deviceIdxs']:
+		with tf.device('/gpu:%d' % g):
+			io_x, __ = get_io_placeholders(opt)
+			io['x'].append(io_x)
+	pt = tf.placeholder(tf.bool, name='phase_train')
+	
+	# Construct model
+	__, __, __, __, cv = opt['model'](opt, io['x'][0], pt)
+	#y = tf.nn.sigmoid(fms['fuse'])
+	
+	# Configure tensorflow session
+	config = config_init()
+	config.inter_op_parallelism_threads = 1
+	f = '253092.jpg'
+	im = skio.imread('/home/daniel/Code/harmonicConvolutions/data/BSR/BSDS500/data/images/test/' + f)
+	
+	transposed = False
+	if im.shape[0] > im.shape[1]:
+		im = np.transpose(im, (1,0,2))
+		transposed = True
+	im = im[np.newaxis,...]
+	im = (im - np.mean(im))/np.std(im)
+	
+	'''
+	num_params = 0
+	for var in tf.trainable_variables():
+		num_params += int(np.prod(var.get_shape()))
+	print num_params
+	'''
+	plt.ion()
+	plt.show()
+	save_dir = './bsd/flowS/' + f.replace('.jpg','')
+	if not os.path.exists(save_dir):
+		os.mkdir(save_dir)
+	with tf.Session(config=config) as sess:
+		#init = tf.initialize_all_variables()
+		#sess.run(init)
+		saver = tf.train.Saver()
+		saver.restore(sess, './checkpoints/deep_bsd/trialS/model.ckpt')
+
+		bs = opt['batch_size']
+		fd = {io['x'][0]: im, pt: False}
+		for i in xrange(5):
+			fuse = sess.run(cv[i+1], feed_dict=fd)
+			real = fuse[1][0]
+			imag = fuse[1][1]
+			#r = np.sqrt(real**2 + imag**2)[0,...]
+			#real = real[0,...] / r
+			#imag = imag[0,...] / r
+			for j in xrange(real.shape[3]):
+				#flow = to_optical_flow(np.squeeze(real[0,...,j]), np.squeeze(imag[0,...,j]))
+				flow = np.sqrt(np.squeeze(real[0,...,j])**2 + np.squeeze(imag[0,...,j]**2))
+				if transposed:
+					#flow = np.transpose(flow, (1,0,2))
+					flow = flow.T
+				fname = save_dir + '/l'+str(2*i+2)+'_fm'+str(j)+'.png'
+				#skio.imsave(fname, flow)
+				plt.imshow(flow, interpolation='nearest')
+				#plt.quiver(real[...,j], imag[...,j])
+				plt.axis('off')
+				plt.draw()
+				raw_input(j)
+
+
+def to_optical_flow(x, y):
+	'''Return RGB image using optical flow colorspace'''
+	saturation = np.sqrt(x**2 + y**2)
+	saturation = saturation / (np.amax(saturation)*0.5)
+	hue = (np.arctan2(y, x) + np.pi)/(2*np.pi)
+	value = np.ones(x.shape)
+	#print np.amin(hue), np.amax(hue)
+	#print np.amin(saturation), np.amax(saturation)
+	#print np.amin(value), np.amax(value)
+	
+	hsv = np.stack((hue, saturation, value), axis=-1)
+	return skco.hsv2rgb(hsv)
+
+
+def bsd_rotate(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8):
+	opt = {}
+	opt['deviceIdxs'] = [0,]
+	opt['data_dir'] = 'data'
+	opt['machine'] = 'daniel'
+	opt, __ = get_settings(opt)
+	opt['n_filters'] = 8
+	opt['batch_size'] = 1
+	opt['trial_num'] ='S'
+	
+	n_GPUs = 1
+	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
+	# Make placeholders
+	io = {}
+	io['x'] = []
+	for g in opt['deviceIdxs']:
+		with tf.device('/gpu:%d' % g):
+			io_x, __ = get_io_placeholders(opt)
+			io['x'].append(io_x)
+	pt = tf.placeholder(tf.bool, name='phase_train')
+	
+	# Construct model
+	__, __, __, __, cv = opt['model'](opt, io['x'][0], pt)
+	
+	# Configure tensorflow session
+	config = config_init()
+	config.inter_op_parallelism_threads = 1
+	#f = '253092.jpg'
+	f = '159022.jpg'
+	im = skio.imread('/home/daniel/Code/harmonicConvolutions/data/BSR/BSDS500/data/images/test/' + f)
+	#import caffe
+	#im = caffe.io.load_image('../caffe/examples/images/cat.jpg')
+	
+	transposed = False
+	if im.shape[0] > im.shape[1]:
+		im = np.transpose(im, (1,0,2))
+		transposed = True
+	im = (im - np.mean(im, axis=(0,1)))/np.std(im, axis=(0,1))
+	im = np.pad(im, ((80,80),(0,0),(0,0)), 'constant')
+	#im = im[:,80:401,:]
+	mask = skmo.disk(im.shape[0]/2 - 5)
+	mask = np.pad(mask, ((5,5),(5,5)), 'constant')
+	#im = im*mask[...,np.newaxis]
+	
+	#plt.ion()
+	#plt.show()
+	save_dir = './video/hnet_color/159022/'
+	with tf.Session(config=config) as sess:
+		saver = tf.train.Saver()
+		saver.restore(sess, './checkpoints/deep_bsd/trialS/model.ckpt')
+		for j, angle in enumerate(np.linspace(0., 360., num=721)):
+			im_ = sktr.rotate(im, angle)
+			#offset_x = int(100.*np.sin(2.*np.pi*angle/360.))
+			#offset_y = 0. #int(100.*np.sin(2*np.pi*angle/360.))
+			#affine_matrix = sktr.AffineTransform(translation=(offset_x,offset_y))
+			#im_ = sktr.warp(im, affine_matrix)
+			im_ = im_[np.newaxis,...]
+	
+			bs = opt['batch_size']
+			
+			fd = {io['x'][0]: im_, pt: False}
+			fuse = sess.run(cv[1], feed_dict=fd)
+			real = fuse[1][0]
+			imag = fuse[1][1]
+			flow = to_optical_flow(np.squeeze(real[0,...,3]), np.squeeze(imag[0,...,3]))
+			#flow = np.sqrt(np.squeeze(real[0,...,12])**2 + np.squeeze(imag[0,...,12]**2))
+			#flow = np.sqrt(np.squeeze(real[0,...,3])**2 + np.squeeze(imag[0,...,3]**2))
+			if transposed:
+				flow = np.transpose(flow, (1,0,2))
+				#flow = flow.T
+			#flow = flow / 20. # 10.
+			#print np.amin(flow), np.amax(flow)
+			
+			fname = save_dir + 'im_' + '{:04d}'.format(j) + '.png'
+			print fname
+			skio.imsave(fname, flow)
+			'''
+			plt.clf()
+			plt.imshow(flow, interpolation='nearest')
+			#plt.quiver(real[...,j], imag[...,j])
+			plt.axis('off')
+			plt.draw()
+			#plt.pause(0.0001)
+			raw_input()
+			'''
+
+def caffenet_rotate(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8):
+	
+	#f = '253092.jpg'
+	f = '14092.jpg'
+	im = skio.imread('/home/daniel/Code/harmonicConvolutions/data/BSR/BSDS500/data/images/test/' + f)
+	import caffe
+	root_dir = '../caffe/'
+	net = caffe.Net(root_dir+'models/vgg/VGG_ILSVRC_16_daniel_deploy.prototxt',
+					root_dir+'models/vgg/VGG_ILSVRC_16_layers.caffemodel',
+					caffe.TEST)
+	
+	# load input and configure preprocessing
+	net.blobs['data'].reshape(10,3,481,481)
+	
+	transposed = False
+	if im.shape[0] > im.shape[1]:
+		im = np.transpose(im, (1,0,2))
+		transposed = True
+	im = (im - np.mean(im, axis=(0,1)))/np.std(im, axis=(0,1))
+	im = np.pad(im, ((80,80),(0,0),(0,0)), 'constant')
+	mask = skmo.disk(im.shape[0]/2 - 5)
+	mask = np.pad(mask, ((5,5),(5,5)), 'constant')
+	
+	#plt.ion()
+	#plt.show()
+	save_dir = './video/cnn_rot_conv2_2/'
+	im = sktr.resize(im, (481,481,3))
+	angle_array = np.linspace(0., 360., num=721)
+	angle_list = []
+	for i in xrange(0,len(angle_array),10):
+		angle_list.append(angle_array[i:i+10])
+	j = 0
+	for angles in angle_list:
+		images = []
+		for angle in angles:
+			offset_x = int(100.*np.sin(2*np.pi*angle/360.))
+			#offset_y = int(100.*np.sin(2*np.pi*angle/360.))
+			#affine_matrix = sktr.AffineTransform(translation=(offset_x,0))
+			#im_ = sktr.warp(im, affine_matrix)
+			im_ = sktr.rotate(im, angle)
+			#im_ = np.transpose(im_, (2,0,1))[np.newaxis,...]
+			#print im_.shape
+			#im_ = im_[np.newaxis,...]
+			images.append(im_)
+		images = np.stack(images, axis=0)
+
+		#note we can change the batch size on-the-fly
+		#since we classify only one image, we change batch size from 10 to 1
+		#print transformer.preprocess('data', images).shape
+		net.blobs['data'].data[...] = np.transpose(images, (0,3,1,2))
+		out = net.forward()
+		for i in xrange(images.shape[0]):
+			flow = flow = net.blobs['conv2_2'].data[i,4,...]
+			#flow = to_optical_flow(np.squeeze(real[0,...,3]), np.squeeze(imag[0,...,3]))
+			#flow = np.sqrt(np.squeeze(real[0,...,3])**2 + np.squeeze(imag[0,...,3]**2))
+			if transposed:
+				#flow = np.transpose(flow, (1,0,2))
+				flow = flow.T
+			flow = flow / 110.
+			#print flow.shape
+			fname = save_dir + 'im_' + '{:04d}'.format(j) + '.png'
+			print np.amin(flow), np.amax(flow)
+			skio.imsave(fname, flow)
+			j += 1
+			'''
+			plt.clf()
+			plt.imshow(flow, interpolation='nearest', vmin=0., vmax=9.)
+			#plt.quiver(real[...,j], imag[...,j])
+			plt.axis('off')
+			plt.draw()
+			plt.pause(0.0001)
+			'''
 
 if __name__ == '__main__':
 	#view_feature_maps(model='deep_complex_bias', lr=2e-2, batch_size=200,
@@ -1054,9 +1423,10 @@ if __name__ == '__main__':
 	#					   n_epochs=500, std_mult=0.3, n_filters=5,
 	#					   combine_train_val=False)
 	#equivariance_caffe()
-	equivariance_bsd(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8)
-
-
+	#equivariance_bsd(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8)
+	#phase_histogram(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8)
+	bsd_rotate(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8)
+	#caffenet_rotate(model='deep_bsd', lr=1e-2, batch_size=5, n_filters=8)
 
 
 

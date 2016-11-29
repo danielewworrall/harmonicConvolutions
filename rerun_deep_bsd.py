@@ -225,14 +225,14 @@ def rerun_model(opt, data):
 	sess.run(init)
 	saver = tf.train.Saver()
 	if opt['load_pretrained']:
-		saver.restore(sess, './checkpoints/deep_bsd/trialR/model.ckpt')
+		saver.restore(sess, './checkpoints/deep_bsd/trialS/model.ckpt')
 	start = time.time()
 	
-	bs = opt['batch_size']
-	print('Rerunning')
-	save_predictions(sess, io['x'][0], opt, pred, pt, data, 'rerun')
-	sess.close()
-	return 
+	#bs = opt['batch_size']
+	#print('Rerunning')
+	#save_predictions(sess, io['x'][0], opt, pred, pt, data, 'rerun')
+	#sess.close()
+	#return 
 
 def load_pkl(dir_name, subdir_name, prepend=''):
 	"""Load dataset from subdirectory"""
