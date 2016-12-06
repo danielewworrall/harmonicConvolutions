@@ -10,8 +10,8 @@ from io_helpers import *
 from harmonic_network_models import *
 
 #----------HELPER FUNCTIONS----------
-def print_train(trial_num, epoch, time,
-	cost_total, vloss_total, acc_total, vacc_total):
+def print_train_validation(trial_num, epoch, time,
+	cost_total, validation_loss_total, acc_total, validation_acc_total):
 	"""Formats print-out for the training-loop
 	
 	"""
@@ -20,9 +20,9 @@ def print_train(trial_num, epoch, time,
 		"{:.3f}".format(time.time()-start) + ", Counter: " + \
 		"{:d}".format(counter) + ", Loss: " + \
 		"{:.5f}".format(cost_total) + ", Val loss: " + \
-		"{:.5f}".format(vloss_total) + ", Train Acc: " + \
+		"{:.5f}".format(validation_loss_total) + ", Train Acc: " + \
 		"{:.5f}".format(acc_total) + ", Val acc: " + \
-		"{:.5f}".format(vacc_total)
+		"{:.5f}".format(validation_acc_total)
 
 
 def print_validation(trial_num, counter, epoch, time,
@@ -36,6 +36,7 @@ def print_validation(trial_num, counter, epoch, time,
 		"{:d}".format(counter) + ", Loss: " + \
 		"{:.5f}".format(cost_total) + ", Train Acc: " + \
 		"{:.5f}".format(acc_total)
+
 
 def average_gradients(gpu_grads):
 	"""Calculate the average gradient for each shared variable across all gpus.
@@ -307,9 +308,11 @@ def train_model(opt, data, tf_nodes):
 		cost_total, acc_total, step = loop('train', sess, opt, data, tf_nodes,step=step)
 		if not opt['combine_train_val']:
 			vloss_total, vacc_total, __ = loop('valid', sess, opt, data, tf_nodes)
-
-			fd = {tf_nodes['sum']['train_cost'][0] : cost_total, tf_nodes['sum']['val_cost'][0] : vloss_total,
-					tf_nodes['sum']['val_acc'] [0] : vacc_total, tf_nodes['sum']['learning_rate'][0] : opt['lr']}
+			#build the feed-dict
+			fd = {tf_nodes['sum']['train_cost'][0] : cost_total,
+				tf_nodes['sum']['val_cost'][0] : vloss_total,
+				tf_nodes['sum']['val_acc'] [0] : vacc_total,
+				tf_nodes['sum']['learning_rate'][0] : opt['lr']}
 			summaries = sess.run([tf_nodes['sum']['train_cost'][1], tf_nodes['sum']['val_cost'][1],
 					tf_nodes['sum']['val_acc'] [1], tf_nodes['sum']['learning_rate'][1]],
 				feed_dict=fd)
@@ -320,7 +323,7 @@ def train_model(opt, data, tf_nodes):
 				cost_total, vloss_total, acc_total, vacc_total):
 		else:
 			best, counter, opt['lr'] = get_learning_rate(opt, acc_total, best, counter, opt['lr'])
-			print_validation(opt['trial_num'], counter, epoch, time.time()-start, cost_total, acc_total,):
+			print_train_validation(opt['trial_num'], counter, epoch, time.time()-start, cost_total, acc_total,):
 		epoch += 1
 
 		if (epoch) % opt['save_step'] == 0:
