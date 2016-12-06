@@ -1,22 +1,13 @@
 import os
-import sys
 import time
 
-import cv2
-import equivariant
 import numpy as np
 import scipy as sp
-import scipy.linalg as scilin
-import scipy.ndimage.interpolation as sciint
+
 import tensorflow as tf
 
-import input_data
-
-from equivariant import *
-from matplotlib import pyplot as plt
-from scipy import ndimage
-from scipy import misc
-from steer_conv import *
+from io_helpers import *
+from harmonic_network_models import *
 
 #----------HELPER FUNCTIONS----------
 def average_gradients(gpu_grads):

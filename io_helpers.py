@@ -1,13 +1,9 @@
 import numpy as np
-import scipy.linalg as scilin
-from scipy.ndimage import distance_transform_edt
 import scipy.ndimage.interpolation as sciint
 import skimage.color as skco
 import skimage.exposure as skiex
 import skimage.io as skio
-import skimage.morphology as skmo
 import skimage.transform as sktr
-import tensorflow as tf
 
 ##### HELPERS #####
 def checkFolder(dir):
