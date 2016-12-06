@@ -1,10 +1,12 @@
 import sys
+
 from model_assembly_train import build_all_and_train
+from io_helpers import load_dataset
+import harmonic_network_models
 
 def create_opt_data(opt):
 	# Default configuration
-	opt['data_dir'] = '/home/daniel/data'
-	opt['model'] = getattr(equivariant, opt['model'])
+	opt['model'] = getattr(harmonic_network_models, opt['model'])
 	opt['save_step'] = 10
 	opt['display_step'] = 1e6
 	opt['lr'] = 3e-2
@@ -124,7 +126,7 @@ def create_opt_data(opt):
 		del data['test_x']
 		del data['test_y']
 		opt['pos_weight'] = 100
-		opt['model'] = getattr(equivariant, 'deep_bsd')
+		opt['model'] = getattr(harmonic_network_models, 'deep_bsd')
 		opt['is_bsd'] = True
 		opt['lr'] = 1e-1
 		opt['batch_size'] = 4
@@ -154,13 +156,21 @@ def create_opt_data(opt):
 		return opt, data
 
 if __name__ == '__main__':
-	deviceIdxs = [int(x.strip()) for x in sys.argv[2].split(',')]
+	if len(sys.argv) != 5:
+		print('Please provide:')
+		print('     -comma-seperated list of device IDxs to use')
+		print('     -dataset name (mnist / cifar10 /  plankton / galaxies / bsd)')
+		print('     -model name (as defined in harmonic_network_models.py)')
+		print('     -parent data directory)')
+		sys.exit(1)
+	deviceIdxs = [int(x.strip()) for x in sys.argv[1].split(',')]
 	opt = {}
-	opt['model'] = sys.argv[3]
-	opt['datasetIdx'] = sys.argv[1]
 	opt['deviceIdxs'] = deviceIdxs
+	opt['datasetIdx'] = sys.argv[2]
+	opt['model'] = sys.argv[3]
+	opt['data_dir'] = sys.argv[4]
 	#create configuration for different tests
 	opt, data = create_opt_data(opt)
-    #build the model and train it
+	#build the model and train it
 	build_all_and_train(opt, data)
 	print("ALL FINISHED! :)")

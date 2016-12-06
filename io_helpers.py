@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import scipy.ndimage.interpolation as sciint
 import skimage.color as skco
@@ -10,7 +11,7 @@ def checkFolder(dir):
 	"""Checks if a folder exists and creates it if not.
 	dir: directory
 	Returns nothing
-	""""
+	"""
 	if not os.path.exists(dir):
 		os.makedirs(dir)
 

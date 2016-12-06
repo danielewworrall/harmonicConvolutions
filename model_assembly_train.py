@@ -248,7 +248,7 @@ def build_model(opt, data):
 	n_GPUs = len(opt['deviceIdxs'])
 	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
 	#tensorflow nodes
-	tf_nodes {}
+	tf_nodes = {}
 	tf_nodes['io'] = {}
 	tf_nodes['io']['x'] = []
 	tf_nodes['io']['y'] = []
@@ -320,10 +320,10 @@ def train_model(opt, data, tf_nodes):
 				summary.add_summary(summ, step)
 			best, counter, opt['lr'] = get_learning_rate(opt, vacc_total, best, counter, opt['lr'])
 			print_train(opt['trial_num'], epoch, time.time()-start,
-				cost_total, vloss_total, acc_total, vacc_total):
+				cost_total, vloss_total, acc_total, vacc_total)
 		else:
 			best, counter, opt['lr'] = get_learning_rate(opt, acc_total, best, counter, opt['lr'])
-			print_train_validation(opt['trial_num'], counter, epoch, time.time()-start, cost_total, acc_total,):
+			print_train_validation(opt['trial_num'], counter, epoch, time.time()-start, cost_total, acc_total)
 		epoch += 1
 
 		if (epoch) % opt['save_step'] == 0:
