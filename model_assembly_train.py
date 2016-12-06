@@ -10,6 +10,33 @@ from io_helpers import *
 from harmonic_network_models import *
 
 #----------HELPER FUNCTIONS----------
+def print_train(trial_num, epoch, time,
+	cost_total, vloss_total, acc_total, vacc_total):
+	"""Formats print-out for the training-loop
+	
+	"""
+	print "[" + str(trial_num),str(epoch) + \
+		"] Time: " + \
+		"{:.3f}".format(time.time()-start) + ", Counter: " + \
+		"{:d}".format(counter) + ", Loss: " + \
+		"{:.5f}".format(cost_total) + ", Val loss: " + \
+		"{:.5f}".format(vloss_total) + ", Train Acc: " + \
+		"{:.5f}".format(acc_total) + ", Val acc: " + \
+		"{:.5f}".format(vacc_total)
+
+
+def print_validation(trial_num, counter, epoch, time,
+	cost_total, acc_total,):
+	"""Formats print-out for the training-loop
+
+	"""
+	print "[" + str(trial_num),str(epoch) + \
+		"] Time: " + \
+		"{:.3f}".format(time.time()-start) + ", Counter: " + \
+		"{:d}".format(counter) + ", Loss: " + \
+		"{:.5f}".format(cost_total) + ", Train Acc: " + \
+		"{:.5f}".format(acc_total)
+
 def average_gradients(gpu_grads):
 	"""Calculate the average gradient for each shared variable across all gpus.
 	This forces synchronisation as on the CPU if the original variables are
@@ -289,22 +316,11 @@ def train_model(opt, data, tf_nodes):
 			for summ in summaries:
 				summary.add_summary(summ, step)
 			best, counter, opt['lr'] = get_learning_rate(opt, vacc_total, best, counter, opt['lr'])
-			print "[" + str(opt['trial_num']),str(epoch) + \
-			"] Time: " + \
-			"{:.3f}".format(time.time()-start) + ", Counter: " + \
-			"{:d}".format(counter) + ", Loss: " + \
-			"{:.5f}".format(cost_total) + ", Val loss: " + \
-			"{:.5f}".format(vloss_total) + ", Train Acc: " + \
-			"{:.5f}".format(acc_total) + ", Val acc: " + \
-			"{:.5f}".format(vacc_total)
+			print_train(opt['trial_num'], epoch, time.time()-start,
+				cost_total, vloss_total, acc_total, vacc_total):
 		else:
 			best, counter, opt['lr'] = get_learning_rate(opt, acc_total, best, counter, opt['lr'])
-			print "[" + str(opt['trial_num']),str(epoch) + \
-			"] Time: " + \
-			"{:.3f}".format(time.time()-start) + ", Counter: " + \
-			"{:d}".format(counter) + ", Loss: " + \
-			"{:.5f}".format(cost_total) + ", Train Acc: " + \
-			"{:.5f}".format(acc_total)
+			print_validation(opt['trial_num'], counter, epoch, time.time()-start, cost_total, acc_total,):
 		epoch += 1
 
 		if (epoch) % opt['save_step'] == 0:
