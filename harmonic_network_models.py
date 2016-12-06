@@ -1,4 +1,16 @@
-##### MODELS #####
+"""
+Harmonic Network Definitions
+
+This file contains the definition of our neural network models. This
+should be used an example of how to create a harmonic network using our 
+helper functions in tensorflow.
+
+"""
+import tensorflow as tf
+
+from harmonic_network_helpers import *
+from harmonic_network_components import *
+
 def deep_Z(opt, x, phase_train, device='/cpu:0'):
 	"""A standard neural net"""
 	# Sure layers weight & bias
