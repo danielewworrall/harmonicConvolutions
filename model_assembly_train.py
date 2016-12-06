@@ -88,7 +88,7 @@ def get_io_placeholders(opt):
 	return io_x, io_y
 
 def build_optimizer(cost, lr, opt):
-	"""Apply the psi_precponditioner"""
+	"""Apply the psi_preconditioner"""
 	optim = tf.train.AdamOptimizer(learning_rate=lr)
 	grads_and_vars = optim.compute_gradients(cost)
 	modified_gvs = []
@@ -112,14 +112,14 @@ def get_evaluation(pred, y, opt):
 			accuracy = cost
 	return accuracy
 
-def build_feed_dict(opt, io, batch, tf_learning_rate, pt, learning_rate, pt_):
+def build_feed_dict(opt, batch, tf_nodes, is_training):
 	'''Build a feed_dict appropriate to training regime'''
 	batch_x, batch_y = batch
-	fd = {tf_learning_rate : learning_rate, pt : pt_}
+	fd = {tf_nodes['learning_rate'] : opt['lr'], tf_nodes['train_phase'] : train_phase}
 	bs = opt['batch_size']
 	for g in xrange(len(opt['deviceIdxs'])):
-		fd[io['x'][g]] = batch_x[g*bs:(g+1)*bs,:]
-		fd[io['y'][g]] = batch_y[g*bs:(g+1)*bs]
+		fd[tf_nodes['io']['x'][g]] = batch_x[g*bs:(g+1)*bs,:]
+		fd[tf_nodes['io']['y'][g]] = batch_y[g*bs:(g+1)*bs]
 	return fd
 
 
@@ -146,7 +146,7 @@ def loop(mode, sess, opt, data, tf_nodes, step=0):
 	cost_total = 0.
 	acc_total = 0.
 	for i, batch in enumerate(generator):
-		fd = build_feed_dict(opt, tf_nodes['io'], batch, tf_nodes['learning_rate'], tf_nodes['train_phase'], opt['lr'], is_training)
+		fd = build_feed_dict(opt, batch, tf_nodes, is_training)
 		if mode == 'train':
 			__, cost_, acc_ = sess.run([tf_nodes['train_op'], tf_nodes['loss'], tf_nodes['accuracy']], feed_dict=fd)
 		else:

@@ -40,7 +40,6 @@ def create_opt_data(opt):
 		data['valid_y'] = valid['y']
 		data['test_x'] = test['x']
 		data['test_y'] = test['y']
-		#optimiser choice
 		opt['n_epochs'] = 200
 		opt['batch_size'] = 46
 		opt['lr']  = 0.0076
@@ -51,7 +50,6 @@ def create_opt_data(opt):
 		opt['filter_gain'] = 2
 		opt['filter_size'] = 3
 		opt['n_filters'] = 8
-		
 		opt['display_step'] = 10000/(opt['batch_size']*3.)
 		opt['is_classification'] = True
 		opt['combine_train_val'] = True
@@ -59,7 +57,6 @@ def create_opt_data(opt):
 		opt['crop_shape'] = 0
 		opt['n_channels'] = 1
 		opt['n_classes'] = 10
-		#general settings
 		opt['log_path'] = './logs/deep_mnist/trialA'
 		opt['checkpoint_path'] = './checkpoints/deep_mnist/trialA'
 	elif opt['datasetIdx'] == 'cifar10': 
