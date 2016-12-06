@@ -4,32 +4,18 @@ import os
 import sys
 import time
 
-from equivariant import deep_bsd
-
-import os
-import sys
-import time
-
 import cPickle as pkl
-import cv2
-import equivariant
 import numpy as np
 import scipy as sp
-import scipy.linalg as scilin
 import scipy.ndimage.interpolation as sciint
 import skimage.io as skio
-import tensorflow as tf
-
-import input_data
-
-from equivariant import *
-from matplotlib import pyplot as plt
 from scipy import ndimage
 from scipy import misc
-from steer_conv import *
+
+import tensorflow as tf
 
 ###HELPER FUNCTIONS------------------------------------------------------------------
-def get_loss(opt, pred, y, sl=None):
+def bsd_get_loss(opt, pred, y, sl=None):
 	"""Pred is a dist of feature maps and so is y"""
 	cost = 0.
 	beta = 1-tf.reduce_mean(y)
@@ -43,41 +29,17 @@ def get_loss(opt, pred, y, sl=None):
 		#	mult = sl
 		cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y, pw))
 		# Sparsity regularizer
-		cost += sparsity_coefficient*sparsity_regularizer(pred_, 1-beta)
+		cost += sparsity_coefficient*bsd_sparsity_regularizer(pred_, 1-beta)
 	print('  Constructed loss')
 	return cost
 
-def sparsity_regularizer(x, sparsity):
+def bsd_sparsity_regularizer(x, sparsity):
 	"""Define a sparsity regularizer"""
 	q = tf.reduce_mean(tf.nn.sigmoid(x))
 	return -sparsity*tf.log(q) - (1-sparsity)*tf.log(1-q)
 
-def get_io_placeholders(opt):
-	"""Return placeholders for classification/regression"""
-	size = int(opt['dim'])
-	size2 = int(opt['dim2'])
-	io_x = tf.placeholder(tf.float32, [opt['batch_size'],None,None,3])
-	io_y = tf.placeholder(tf.float32, [opt['batch_size'],None,None,1], name='y')
-	return io_x, io_y
 
-def build_optimizer(cost, lr, opt):
-	"""Apply the psi_precponditioner"""
-	#mmtm = tf.train.MomentumOptimizer
-	mmtm = tf.train.AdamOptimizer
-	#optim = mmtm(learning_rate=lr, momentum=opt['momentum'], use_nesterov=True)
-	optim = mmtm(learning_rate=lr)
-	
-	grads_and_vars = optim.compute_gradients(cost)
-	modified_gvs = []
-	for g, v in grads_and_vars:
-		if 'psi' in v.name:
-			g = opt['psi_preconditioner']*g
-		modified_gvs.append((g, v))
-	optimizer = optim.apply_gradients(modified_gvs)
-	print('  Optimizer built')
-	return optimizer
-
-def build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
+def bsd_build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
 	'''Build a feed_dict appropriate to training regime'''
 	batch_x, batch_y, __ = batch
 	fd = {lr : lr_, pt : pt_}
@@ -88,7 +50,7 @@ def build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
 	return fd
 
 ##### TRAINING LOOPS #####
-def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
+def bsd_loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
 		 optim=None, step=0, anneal=0.):
 	"""Run a loop"""
 	X = data[mode+'_x']
@@ -99,10 +61,9 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
 						   shuffle=is_training, augment=opt['augment'],
 						   img_shape=(opt['dim'], opt['dim2'], 3))
 	#if is_training:
-	#	generator = threadedGen(generator)
 	cost_total = 0.
 	for i, batch in enumerate(generator):
-		fd = build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
+		fd = bsd_build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
 		if sl is not None:
 				fd[sl] = np.maximum(1. - float(epoch)/100.,0.)
 		if mode == 'train':
@@ -114,42 +75,18 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
 		cost_total += cost_
 	return cost_total/(i+1.), step
 
-def threadedGen(generator, num_cached=50):
-    '''Threaded generator to multithread the data loading pipeline'''
-    import Queue
-    queue = Queue.Queue(maxsize=num_cached)
-    sentinel = object()  # guaranteed unique reference
 
-    # define producer (putting items into queue)
-    def producer():
-        for item in generator:
-            queue.put(item)
-        queue.put(sentinel)
-
-    # start producer (in a background thread)
-    import threading
-    thread = threading.Thread(target=producer)
-    thread.daemon = True
-    thread.start()
-
-    # run as consumer (read items from queue, in current thread)
-    item = queue.get()
-    while item is not sentinel:
-        yield item
-        queue.task_done()
-        item = queue.get()
-
-def construct_model_and_optimizer(opt, io, lr, pt, sl=None):
+def bsd_construct_model_and_optimizer(opt, io, lr, pt, sl=None):
 	"""Build the model and an single/multi-GPU optimizer"""
 	if len(opt['deviceIdxs']) == 1:
 		size = opt['dim']
 		size2 = opt['dim2']
 		pred, __ = opt['model'](opt, io['x'][0], pt)
-		loss = get_loss(opt, pred, io['y'][0], sl=sl)
+		loss = bsd_get_loss(opt, pred, io['y'][0], sl=sl)
 		train_op = build_optimizer(loss, lr, opt)
 	return loss, train_op, pred
 
-def save_predictions(sess, x, opt, pred, pt, data, epoch):
+def bsd_save_predictions(sess, x, opt, pred, pt, data, epoch):
 	"""Save predictions to output folder"""
 	X = data['valid_x']
 	Y = data['valid_y']
@@ -199,7 +136,7 @@ def train_model(opt, data):
 		sl = None
 	
 	# Construct model and optimizer
-	loss, train_op, pred = construct_model_and_optimizer(opt, io, lr, pt, sl=sl)
+	loss, train_op, pred = bsd_construct_model_and_optimizer(opt, io, lr, pt, sl=sl)
 	
 	# Initializing the variables
 	init = tf.initialize_all_variables()
@@ -232,11 +169,11 @@ def train_model(opt, data):
 	while epoch < opt['n_epochs']:
 		# Need batch_size*n_GPUs amount of data
 		anneal = 0.1 + np.minimum(epoch/30.,1.)
-		cost_total, step = loop('train', sess, io, opt, data, loss, lr, lr_, pt,
+		cost_total, step = bsd_loop('train', sess, io, opt, data, loss, lr, lr_, pt,
 								sl=sl, epoch=epoch, optim=train_op, step=step,
 								anneal=anneal)
 		
-		vloss_total, __ = loop('valid', sess, io, opt, data, loss, lr, lr_, pt,
+		vloss_total, __ = bsd_loop('valid', sess, io, opt, data, loss, lr, lr_, pt,
 							   sl=sl, epoch=epoch, optim=train_op, anneal=1.)
 		
 		fd = {tcost_ss[0] : cost_total, vcost_ss[0] : vloss_total,
@@ -258,7 +195,7 @@ def train_model(opt, data):
 		
 		# Write test time predictions to file
 		if epoch % opt['save_test_step'] == 0:
-			save_predictions(sess, io['x'][0], opt, pred, pt, data, epoch)
+			bsd_save_predictions(sess, io['x'][0], opt, pred, pt, data, epoch)
 	
 		epoch += 1
 	
@@ -285,20 +222,6 @@ def load_pkl(dir_name, subdir_name, prepend=''):
 	with open(data_dir + '/' + prepend + 'valid_labels.pkl') as fp:
 		data['valid_y'] = pkl.load(fp)
 	return data
-
-def create_scalar_summary(name):
-	"""Create a scalar summary placeholder and op"""
-	ss = []
-	ss.append(tf.placeholder(tf.float32, [], name=name))
-	ss.append(tf.scalar_summary(name+'_summary', ss[0]))
-	return ss
-
-def config_init():
-	"""Default config settings"""
-	config = tf.ConfigProto()
-	config.gpu_options.allow_growth = True
-	config.log_device_placement = False
-	return config
 
 ##### MAIN SCRIPT #####
 def get_settings(opt):
@@ -357,7 +280,7 @@ def get_settings(opt):
 		print(key + ': ' + str(val))
 	return opt, data
 
-def run(opt):
+def bsd_run(opt):
 	opt, data = get_settings(opt)
 	return train_model(opt, data)
 
@@ -369,5 +292,5 @@ if __name__ == '__main__':
 	opt['data_dir'] = sys.argv[2]
 	opt['machine'] = sys.argv[3]
 
-	run(opt)
+	bsd_run(opt)
 	print("ALL FINISHED! :)")

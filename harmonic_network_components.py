@@ -1,11 +1,15 @@
-'''The Matrix Lie Group Convolutional module'''
+"""
+Core Harmonic Convolution Implementation
 
-import os
-import sys
-import time
+This file contains the core implementation of our harmonic convolutions.
+We assume that:
+	- the name_scopes these get called in is unique
+	- tensors for the convolutional filters and biases have already been initialised
+	  using get_weights_dict() and get_bias_dict() specified in harmonic_network_helpers.py.
+	  Please see harmonic_network_models.py for examples of how this is done.
+"""
 
 import numpy as np
-import scipy.linalg as scilin
 import tensorflow as tf
 
 def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
@@ -30,6 +34,7 @@ def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
 		Ri = Rri + Rir
 		return Rr, Ri
 
+
 def real_input_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
 						name='N'):
 	"""Equivariant complex convolution for a real input e.g. an image.
@@ -53,6 +58,7 @@ def real_input_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
 							  name='reic_im'+name)
 			Z[m] = (Zr, Zi)
 		return Z
+
 
 def complex_input_conv(X, R, filter_size=3, output_orders=[0,],
 						   strides=(1,1,1,1), padding='VALID', name='N'):
@@ -93,6 +99,7 @@ def complex_input_conv(X, R, filter_size=3, output_orders=[0,],
 		# sum the inputs from each F in [A,B,...,C].
 		return sum_complex_tensor_dict(Z)
 
+
 def real_input_rotated_conv(X, R, psi, filter_size=3, strides=(1,1,1,1), 
 							padding='VALID', name='N'):
 	"""Equivariant complex convolution for a real input e.g. an image.
@@ -117,6 +124,7 @@ def real_input_rotated_conv(X, R, psi, filter_size=3, strides=(1,1,1,1),
 							  name='reic_im'+name)
 			Z[m] = (Zr, Zi)
 		return Z
+
 
 def complex_input_rotated_conv(X, R, psi, filter_size=3, output_orders=[0,],
 						   strides=(1,1,1,1), padding='VALID', name='N'):
@@ -158,6 +166,7 @@ def complex_input_rotated_conv(X, R, psi, filter_size=3, output_orders=[0,],
 		# sum the inputs from each F in [A,B,...,C].
 		return sum_complex_tensor_dict(Z)
 
+
 def get_key_pairings(X, R, output_orders):
 	"""Finds combinations of all inputs and filters, such that
 	input_order + filter_order = output_order
@@ -180,6 +189,7 @@ def get_key_pairings(X, R, output_orders):
 			pairings[order].append((R_keys[k[0],0], X_keys[k[1]]))
 	return pairings
 
+
 def mirror_filter_keys(R_keys):
 	"""Add negative component to filter keys e.g. [0,1,2]->[-2,-1,0,1,2]
 	
@@ -193,6 +203,7 @@ def mirror_filter_keys(R_keys):
 			new_keys.append(key)
 			new_keys.append(-key)
 	return sorted(new_keys)
+
 
 def sum_complex_tensor_dict(X):
 	"""X is a dict of lists of tuples of complex numbers {order: [(real,im), \
@@ -211,6 +222,7 @@ def sum_complex_tensor_dict(X):
 			ims.append(im)
 		output[order] = (tf.add_n(reals), tf.add_n(ims))
 	return output
+
 
 ##### NONLINEARITIES #####
 def complex_nonlinearity(X, b, fnc, eps=1e-4):
@@ -233,6 +245,7 @@ def complex_nonlinearity(X, b, fnc, eps=1e-4):
 		R[m] = (r[0]*c, r[1]*c)
 	return R
 
+
 def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
 					   name='complexBatchNorm', outerScope='complexBatchNormOuter', device='/cpu:0'):
 	"""Batch normalization for the magnitudes of X
@@ -254,6 +267,7 @@ def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
 		R[m] = (r[0]*c, r[1]*c)
 		idx += 1
 	return R
+
 
 def batch_norm(X, phase_train, decay=0.99, name='batchNorm', device='/cpu:0'):
 	"""Batch normalization module.
@@ -294,6 +308,7 @@ def batch_norm(X, phase_train, decay=0.99, name='batchNorm', device='/cpu:0'):
 	normed = tf.nn.batch_normalization(X, mean, var, beta, gamma, 1e-3)
 	return normed
 
+
 def sum_magnitudes(X, eps=1e-4):
 	"""Sum the magnitudes of each of the complex feature maps in X.
 	
@@ -306,6 +321,7 @@ def sum_magnitudes(X, eps=1e-4):
 	for m, r in X.iteritems():
 		R.append(tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps))
 	return tf.add_n(R)
+
 
 def stack_magnitudes(X, eps=1e-4):
     """Stack the magnitudes of each of the complex feature maps in X.
@@ -320,6 +336,7 @@ def stack_magnitudes(X, eps=1e-4):
         R.append(tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps))
     return tf.concat(3, R, name='concat')
 
+
 ##### CREATING VARIABLES #####
 def to_constant_float(Q):
 	"""Converts a numpy tensor to a tf constant float
@@ -328,6 +345,7 @@ def to_constant_float(Q):
 	"""
 	Q = tf.Variable(Q, trainable=False) 
 	return tf.to_float(Q)
+
 
 def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:0'):
 	"""Initialize weights variable with He method
@@ -342,6 +360,7 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:
 			stddev = std_mult*np.sqrt(2.0 / np.prod(filter_shape[:3]))
 		return tf.get_variable(name, dtype=tf.float32, shape=filter_shape,
 				initializer=tf.random_normal_initializer(stddev=stddev))
+
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####
 def get_complex_filters(R, filter_size):
@@ -366,6 +385,7 @@ def get_complex_filters(R, filter_size):
 		filters[m] = (ucos, usin)
 	return filters
 
+
 def get_complex_rotated_filters(R, psi, filter_size):
     """Return a complex filter of the form $u(r,t,psi) = R(r)e^{im(t-psi)}"""
     filters = {}
@@ -386,6 +406,7 @@ def get_complex_rotated_filters(R, psi, filter_size):
         sine = -tf.sin(psi[m])*ucos + tf.cos(psi[m])*usin
         filters[m] = (cosine, sine)
     return filters
+
 
 def get_complex_basis_matrices(filter_size, order=1):
 	"""Return complex basis component e^{imt} (ODD sizes only).
@@ -424,6 +445,7 @@ def get_complex_basis_matrices(filter_size, order=1):
 	smasks = tf.reshape(smasks, [k,k,tap_length-(order>0)])
 	return cmasks, smasks
 
+
 ##### SPECIAL FUNCTIONS #####
 def mean_pooling(X, ksize=(1,1,1,1), strides=(1,1,1,1)):
 	"""Implement mean pooling on complex-valued feature maps. The complex mean
@@ -442,6 +464,7 @@ def mean_pooling(X, ksize=(1,1,1,1), strides=(1,1,1,1)):
 		Y[k] = (y0,y1)
 	return Y
 
+
 def get_complex_basis_functions(filter_size, order):
 	"""Return complex exponential basis functions of order order
 	
@@ -457,6 +480,7 @@ def get_complex_basis_functions(filter_size, order):
 	I = np.sin(order*theta)
 	I = to_constant_float(I/(np.sum(I**2)+1e-6))
 	return tf.reshape(R, tf.pack([k,k,1,1])), tf.reshape(I, tf.pack([k,k,1,1]))
+
 
 def hough_module(X, weights, filter_size):
 	"""Implement a differential Hough module, which is a variation of the
@@ -479,6 +503,7 @@ def hough_module(X, weights, filter_size):
 		Zr += Wr*Yr - Wi*Yi
 		Zi += Wr*Yi + Wi*Yr
 	return Zr, Zi
+
 
 ##### SPECIAL FUNCTIONS #####
 def mean_pooling(X, ksize=(1,1,1,1), strides=(1,1,1,1)):
