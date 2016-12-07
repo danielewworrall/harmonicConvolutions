@@ -202,6 +202,29 @@ def loop(mode, sess, opt, data, tf_nodes, step=0):
 		step += 1
 	return cost_total/(i+1.), acc_total/(i+1.), step
 
+def bsd_loop(mode, sess, opt, data, tf_nodes, step=0,
+		sl=None, epoch=0, anneal=0.):
+	"""Run a loop"""
+	X = data[mode+'_x']
+	Y = data[mode+'_y']
+	is_training = (mode=='train')
+	n_GPUs = len(opt['deviceIdxs'])
+	generator = pklbatcher(X, Y, n_GPUs*opt['batch_size'], anneal=anneal,
+						   shuffle=is_training, augment=opt['augment'],
+						   img_shape=(opt['dim'], opt['dim2'], 3))
+	cost_total = 0.
+	for i, batch in enumerate(generator):
+		fd = build_feed_dict(opt, batch, tf_nodes, is_training)
+		if sl is not None:
+				fd[sl] = np.maximum(1. - float(epoch)/100.,0.)
+		if mode == 'train':
+			__, cost_ = sess.run([tf_nodes['train_op'], tf_nodes['loss']], feed_dict=fd)
+		else:
+			cost_ = sess.run(tf_nodes['loss'], feed_dict=fd)
+		if step % opt['display_step'] == 0:
+			print('  ' + mode + ' loss: %f' % cost_)
+		cost_total += cost_
+	return cost_total/(i+1.), step
 
 def construct_model_and_optimizer(opt, tf_nodes):
 	"""Build the model and an single/multi-GPU optimizer
