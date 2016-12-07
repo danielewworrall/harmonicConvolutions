@@ -1,6 +1,7 @@
 import os
-from subprocess import call
-import urllib
+import sys
+import zipfile
+import urllib2
 
 import numpy as np
 import scipy.ndimage.interpolation as sciint
@@ -23,9 +24,20 @@ def download_dataset(opt):
 	if opt["datasetIdx"] == 'mnist':
 		print('Downloading rotated MNIST...')
 		checkFolder(opt["data_dir"])
-		urllib.urlretrieve("https://www.dropbox.com/s/0fxwai3h84dczh0/mnist_rotation_new.zip?dl=0",
-			opt["data_dir"] + "/mnist_rotation_new.zip")
-		call(["unzip", opt["data_dir"] + "/mnist_rotation_new"])
+		zipFileName = opt["data_dir"] + "/mnist_rotation_new.zip"
+		request = urllib2.urlopen("https://www.dropbox.com/s/0fxwai3h84dczh0/mnist_rotation_new.zip?dl=1")
+		with open(zipFileName, "wb") as f :
+			f.write(request.read())
+		if not zipfile.is_zipfile(zipFileName):
+			print('ERROR: ' + zipFileName + ' is not a valid zip file.')
+			sys.exit(1)
+		print('Extracting rotated MNIST...')
+		wd = os.getcwd()
+		os.chdir(opt["data_dir"])
+		archive = zipfile.ZipFile(opt["data_dir"] + "/mnist_rotation_new.zip", mode='r')
+		archive.extractall()
+		archive.close()
+		os.chdir(wd)
 		print('Successfully retrieved rotated MNIST dataset.')
 	else:
 		print('ERROR: Cannot download dataset ' + dataset_name)
