@@ -80,6 +80,13 @@ def average_gradients(gpu_grads):
 		average_grads.append(grad_and_var)
 	return average_grads
 
+
+def sparsity_regularizer(x, sparsity):
+	"""Define a sparsity regularizer"""
+	q = tf.reduce_mean(tf.nn.sigmoid(x))
+	return -sparsity*tf.log(q) - (1-sparsity)*tf.log(1-q)
+
+
 def get_loss(opt, pred, y):
 	"""Constructs loss different for regression/classification
 
@@ -90,7 +97,15 @@ def get_loss(opt, pred, y):
 	Returns:
 	Tensorflow node for calculating the final cost"""
 	if opt['is_bsd']:
-		cost = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred, y, opt['pos_weight']))	
+		cost = 0.
+		beta = 1-tf.reduce_mean(y)
+		pw = beta / (1. - beta)
+		sparsity_coefficient = opt['sparsity']
+		for key in pred.keys():
+			pred_ = pred[key]
+			cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y, pw))
+			# Sparsity regularizer
+			cost += sparsity_coefficient*sparsity_regularizer(pred_, 1-beta)
 	else:
 		if opt['is_classification']:
 			cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
@@ -99,6 +114,7 @@ def get_loss(opt, pred, y):
 	
 	print('Constructed loss...')
 	return cost
+
 
 def get_io_placeholders(opt):
 	"""Return placeholders for classification/regression"""
@@ -350,7 +366,6 @@ def create_scalar_summary(name):
 	ss.append(tf.placeholder(tf.float32, [], name=name))
 	ss.append(tf.scalar_summary(name+'_summary', ss[0]))
 	return ss
-
 
 def config_init():
 	"""Default config settings. Prevents excessive memory usage"""

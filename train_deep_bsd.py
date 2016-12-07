@@ -15,39 +15,6 @@ from scipy import misc
 import tensorflow as tf
 
 ###HELPER FUNCTIONS------------------------------------------------------------------
-def bsd_get_loss(opt, pred, y, sl=None):
-	"""Pred is a dist of feature maps and so is y"""
-	cost = 0.
-	beta = 1-tf.reduce_mean(y)
-	pw = beta / (1. - beta)
-	sparsity_coefficient = opt['sparsity']
-	for key in pred.keys():
-		pred_ = pred[key]
-		# side-weight/fusion loss
-		#mult = 1.
-		#if (sl is not None) and (key == 'fuse'):
-		#	mult = sl
-		cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y, pw))
-		# Sparsity regularizer
-		cost += sparsity_coefficient*bsd_sparsity_regularizer(pred_, 1-beta)
-	print('  Constructed loss')
-	return cost
-
-def bsd_sparsity_regularizer(x, sparsity):
-	"""Define a sparsity regularizer"""
-	q = tf.reduce_mean(tf.nn.sigmoid(x))
-	return -sparsity*tf.log(q) - (1-sparsity)*tf.log(1-q)
-
-
-def bsd_build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
-	'''Build a feed_dict appropriate to training regime'''
-	batch_x, batch_y, __ = batch
-	fd = {lr : lr_, pt : pt_}
-	bs = opt['batch_size']
-	for g in xrange(len(opt['deviceIdxs'])):
-		fd[io['x'][g]] = batch_x[g*bs:(g+1)*bs,:]
-		fd[io['y'][g]] = batch_y[g*bs:(g+1)*bs]
-	return fd
 
 ##### TRAINING LOOPS #####
 def bsd_loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
@@ -208,20 +175,6 @@ def train_model(opt, data):
 	print("Model saved in file: %s" % save_path)
 	sess.close()
 	return 
-
-def load_pkl(dir_name, subdir_name, prepend=''):
-	"""Load dataset from subdirectory"""
-	data_dir = dir_name + '/' + subdir_name
-	data = {}
-	with open(data_dir + '/' + prepend + 'train_images.pkl') as fp:
-		data['train_x'] = pkl.load(fp)
-	with open(data_dir + '/' + prepend + 'train_labels.pkl') as fp:
-		data['train_y'] = pkl.load(fp)
-	with open(data_dir + '/' + prepend + 'valid_images.pkl') as fp:
-		data['valid_x'] = pkl.load(fp)
-	with open(data_dir + '/' + prepend + 'valid_labels.pkl') as fp:
-		data['valid_y'] = pkl.load(fp)
-	return data
 
 ##### MAIN SCRIPT #####
 def get_settings(opt):

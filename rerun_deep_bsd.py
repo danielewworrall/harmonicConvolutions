@@ -29,53 +29,7 @@ from scipy import misc
 from steer_conv import *
 
 ###HELPER FUNCTIONS------------------------------------------------------------------
-def get_loss(opt, pred, y, sl=None):
-	"""Pred is a dist of feature maps and so is y"""
-	cost = 0.
-	beta = 1-tf.reduce_mean(y)
-	pw = beta / (1. - beta)
-	sparsity_coefficient = opt['sparsity']
-	for key in pred.keys():
-		pred_ = pred[key]
-		# side-weight/fusion loss
-		#mult = 1.
-		#if (sl is not None) and (key == 'fuse'):
-		#	mult = sl
-		cost += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(pred_, y, pw))
-		# Sparsity regularizer
-		cost += sparsity_coefficient*sparsity_regularizer(pred_, 1-beta)
-	print('  Constructed loss')
-	return cost
 
-def sparsity_regularizer(x, sparsity):
-	"""Define a sparsity regularizer"""
-	q = tf.reduce_mean(tf.nn.sigmoid(x))
-	return -sparsity*tf.log(q) - (1-sparsity)*tf.log(1-q)
-
-def get_io_placeholders(opt):
-	"""Return placeholders for classification/regression"""
-	size = int(opt['dim'])
-	size2 = int(opt['dim2'])
-	io_x = tf.placeholder(tf.float32, [opt['batch_size'],None,None,3])
-	io_y = tf.placeholder(tf.float32, [opt['batch_size'],None,None,1], name='y')
-	return io_x, io_y
-
-def build_optimizer(cost, lr, opt):
-	"""Apply the psi_precponditioner"""
-	#mmtm = tf.train.MomentumOptimizer
-	mmtm = tf.train.AdamOptimizer
-	#optim = mmtm(learning_rate=lr, momentum=opt['momentum'], use_nesterov=True)
-	optim = mmtm(learning_rate=lr)
-	
-	grads_and_vars = optim.compute_gradients(cost)
-	modified_gvs = []
-	for g, v in grads_and_vars:
-		if 'psi' in v.name:
-			g = opt['psi_preconditioner']*g
-		modified_gvs.append((g, v))
-	optimizer = optim.apply_gradients(modified_gvs)
-	print('  Optimizer built')
-	return optimizer
 
 def build_feed_dict(opt, io, batch, lr, pt, lr_, pt_):
 	'''Build a feed_dict appropriate to training regime'''
@@ -113,31 +67,6 @@ def loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
 			print('  ' + mode + ' loss: %f' % cost_)
 		cost_total += cost_
 	return cost_total/(i+1.), step
-
-def threadedGen(generator, num_cached=50):
-    '''Threaded generator to multithread the data loading pipeline'''
-    import Queue
-    queue = Queue.Queue(maxsize=num_cached)
-    sentinel = object()  # guaranteed unique reference
-
-    # define producer (putting items into queue)
-    def producer():
-        for item in generator:
-            queue.put(item)
-        queue.put(sentinel)
-
-    # start producer (in a background thread)
-    import threading
-    thread = threading.Thread(target=producer)
-    thread.daemon = True
-    thread.start()
-
-    # run as consumer (read items from queue, in current thread)
-    item = queue.get()
-    while item is not sentinel:
-        yield item
-        queue.task_done()
-        item = queue.get()
 
 def construct_model_and_optimizer(opt, io, lr, pt, sl=None):
 	"""Build the model and an single/multi-GPU optimizer"""
@@ -227,40 +156,6 @@ def rerun_model(opt, data):
 	if opt['load_pretrained']:
 		saver.restore(sess, './checkpoints/deep_bsd/trialS/model.ckpt')
 	start = time.time()
-	
-	#bs = opt['batch_size']
-	#print('Rerunning')
-	#save_predictions(sess, io['x'][0], opt, pred, pt, data, 'rerun')
-	#sess.close()
-	#return 
-
-def load_pkl(dir_name, subdir_name, prepend=''):
-	"""Load dataset from subdirectory"""
-	data_dir = dir_name + '/' + subdir_name
-	data = {}
-	with open(data_dir + '/' + prepend + 'train_images.pkl') as fp:
-		data['train_x'] = pkl.load(fp)
-	with open(data_dir + '/' + prepend + 'train_labels.pkl') as fp:
-		data['train_y'] = pkl.load(fp)
-	with open(data_dir + '/' + prepend + 'valid_images.pkl') as fp:
-		data['valid_x'] = pkl.load(fp)
-	with open(data_dir + '/' + prepend + 'valid_labels.pkl') as fp:
-		data['valid_y'] = pkl.load(fp)
-	return data
-
-def create_scalar_summary(name):
-	"""Create a scalar summary placeholder and op"""
-	ss = []
-	ss.append(tf.placeholder(tf.float32, [], name=name))
-	ss.append(tf.scalar_summary(name+'_summary', ss[0]))
-	return ss
-
-def config_init():
-	"""Default config settings"""
-	config = tf.ConfigProto()
-	config.gpu_options.allow_growth = True
-	config.log_device_placement = False
-	return config
 
 ##### MAIN SCRIPT #####
 def get_settings(opt):

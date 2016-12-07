@@ -46,8 +46,20 @@ def load_dataset(dir_name, subdir_name, prepend=''):
 		data['test_y'] = np.load(data_dir + '/testY.npy')
 	return data
 
+def load_pkl(dir_name, subdir_name, prepend=''):
+	"""Load dataset from subdirectory"""
+	data_dir = dir_name + '/' + subdir_name
+	data = {}
+	with open(data_dir + '/' + prepend + 'train_images.pkl') as fp:
+		data['train_x'] = pkl.load(fp)
+	with open(data_dir + '/' + prepend + 'train_labels.pkl') as fp:
+		data['train_y'] = pkl.load(fp)
+	with open(data_dir + '/' + prepend + 'valid_images.pkl') as fp:
+		data['valid_x'] = pkl.load(fp)
+	with open(data_dir + '/' + prepend + 'valid_labels.pkl') as fp:
+		data['valid_y'] = pkl.load(fp)
+	return data
 
-##### CUSTOM FUNCTIONS FOR MAIN SCRIPT #####
 def pklbatcher(inputs, targets, batch_size, shuffle=False, augment=False,
 				img_shape=(321,481,3), anneal=1.):
 	"""Input and target are minibatched. Returns a generator"""

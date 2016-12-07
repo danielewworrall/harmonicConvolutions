@@ -1,4 +1,5 @@
 import sys
+import numpy as np
 
 from model_assembly_train import build_all_and_train
 from io_helpers import load_dataset
@@ -26,7 +27,6 @@ def create_opt_data(opt):
 	opt['log_path'] = './logs/current'
 	opt['checkpoint_path'] = './checkpoints/current'
 	opt['is_bsd'] = False
-	
 	# Model specifics
 	if opt['datasetIdx'] == 'mnist':
 		# Load dataset
@@ -153,15 +153,15 @@ def create_opt_data(opt):
 		print('Dataset unrecognized, options are:')
 		print('mnist, cifar10, plankton, galaxies, bsd')
 		sys.exit(1)
-		return opt, data
+	return opt, data
 
 if __name__ == '__main__':
 	if len(sys.argv) != 5:
 		print('Please provide:')
-		print('     -comma-seperated list of device IDxs to use')
+		print('     -comma-separated list of device IDxs to use')
 		print('     -dataset name (mnist / cifar10 /  plankton / galaxies / bsd)')
 		print('     -model name (as defined in harmonic_network_models.py)')
-		print('     -parent data directory)')
+		print('     -parent data directory')
 		sys.exit(1)
 	deviceIdxs = [int(x.strip()) for x in sys.argv[1].split(',')]
 	opt = {}
@@ -170,7 +170,7 @@ if __name__ == '__main__':
 	opt['model'] = sys.argv[3]
 	opt['data_dir'] = sys.argv[4]
 	#create configuration for different tests
-	opt, data = create_opt_data(opt)
+	amended_opt, data = create_opt_data(opt)
 	#build the model and train it
-	build_all_and_train(opt, data)
+	build_all_and_train(amended_opt, data)
 	print("ALL FINISHED! :)")
