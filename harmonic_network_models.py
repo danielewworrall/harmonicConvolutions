@@ -9,7 +9,7 @@ helper functions in tensorflow.
 import tensorflow as tf
 
 from harmonic_network_helpers import *
-from harmonic_network_components import *
+from harmonic_network_ops import *
 
 def deep_Z(opt, x, phase_train, device='/cpu:0'):
 	"""A standard neural net"""

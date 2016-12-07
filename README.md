@@ -1,7 +1,16 @@
 # Phase invariant convolutions
-This folder contains the basic material to construct NNs with rotational pooling. The scripts are:
-* equivariant.py: main script to run
-* steer_conv.py: contains the basic units for phase invariant pooling
+This folder contains the basic material to construct Harmonic Networks (HNs)
+* train.py is the main entry point for our code
+* harmonic_network_ops.py contains core HC implementations
+* harmonic_network_helpers.py contains handy functions for using these
+* harmonic_network_models.py contains the model definitions that allow to reproduce our results
 
-* hyperopt.py: runs a 2 hyperparameter optimizers to optimize models in equivariant.py
-* input_data.py: loads the .npz format datasets
+Please note that this is work in progress, so pull often!
+
+Todos which we have completed:
+- [x] API for core HC functions
+- [x] Easy rotated MNIST example
+
+Todos which we are currently working on:
+- [ ] Providing easy training code for our BSD experiments
+- [ ] Providing multi-threaded reads for data-feeding

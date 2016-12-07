@@ -16,43 +16,6 @@ import tensorflow as tf
 
 ###HELPER FUNCTIONS------------------------------------------------------------------
 
-##### TRAINING LOOPS #####
-def bsd_loop(mode, sess, io, opt, data, cost, lr, lr_, pt, sl=None, epoch=0,
-		 optim=None, step=0, anneal=0.):
-	"""Run a loop"""
-	X = data[mode+'_x']
-	Y = data[mode+'_y']
-	is_training = (mode=='train')
-	n_GPUs = len(opt['deviceIdxs'])
-	generator = pklbatcher(X, Y, n_GPUs*opt['batch_size'], anneal=anneal,
-						   shuffle=is_training, augment=opt['augment'],
-						   img_shape=(opt['dim'], opt['dim2'], 3))
-	#if is_training:
-	cost_total = 0.
-	for i, batch in enumerate(generator):
-		fd = bsd_build_feed_dict(opt, io, batch, lr, pt, lr_, is_training)
-		if sl is not None:
-				fd[sl] = np.maximum(1. - float(epoch)/100.,0.)
-		if mode == 'train':
-			__, cost_ = sess.run([optim, cost], feed_dict=fd)
-		else:
-			cost_ = sess.run(cost, feed_dict=fd)
-		if step % opt['display_step'] == 0:
-			print('  ' + mode + ' loss: %f' % cost_)
-		cost_total += cost_
-	return cost_total/(i+1.), step
-
-
-def bsd_construct_model_and_optimizer(opt, io, lr, pt, sl=None):
-	"""Build the model and an single/multi-GPU optimizer"""
-	if len(opt['deviceIdxs']) == 1:
-		size = opt['dim']
-		size2 = opt['dim2']
-		pred, __ = opt['model'](opt, io['x'][0], pt)
-		loss = bsd_get_loss(opt, pred, io['y'][0], sl=sl)
-		train_op = build_optimizer(loss, lr, opt)
-	return loss, train_op, pred
-
 def bsd_save_predictions(sess, x, opt, pred, pt, data, epoch):
 	"""Save predictions to output folder"""
 	X = data['valid_x']
