@@ -236,9 +236,9 @@ def construct_model_and_optimizer(opt, tf_nodes):
 	cost, accuracy, training_op
 	"""
 	if len(opt['deviceIdxs']) == 1:
-		pred = opt['model'](opt, io['x'][0], tf_nodes['train_phase'])
-		loss = get_loss(opt, pred, io['y'][0])
-		accuracy = get_evaluation(pred, io['y'][0], opt)
+		pred = opt['model'](opt, tf_nodes['io']['x'][0], tf_nodes['train_phase'])
+		loss = get_loss(opt, pred, tf_nodes['io']['y'][0])
+		accuracy = get_evaluation(pred, tf_nodes['io']['y'][0], opt)
 		train_op = build_optimizer(loss, tf_nodes['learning_rate'], opt)
 	else:
 		# Multi_GPU Optimizer
@@ -254,9 +254,9 @@ def construct_model_and_optimizer(opt, tf_nodes):
 				print('Building Model on GPU: %d' % g)
 				with tf.name_scope('%s_%d' % (opt['model'].__name__, 0)) as scope:
 					# Forward pass
-					pred = opt['model'](opt, io['x'][linearGPUIdx], tf_nodes['train_phase'])
-					loss = get_loss(opt, pred, io['y'][linearGPUIdx])
-					accuracy = get_evaluation(pred, io['y'][linearGPUIdx], opt)
+					pred = opt['model'](opt, tf_nodes['io']['x'][linearGPUIdx], tf_nodes['train_phase'])
+					loss = get_loss(opt, pred, tf_nodes['io']['y'][linearGPUIdx])
+					accuracy = get_evaluation(pred, tf_nodes['io']['y'][linearGPUIdx], opt)
 					# Reuse variables for the next tower
 					tf.get_variable_scope().reuse_variables()
 					# Calculate gradients for minibatch on this gpus
@@ -393,7 +393,7 @@ def create_scalar_summary(name):
 def config_init():
 	"""Default config settings. Prevents excessive memory usage"""
 	config = tf.ConfigProto()
-	config.gpu_options.allow_growth = True
+	config.gpu_options.allow_growth = True5555
 	config.log_device_placement = False
 	return config
 
@@ -405,10 +405,10 @@ def build_all_and_train(opt, data):
 							str(opt['trial_num']) 
 	if not os.path.exists(opt['log_path']):
 		print('Creating log path')
-		os.mkdir(opt['log_path'])
+		os.makedirs(opt['log_path'])
 	if not os.path.exists(opt['checkpoint_path']):
 		print('Creating checkpoint path')
-		os.mkdir(opt['checkpoint_path'])
+		os.makedirs(opt['checkpoint_path'])
 	opt['checkpoint_path'] = opt['checkpoint_path'] + '/model.ckpt'
 	
 	# Print out options

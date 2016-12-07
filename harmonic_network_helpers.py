@@ -8,6 +8,8 @@ import numpy as np
 import tensorflow as tf
 import scipy as sp
 
+from harmonic_network_ops import get_weights
+
 #----------CORE FUNCTIONS FOR LAYER CREATION---------- 
 def conv2d(X, V, b=None, strides=(1,1,1,1), padding='VALID', name='conv2d'):
 	"""conv2d wrapper. Supply input X, weights V and optional bias"""
