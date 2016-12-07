@@ -1,10 +1,14 @@
 import os
+from subprocess import call
+import urllib
+
 import numpy as np
 import scipy.ndimage.interpolation as sciint
 import skimage.color as skco
 import skimage.exposure as skiex
 import skimage.io as skio
 import skimage.transform as sktr
+
 
 ##### HELPERS #####
 def checkFolder(dir):
@@ -15,6 +19,17 @@ def checkFolder(dir):
 	if not os.path.exists(dir):
 		os.makedirs(dir)
 
+def download_dataset(opt):
+	if opt["datasetIdx"] == 'mnist':
+		print('Downloading rotated MNIST...')
+		checkFolder(opt["data_dir"])
+		urllib.urlretrieve("https://www.dropbox.com/s/0fxwai3h84dczh0/mnist_rotation_new.zip?dl=0",
+			opt["data_dir"] + "/mnist_rotation_new.zip")
+		call(["unzip", opt["data_dir"] + "/mnist_rotation_new"])
+		print('Successfully retrieved rotated MNIST dataset.')
+	else:
+		print('ERROR: Cannot download dataset ' + dataset_name)
+		sys.exit(1)
 
 def load_dataset(dir_name, subdir_name, prepend=''):
 	"""Loads numpy-formatted version of the datasets from the specified folder.

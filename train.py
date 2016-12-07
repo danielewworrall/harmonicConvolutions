@@ -1,8 +1,9 @@
 import sys
+import os
 import numpy as np
 
 from model_assembly_train import build_all_and_train
-from io_helpers import load_dataset
+from io_helpers import load_dataset, download_dataset
 import harmonic_network_models
 
 def create_opt_data(opt):
@@ -29,6 +30,9 @@ def create_opt_data(opt):
 	opt['is_bsd'] = False
 	# Model specifics
 	if opt['datasetIdx'] == 'mnist':
+		# Download MNIST if it doesn't exist
+		if not os.path.exists(opt['data_dir'] + '/mnist_rotation_new'):
+			download_dataset(opt)
 		# Load dataset
 		mnist_dir = opt['data_dir'] + '/mnist_rotation_new'
 		train = np.load(mnist_dir + '/rotated_train.npz')
