@@ -120,35 +120,38 @@ def create_opt_data(opt):
 		opt['n_channels'] = 3
 		opt['n_classes'] = 37
 	elif opt['datasetIdx'] == 'bsd':
-		data = load_dataset(opt['data_dir'], 'BSDS500_numpy', prepend='small_')
-		data['train_y'] = data['train_y'][...,np.newaxis]
-		data['valid_y'] = data['valid_y'][...,np.newaxis]
-		del data['test_x']
-		del data['test_y']
-		opt['pos_weight'] = 100
-		opt['model'] = getattr(harmonic_network_models, 'deep_bsd')
+		opt['trial_num'] = 'R'
+		opt['combine_train_val'] = False	
+		data = load_pkl(opt['data_dir'], 'bsd_pkl_float', prepend='')
+		opt['model'] = getattr(equivariant, 'deep_bsd')
 		opt['is_bsd'] = True
-		opt['lr'] = 1e-1
-		opt['batch_size'] = 4
+		opt['lr'] = 1e-2
+		opt['batch_size'] = 10
 		opt['std_mult'] = 1
 		opt['momentum'] = 0.95
 		opt['psi_preconditioner'] = 3.4
 		opt['delay'] = 8
-		opt['display_step'] = 10
+		opt['display_step'] = 8
 		opt['save_step'] = 10
 		opt['is_classification'] = True
 		opt['n_epochs'] = 250
-		opt['dim'] = 127
-		opt['dim2'] = 160
+		opt['dim'] = 321
+		opt['dim2'] = 481
 		opt['n_channels'] = 3
-		opt['n_classes'] = 2
-		opt['n_filters'] = 32
+		opt['n_classes'] = 10
+		opt['n_filters'] = 8 #32
 		opt['filter_gain'] = 2
-		opt['augment'] = False
-		opt['lr_div'] = np.sqrt(10.)
-		opt['crop_shape'] = 0
+		opt['augment'] = True
+		opt['lr_div'] = 10.
 		opt['log_path'] = './logs/deep_bsd'
 		opt['checkpoint_path'] = './checkpoints/deep_bsd'
+		opt['test_path'] = './bsd/trial' + opt['trial_num']
+		opt['anneal_sl'] = True
+		opt['load_pretrained'] = False
+		opt['sparsity'] = 1
+		if not os.path.exists(opt['test_path']):
+			os.mkdir(opt['test_path'])
+		opt['save_test_step'] = 5
 	else:
 		print('Dataset unrecognized, options are:')
 		print('mnist, cifar10, plankton, galaxies, bsd')

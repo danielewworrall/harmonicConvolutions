@@ -176,63 +176,6 @@ def train_model(opt, data):
 	sess.close()
 	return 
 
-##### MAIN SCRIPT #####
-def get_settings(opt):
-	# Parameters
-	tf.reset_default_graph()
-	
-	# Default configuration
-	opt['trial_num'] = 'R'
-	opt['combine_train_val'] = False	
-	
-	data = load_pkl(opt['data_dir'], 'bsd_pkl_float', prepend='')
-	opt['model'] = getattr(equivariant, 'deep_bsd')
-	opt['is_bsd'] = True
-	opt['lr'] = 1e-2
-	opt['batch_size'] = 10
-	opt['std_mult'] = 1
-	opt['momentum'] = 0.95
-	opt['psi_preconditioner'] = 3.4
-	opt['delay'] = 8
-	opt['display_step'] = 8
-	opt['save_step'] = 10
-	opt['is_classification'] = True
-	opt['n_epochs'] = 250
-	opt['dim'] = 321
-	opt['dim2'] = 481
-	opt['n_channels'] = 3
-	opt['n_classes'] = 10
-	opt['n_filters'] = 8 #32
-	opt['filter_gain'] = 2
-	opt['augment'] = True
-	opt['lr_div'] = 10.
-	opt['log_path'] = './logs/deep_bsd'
-	opt['checkpoint_path'] = './checkpoints/deep_bsd'
-	opt['test_path'] = './bsd/trial' + opt['trial_num']
-	opt['anneal_sl'] = True
-	opt['load_pretrained'] = False
-	opt['sparsity'] = 1
-	if not os.path.exists(opt['test_path']):
-		os.mkdir(opt['test_path'])
-	opt['save_test_step'] = 5
-	
-	# Check that save paths exist
-	opt['log_path'] = opt['log_path'] + '/trial' + str(opt['trial_num'])
-	opt['checkpoint_path'] = opt['checkpoint_path'] + '/trial' + \
-							str(opt['trial_num']) 
-	if not os.path.exists(opt['log_path']):
-		print('Creating log path')
-		os.mkdir(opt['log_path'])
-	if not os.path.exists(opt['checkpoint_path']):
-		print('Creating checkpoint path')
-		os.mkdir(opt['checkpoint_path'])
-	opt['checkpoint_path'] = opt['checkpoint_path'] + '/model.ckpt'
-	
-	# Print out options
-	for key, val in opt.iteritems():
-		print(key + ': ' + str(val))
-	return opt, data
-
 def bsd_run(opt):
 	opt, data = get_settings(opt)
 	return train_model(opt, data)
