@@ -246,13 +246,13 @@ def complex_nonlinearity(X, b, fnc, eps=1e-4):
 	return R
 
 
-def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
+def complex_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-4,
 					   name='complexBatchNorm', outerScope='complexBatchNormOuter', device='/cpu:0'):
 	"""Batch normalization for the magnitudes of X
 	
 	X: dict of channels {rotation order: (real, imaginary)}
 	fnc: function handle for a nonlinearity. MUST map to non-negative reals R+
-	phase_train: boolean flag True: training mode, False: test mode
+	train_phase: boolean flag True: training mode, False: test mode
 	decay: decay rate: 0 is memory-less, 1 no updates (default 0.99)
 	eps: regularization since grad |Z| is infinite at zero (default 1e-4)
 	name: (default complexBatchNorm)
@@ -262,18 +262,18 @@ def complex_batch_norm(X, fnc, phase_train, decay=0.99, eps=1e-4,
 	idx = 0
 	for m, r in X.iteritems():
 		magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-		Rb = batch_norm(magnitude, phase_train, decay=decay, name=name+'_'+str(idx), device=device)
+		Rb = batch_norm(magnitude, train_phase, decay=decay, name=name+'_'+str(idx), device=device)
 		c = fnc(Rb)/magnitude
 		R[m] = (r[0]*c, r[1]*c)
 		idx += 1
 	return R
 
 
-def batch_norm(X, phase_train, decay=0.99, name='batchNorm', device='/cpu:0'):
+def batch_norm(X, train_phase, decay=0.99, name='batchNorm', device='/cpu:0'):
 	"""Batch normalization module.
 	
 	X: tf tensor
-	phase_train: boolean flag True: training mode, False: test mode
+	train_phase: boolean flag True: training mode, False: test mode
 	decay: decay rate: 0 is memory-less, 1 no updates (default 0.99)
 	name: (default batchNorm)
 	
@@ -303,7 +303,7 @@ def batch_norm(X, phase_train, decay=0.99, name='batchNorm', device='/cpu:0'):
 		with tf.control_dependencies([ema_apply_op, pop_mean_op, pop_var_op]):
 			return tf.identity(batch_mean), tf.identity(batch_var)
 
-	mean, var = tf.cond(phase_train, mean_var_with_update,
+	mean, var = tf.cond(train_phase, mean_var_with_update,
 				lambda: (pop_mean, pop_var))
 	normed = tf.nn.batch_normalization(X, mean, var, beta, gamma, 1e-3)
 	return normed

@@ -10,14 +10,14 @@ from io_helpers import *
 from harmonic_network_models import *
 
 #----------HELPER FUNCTIONS----------
-def print_train_validation(trial_num, epoch, time,
+def print_train_validation(trial_num, counter, epoch, time,
 	cost_total, validation_loss_total, acc_total, validation_acc_total):
 	"""Formats print-out for the training-loop
 	
 	"""
 	print "[" + str(trial_num),str(epoch) + \
 		"] Time: " + \
-		"{:.3f}".format(time.time()-start) + ", Counter: " + \
+		"{:.3f}".format(time) + ", Counter: " + \
 		"{:d}".format(counter) + ", Loss: " + \
 		"{:.5f}".format(cost_total) + ", Val loss: " + \
 		"{:.5f}".format(validation_loss_total) + ", Train Acc: " + \
@@ -32,7 +32,7 @@ def print_validation(trial_num, counter, epoch, time,
 	"""
 	print "[" + str(trial_num),str(epoch) + \
 		"] Time: " + \
-		"{:.3f}".format(time.time()-start) + ", Counter: " + \
+		"{:.3f}".format(time) + ", Counter: " + \
 		"{:d}".format(counter) + ", Loss: " + \
 		"{:.5f}".format(cost_total) + ", Train Acc: " + \
 		"{:.5f}".format(acc_total)
@@ -128,7 +128,7 @@ def get_io_placeholders(opt):
 						  opt['num_classes']], name='y')
 	if opt['is_bsd']:
 		io_x = tf.placeholder(tf.float32, [opt['batch_size'],None,None,3])
-	io_y = tf.placeholder(tf.float32, [opt['batch_size'],None,None,1], name='y')
+		io_y = tf.placeholder(tf.float32, [opt['batch_size'],None,None,1], name='y')
 	return io_x, io_y
 
 def build_optimizer(cost, lr, opt):
@@ -159,7 +159,7 @@ def get_evaluation(pred, y, opt):
 def build_feed_dict(opt, batch, tf_nodes, is_training):
 	'''Build a feed_dict appropriate to training regime'''
 	batch_x, batch_y = batch
-	fd = {tf_nodes['learning_rate'] : opt['lr'], tf_nodes['train_phase'] : train_phase}
+	fd = {tf_nodes['learning_rate'] : opt['lr'], tf_nodes['train_phase'] : is_training}
 	bs = opt['batch_size']
 	for g in xrange(len(opt['deviceIdxs'])):
 		fd[tf_nodes['io']['x'][g]] = batch_x[g*bs:(g+1)*bs,:]
@@ -297,7 +297,7 @@ def build_model(opt, data):
 			tf_nodes['io']['x'].append(io_x)
 			tf_nodes['io']['y'].append(io_y)
 	tf_nodes['learning_rate'] = tf.placeholder(tf.float32, name='learning_rate')
-	tf_nodes['train_phase'] = tf.placeholder(tf.bool, name='phase_train')
+	tf_nodes['train_phase'] = tf.placeholder(tf.bool, name='train_phase')
 	
 	# Construct model and optimizer
 	tf_nodes['loss'], tf_nodes['accuracy'], tf_nodes['train_op'] = construct_model_and_optimizer(opt, tf_nodes)
@@ -358,11 +358,11 @@ def train_model(opt, data, tf_nodes):
 			for summ in summaries:
 				summary.add_summary(summ, step)
 			best, counter, opt['lr'] = get_learning_rate(opt, vacc_total, best, counter, opt['lr'])
-			print_train(opt['trial_num'], epoch, time.time()-start,
+			print_train_validation(opt['trial_num'], counter, epoch, time.time()-start,
 				cost_total, vloss_total, acc_total, vacc_total)
 		else:
 			best, counter, opt['lr'] = get_learning_rate(opt, acc_total, best, counter, opt['lr'])
-			print_train_validation(opt['trial_num'], counter, epoch, time.time()-start, cost_total, acc_total)
+			print_validation(opt['trial_num'], counter, epoch, time.time()-start, cost_total, acc_total)
 		epoch += 1
 
 		if (epoch) % opt['save_step'] == 0:
@@ -393,7 +393,7 @@ def create_scalar_summary(name):
 def config_init():
 	"""Default config settings. Prevents excessive memory usage"""
 	config = tf.ConfigProto()
-	config.gpu_options.allow_growth = True5555
+	config.gpu_options.allow_growth = True
 	config.log_device_placement = False
 	return config
 

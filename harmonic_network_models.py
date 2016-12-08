@@ -11,7 +11,7 @@ import tensorflow as tf
 from harmonic_network_helpers import *
 from harmonic_network_ops import *
 
-def deep_Z(opt, x, phase_train, device='/cpu:0'):
+def deep_Z(opt, x, train_phase, device='/cpu:0'):
 	"""A standard neural net"""
 	# Sure layers weight & bias
 	nf = opt['n_filters']
@@ -53,18 +53,18 @@ def deep_Z(opt, x, phase_train, device='/cpu:0'):
 	with tf.name_scope('block1') as scope:
 		cv1 = conv2d(x, weights['w1'], biases['b1'], name='cv1')
 		cv2 = conv2d(tf.nn.relu(cv1), weights['w2'], biases['b2'], name='cv2')
-		cv2 = batch_norm(cv2, phase_train, name='bn2')
+		cv2 = batch_norm(cv2, train_phase, name='bn2')
 		cv2 = maxpool2d(cv2, k=2)
 		cv3 = conv2d(tf.nn.relu(cv2), weights['w3'], biases['b3'], name='cv3')
 		cv4 = conv2d(tf.nn.relu(cv3), weights['w4'], biases['b4'], name='cv4')
-		cv4 = batch_norm(cv4, phase_train, name='bn4')
+		cv4 = batch_norm(cv4, train_phase, name='bn4')
 		cv5 = conv2d(tf.nn.relu(cv4), weights['w5'], biases['b5'], name='cv5')
 		cv6 = conv2d(tf.nn.relu(cv5), weights['w6'], biases['b6'], name='cv6')
-		cv6 = batch_norm(cv6, phase_train, name='bn6')
+		cv6 = batch_norm(cv6, train_phase, name='bn6')
 		cv7 = conv2d(tf.nn.relu(cv6), weights['w7'], biases['b7'], name='cv7')
 		return tf.squeeze(cv7)
 
-def deep_stable(opt, x, phase_train, device='/cpu:0'):
+def deep_stable(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 1
@@ -119,7 +119,7 @@ def deep_stable(opt, x, phase_train, device='/cpu:0'):
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
 										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='2')
-		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train,
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, train_phase,
 								 name='batchNorm1', device=device)
 		fms.append(cv2)
 	with tf.name_scope('block2') as scope:
@@ -134,7 +134,7 @@ def deep_stable(opt, x, phase_train, device='/cpu:0'):
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
 										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='4')
-		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train,
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, train_phase,
 								 name='batchNorm2', device=device)
 		fms.append(cv4)
 	with tf.name_scope('block3') as scope:
@@ -149,7 +149,7 @@ def deep_stable(opt, x, phase_train, device='/cpu:0'):
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
 										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='4')
-		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train,
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, train_phase,
 								 name='batchNorm3', device=device)
 		fms.append(cv6)
 	# LAYER 7
@@ -159,7 +159,7 @@ def deep_stable(opt, x, phase_train, device='/cpu:0'):
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7']) #, fms
 
-def deep_plankton(opt, x, phase_train, device='/cpu:0'):
+def deep_plankton(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 1
@@ -206,11 +206,11 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 	with tf.name_scope('block1') as scope:
 		cv1 = real_input_rotated_conv(x, weights['w1'], biases['psi1'],
 									  filter_size=5, padding='SAME', name='1')
-		cv1 = complex_batch_norm(cv1, tf.nn.relu, phase_train, name='bn1', device=device)
+		cv1 = complex_batch_norm(cv1, tf.nn.relu, train_phase, name='bn1', device=device)
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
-		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='bn2', device=device)
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, train_phase, name='bn2', device=device)
 	
 	with tf.name_scope('block2') as scope:
 		cv3 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
@@ -218,41 +218,41 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 		cv3 = complex_input_rotated_conv(cv3, weights['w3'], biases['psi3'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='3')
-		cv3 = complex_batch_norm(cv3, tf.nn.relu, phase_train, name='bn3', device=device)
+		cv3 = complex_batch_norm(cv3, tf.nn.relu, train_phase, name='bn3', device=device)
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='4')
-		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='b4', device=device)
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, train_phase, name='b4', device=device)
 	
 	with tf.name_scope('block3') as scope:
 		cv5 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv5 = complex_input_rotated_conv(cv5, weights['w5'], biases['psi5'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='5')
-		cv5 = complex_batch_norm(cv5, tf.nn.relu, phase_train, name='bn5', device=device)
+		cv5 = complex_batch_norm(cv5, tf.nn.relu, train_phase, name='bn5', device=device)
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='6')
-		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, name='bn6', device=device)
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, train_phase, name='bn6', device=device)
 		cv7 = complex_input_rotated_conv(cv6, weights['w7'], biases['psi7'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='7')
-		cv7 = complex_batch_norm(cv7, tf.nn.relu, phase_train, name='bn7', device=device)
+		cv7 = complex_batch_norm(cv7, tf.nn.relu, train_phase, name='bn7', device=device)
 	
 	with tf.name_scope('block4') as scope:
 		cv8 = mean_pooling(cv7, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv8 = complex_input_rotated_conv(cv8, weights['w8'], biases['psi8'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='8')
-		cv8 = complex_batch_norm(cv8, tf.nn.relu, phase_train, name='bn8', device=device)
+		cv8 = complex_batch_norm(cv8, tf.nn.relu, train_phase, name='bn8', device=device)
 		cv9 = complex_input_rotated_conv(cv8, weights['w9'], biases['psi9'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='9')
-		cv9 = complex_batch_norm(cv9, tf.nn.relu, phase_train, name='bn9', device=device)
+		cv9 = complex_batch_norm(cv9, tf.nn.relu, train_phase, name='bn9', device=device)
 		cv10 = complex_input_rotated_conv(cv9, weights['w10'], biases['psi10'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='10')
-		cv10 = complex_batch_norm(cv10, tf.nn.relu, phase_train, name='bn10', device=device)
+		cv10 = complex_batch_norm(cv10, tf.nn.relu, train_phase, name='bn10', device=device)
 	
 	with tf.name_scope('block5') as scope:
 		cv11 = complex_input_conv(cv10, weights['w11'], filter_size=5,
@@ -260,7 +260,7 @@ def deep_plankton(opt, x, phase_train, device='/cpu:0'):
 		cv11 = tf.reduce_mean(sum_magnitudes(cv11), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv11, biases['b11'])
 
-def deep_cifar(opt, x, phase_train, device='/cpu:0'):
+def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 1
@@ -315,7 +315,7 @@ def deep_cifar(opt, x, phase_train, device='/cpu:0'):
 		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
 										 filter_size=5, output_orders=[0,1,2],
 										 padding='SAME', name='2')
-		cv2 = complex_batch_norm(cv2, tf.nn.relu, phase_train, name='bn1', device=device)	
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, train_phase, name='bn1', device=device)	
 		cv3 = mean_pooling(cv2, ksize=(1,3,3,1), strides=(1,2,2,1))
 		cv3 = complex_input_rotated_conv(cv3, weights['w3'], biases['psi3'],
 										 filter_size=5, output_orders=[0,1],
@@ -326,7 +326,7 @@ def deep_cifar(opt, x, phase_train, device='/cpu:0'):
 		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='4')
-		cv4 = complex_batch_norm(cv4, tf.nn.relu, phase_train, name='bn2', device=device)
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, train_phase, name='bn2', device=device)
 		cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='5')
@@ -335,7 +335,7 @@ def deep_cifar(opt, x, phase_train, device='/cpu:0'):
 		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
 										 filter_size=5, output_orders=[0,1],
 										 padding='SAME', name='6')
-		cv6 = complex_batch_norm(cv6, tf.nn.relu, phase_train, name='bn3', device=device)
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, train_phase, name='bn3', device=device)
 
 	with tf.name_scope('block3') as scope:
 		cv7 = complex_input_rotated_conv(cv6, weights['w7'], biases['psi7'],
@@ -345,13 +345,13 @@ def deep_cifar(opt, x, phase_train, device='/cpu:0'):
 		cv8 = complex_input_rotated_conv(cv7, weights['w8'], biases['psi8'],
 										 filter_size=3, output_orders=[0,1],
 										 padding='SAME', name='8')
-		cv8 = complex_batch_norm(cv8, tf.nn.relu, phase_train, name='bn4', device=device)
+		cv8 = complex_batch_norm(cv8, tf.nn.relu, train_phase, name='bn4', device=device)
 		cv9 = complex_input_conv(cv8, weights['w9'], filter_size=3, output_orders=[0,1],
 										 padding='SAME', name='9')
 		cv9 = tf.reduce_mean(sum_magnitudes(cv9), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv9, biases['b9'])
 
-def deep_bsd(opt, x, phase_train, device='/cpu:0'):
+def deep_bsd(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 1
@@ -440,7 +440,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	
 		cv2 = complex_input_rotated_conv(cv1, weights['w1_2'], psis['psi1_2'],
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='1_2')
-		cv2 = complex_batch_norm(cv2, nonlin, phase_train, name='bn1', device=device)
+		cv2 = complex_batch_norm(cv2, nonlin, train_phase, name='bn1', device=device)
 		fm[1] = conv2d(stack_magnitudes(cv2), side_weights['sw1']) #, b=biases['b1_2'])
 		cv[1] = cv2
 	
@@ -452,7 +452,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	
 		cv4 = complex_input_rotated_conv(cv3, weights['w2_2'], psis['psi2_2'],
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='2_2')
-		cv4 = complex_batch_norm(cv4, nonlin, phase_train, name='bn2', device=device)
+		cv4 = complex_batch_norm(cv4, nonlin, train_phase, name='bn2', device=device)
 		fm[2] = conv2d(stack_magnitudes(cv4), side_weights['sw2']) #, b=biases['b2_2'])
 		cv[2] = cv4
 		
@@ -464,7 +464,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	
 		cv6 = complex_input_rotated_conv(cv5, weights['w3_2'], psis['psi3_2'],
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='3_2')
-		cv6 = complex_batch_norm(cv6, nonlin, phase_train, name='bn3', device=device)
+		cv6 = complex_batch_norm(cv6, nonlin, train_phase, name='bn3', device=device)
 		fm[3] = conv2d(stack_magnitudes(cv6), side_weights['sw3']) #, b=biases['b3_2'])
 		cv[3] = cv6
 		
@@ -476,7 +476,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	
 		cv8 = complex_input_rotated_conv(cv7, weights['w4_2'], psis['psi4_2'],
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='4_2')
-		cv8 = complex_batch_norm(cv8, nonlin, phase_train, name='bn4', device=device)
+		cv8 = complex_batch_norm(cv8, nonlin, train_phase, name='bn4', device=device)
 		fm[4] = conv2d(stack_magnitudes(cv8), side_weights['sw4']) #, b=biases['b4_2'])
 		cv[4] = cv8
 		
@@ -488,7 +488,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 	
 		cv10 = complex_input_rotated_conv(cv9, weights['w5_2'], psis['psi5_2'],
 				 filter_size=3, output_orders=[0,1], padding='VALID', name='5_2')
-		cv10 = complex_batch_norm(cv10, nonlin, phase_train, name='bn5', device=device)
+		cv10 = complex_batch_norm(cv10, nonlin, train_phase, name='bn5', device=device)
 		fm[5] = conv2d(stack_magnitudes(cv10), side_weights['sw5']) #, b=biases['b5_2'])
 		cv[5] = cv10
 		
@@ -509,7 +509,7 @@ def deep_bsd(opt, x, phase_train, device='/cpu:0'):
 		fms['fuse'] = conv2d(side_preds, side_weights['h1'], b=biases['fuse'], padding='SAME')
 		return fms, out, weights, psis, cv
 
-def deep_unet(opt, x, phase_train, device='/cpu:0'):
+def deep_unet(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 1
@@ -563,22 +563,22 @@ def deep_unet(opt, x, phase_train, device='/cpu:0'):
 	# Convolutional Layers
 	out, d1 =  down_block(True, x, weights['d1_1'], weights['d1_2'],
 						  psis['psi1_1'], psis['psi1_2'], biases['b1'],
-						  phase_train, name='down1', device=device)
+						  train_phase, name='down1', device=device)
 	out, d2 =  down_block(False, out, weights['d2_1'], weights['d2_2'],
 						  psis['psi2_1'], psis['psi2_2'], biases['b2'],
-						  phase_train, name='down2', device=device)
+						  train_phase, name='down2', device=device)
 	out, d3 =  down_block(False, out, weights['d3_1'], weights['d3_2'],
 						  psis['psi3_1'], psis['psi3_2'], biases['b3'],
-						  phase_train, name='down3', device=device)
+						  train_phase, name='down3', device=device)
 	out, d4 =  down_block(False, out, weights['d4_1'], weights['d4_2'],
 						  psis['psi4_1'], psis['psi4_2'], biases['b4'],
-						  phase_train, name='down4', device=device)
+						  train_phase, name='down4', device=device)
 	
 	out =  up_block(out, d4, weights['u4_1'], weights['u4_2'], psis['u4_1'],
-					psis['u4_2'], biases['u4'], phase_train, name='up4', device=device)
+					psis['u4_2'], biases['u4'], train_phase, name='up4', device=device)
 	out =  up_block(out, d3, weights['u3_1'], weights['u3_2'], psis['u3_1'],
-					psis['u3_2'], biases['u3'], phase_train, name='up3', device=device)
+					psis['u3_2'], biases['u3'], train_phase, name='up3', device=device)
 	out =  up_block(out, d2, weights['u2_1'], weights['u2_2'], psis['u2_1'],
-					psis['u2_2'], biases['u2'], phase_train, name='up2', device=device)
+					psis['u2_2'], biases['u2'], train_phase, name='up2', device=device)
 	out =  up_block(out, d1, weights['u1_1'], weights['u1_2'], psis['u1_1'],
-					psis['u1_2'], biases['u1'], phase_train, name='up1', device=device)
+					psis['u1_2'], biases['u1'], train_phase, name='up1', device=device)
