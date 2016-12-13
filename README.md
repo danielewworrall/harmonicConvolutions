@@ -1,4 +1,4 @@
-# Phase invariant convolutions
+# Harmonic Networks: Deep Translation and Rotation Equivariance
 This folder contains the basic material to construct Harmonic Networks (HNs). Please see our <a href="http://visual.cs.ucl.ac.uk/pubs/harmonicNets/index.html"> project page </a> for more details.
 * `train.py` is the main entry point for our code.
 * `harmonic_network_ops.py` contains core HN implementations.
