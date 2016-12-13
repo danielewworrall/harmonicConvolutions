@@ -267,7 +267,10 @@ def construct_model_and_optimizer(opt, tf_nodes):
 					accuracyPerGPU.append(accuracy)
 			linearGPUIdx += 1
 		# CPU-side synchronisation 
+		# Invoking CudaDevice2Host copy and averaging host-side forces synchronisation
+		# across all devices
 		grads = average_gradients(gradientsPerGPU)
+
 		apply_gradient_op = optim.apply_gradients(grads)
 		train_op = tf.group(apply_gradient_op)
 		loss = tf.reduce_mean(tf.concat(0, lossesPerGPU))
@@ -391,7 +394,11 @@ def create_scalar_summary(name):
 	return ss
 
 def config_init():
-	"""Default config settings. Prevents excessive memory usage"""
+	"""Default config settings. Prevents excessive memory usage
+	This is not neccessarily optimal for memory fragmentation,
+	but we found it more convenient on a multi-GPU system with more than
+	one user (and no changing memory requirements).
+	"""
 	config = tf.ConfigProto()
 	config.gpu_options.allow_growth = True
 	config.log_device_placement = False
