@@ -65,7 +65,9 @@ def create_opt_data(opt):
 		opt['n_classes'] = 10
 		opt['log_path'] = './logs/deep_mnist/trialA'
 		opt['checkpoint_path'] = './checkpoints/deep_mnist/trialA'
-	elif opt['datasetIdx'] == 'cifar10': 
+	elif opt['datasetIdx'] == 'cifar10':
+		print("""WARNING: Our Deep CIFAR Model is new an experimental,
+		 so the current version will be unstable unless otherwise noted!""") 
 		# Download CIFAR10 if it doesn't exist
 		if not os.path.exists(opt['data_dir'] + '/cifar_numpy'):
 			download_dataset(opt)

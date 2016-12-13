@@ -22,7 +22,6 @@ Please note that
 Todos which we have completed:
 - [x] API for core HC functions
 - [x] Easy rotated MNIST example
-- [x] Easy CIFAR10 example
 
 Todos which we are currently working on:
 - [ ] Providing easy training code for our BSD experiments
