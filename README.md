@@ -41,8 +41,8 @@ Todos which we are currently working on:
 - [ ] API simplication
 - [ ] Longer tutorial
 
-#HNet Tensorflow Tutorial
-
+# HNet Tensorflow Tutorial
+## Complex Convolutions
 The key component of our HNet ops is the complex convolution, which we can approximate using 4 real-valued convolutions. This is implemented in the `complex_conv` function contained in `harmonic_network_ops.py`.
 Using CUDNN, we can write this in tensorflow as follows (where r denotes a real and i an imaginary tensor):
 
@@ -77,3 +77,104 @@ def sum_magnitudes(X, eps=1e-4):
 
 The result of this function can then be used with ops such as `reduce_mean` etc. as normal.
 We would like to note how these functions demonstrate our way of handling complex numbers as a dictionary of tensors with a real and an imaginary component.
+
+## Building Networks of Complex Convolutions
+
+As an example of how to use these functions, we will build the MNIST network from the paper.
+
+```python
+def deep_mnist(opt, x, train_phase, device='/cpu:0'):
+"""High frequency convolutions are unstable, so get rid of them"""
+# Sure layers weight & bias
+order = 1
+nf = opt['n_filters']
+nf2 = int(nf*opt['filter_gain'])
+nf3 = int(nf*(opt['filter_gain']**2.))
+bs = opt['batch_size']
+n = ((opt['filter_size']+1)/2)
+tr1 = (n*(n+1))/2
+tr2 = tr1 - 1
+
+sm = opt['std_mult']
+with tf.device(device):
+    weights = {
+        'w1' : get_weights_dict([[tr1,],[tr2,]], opt['n_channels'], nf, std_mult=sm, name='W1', device=device),
+        'w2' : get_weights_dict([[tr1,],[tr2,]], nf, nf, std_mult=sm, name='W2', device=device),
+        'w3' : get_weights_dict([[tr1,],[tr2,]], nf, nf2, std_mult=sm, name='W3', device=device),
+        'w4' : get_weights_dict([[tr1,],[tr2,]], nf2, nf2, std_mult=sm, name='W4', device=device),
+        'w5' : get_weights_dict([[tr1,],[tr2,]], nf2, nf3, std_mult=sm, name='W5', device=device),
+        'w6' : get_weights_dict([[tr1,],[tr2,]], nf3, nf3, std_mult=sm, name='W6', device=device),
+        'w7' : get_weights_dict([[tr1,],[tr2,]], nf3, opt['n_classes'], std_mult=sm, name='W7', device=device),
+    }
+    
+    biases = {
+        'b1' : get_bias_dict(nf, order, name='b1', device=device),
+        'b2' : get_bias_dict(nf, order, name='b2', device=device),
+        'b3' : get_bias_dict(nf2, order, name='b3', device=device),
+        'b4' : get_bias_dict(nf2, order, name='b4', device=device),
+        'b5' : get_bias_dict(nf3, order, name='b5', device=device),
+        'b6' : get_bias_dict(nf3, order, name='b6', device=device),
+        'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[opt['n_classes']],
+            initializer=tf.constant_initializer(1e-2)),
+        'psi1' : get_phase_dict(1, nf, order, name='psi1', device=device),
+        'psi2' : get_phase_dict(nf, nf, order, name='psi2', device=device),
+        'psi3' : get_phase_dict(nf, nf2, order, name='psi3', device=device),
+        'psi4' : get_phase_dict(nf2, nf2, order, name='psi4', device=device),
+        'psi5' : get_phase_dict(nf2, nf3, order, name='psi5', device=device),
+        'psi6' : get_phase_dict(nf3, nf3, order, name='psi6', device=device)
+    }
+    # Reshape input picture -- square inputs for now
+    size = opt['dim'] - 2*opt['crop_shape']
+    x = tf.reshape(x, shape=[bs,size,size,opt['n_channels']])
+
+fms = []
+# Convolutional Layers
+with tf.name_scope('block1') as scope:
+    cv1 = real_input_rotated_conv(x, weights['w1'], biases['psi1'],
+                                    filter_size=opt['filter_size'], padding='SAME', name='1')
+    cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
+    fms.append(cv1)	
+    # LAYER 2
+    cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
+                                        filter_size=opt['filter_size'], output_orders=[0,1],
+                                        padding='SAME', name='2')
+    cv2 = complex_batch_norm(cv2, tf.nn.relu, train_phase,
+                                name='batchNorm1', device=device)
+    fms.append(cv2)
+with tf.name_scope('block2') as scope:
+    cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+    # LAYER 3
+    cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
+                                        filter_size=opt['filter_size'], output_orders=[0,1],
+                                        padding='SAME', name='3')
+    cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
+    fms.append(cv3)
+    # LAYER 4
+    cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
+                                        filter_size=opt['filter_size'], output_orders=[0,1],
+                                        padding='SAME', name='4')
+    cv4 = complex_batch_norm(cv4, tf.nn.relu, train_phase,
+                                name='batchNorm2', device=device)
+    fms.append(cv4)
+with tf.name_scope('block3') as scope:
+    cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+    # LAYER 5
+    cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
+                                        filter_size=opt['filter_size'], output_orders=[0,1],
+                                        padding='SAME', name='5')
+    cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
+    fms.append(cv5)
+    # LAYER 6
+    cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
+                                        filter_size=opt['filter_size'], output_orders=[0,1],
+                                        padding='SAME', name='4')
+    cv6 = complex_batch_norm(cv6, tf.nn.relu, train_phase,
+                                name='batchNorm3', device=device)
+    fms.append(cv6)
+# LAYER 7
+with tf.name_scope('block4') as scope:
+    cv7 = complex_input_conv(cv6, weights['w7'], filter_size=opt['filter_size'],
+                                padding='SAME', name='7')
+    cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
+    return tf.nn.bias_add(cv7, biases['b7']) #, fms
+```
