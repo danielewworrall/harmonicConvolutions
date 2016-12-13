@@ -1,9 +1,9 @@
 # Phase invariant convolutions
 This folder contains the basic material to construct Harmonic Networks (HNs). Please see our <a href="http://visual.cs.ucl.ac.uk/pubs/harmonicNets/index.html"> project page </a> for more details.
-* `train.py` is the main entry point for our code
-* `harmonic_network_ops.py` contains core HC implementations
-* `harmonic_network_helpers.py` contains handy functions for using these
-* `harmonic_network_models.py` contains the model definitions that the user to reproduce our results
+* `train.py` is the main entry point for our code.
+* `harmonic_network_ops.py` contains core HN implementations.
+* `harmonic_network_helpers.py` contains handy functions for using these (such as block definitions).
+* `harmonic_network_models.py` contains the model definitions that are necessary to reproduce our results.
 
 To run the MNIST example from the paper, navigate to the parent directory of this repo and type:
 ```python
@@ -22,6 +22,7 @@ Please note that
 Todos which we have completed:
 - [x] API for core HC functions
 - [x] Easy rotated MNIST example
+- [x] Easy CIFAR10 example
 
 Todos which we are currently working on:
 - [ ] Providing easy training code for our BSD experiments

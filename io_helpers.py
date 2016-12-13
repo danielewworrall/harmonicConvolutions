@@ -20,27 +20,36 @@ def checkFolder(dir):
 	if not os.path.exists(dir):
 		os.makedirs(dir)
 
+def download2FileAndExtract(url, folder, fileName):
+	checkFolder(folder)
+	zipFileName = folder + fileName
+	request = urllib2.urlopen(url)
+	with open(zipFileName, "wb") as f :
+		f.write(request.read())
+	if not zipfile.is_zipfile(zipFileName):
+		print('ERROR: ' + zipFileName + ' is not a valid zip file.')
+		sys.exit(1)
+	print('Extracting rotated MNIST...')
+	wd = os.getcwd()
+	os.chdir(folder)
+	archive = zipfile.ZipFile(zipFileName, mode='r')
+	archive.extractall()
+	archive.close()
+	os.chdir(wd)
+
 def download_dataset(opt):
 	if opt["datasetIdx"] == 'mnist':
 		print('Downloading rotated MNIST...')
-		checkFolder(opt["data_dir"])
-		zipFileName = opt["data_dir"] + "/mnist_rotation_new.zip"
-		request = urllib2.urlopen("https://www.dropbox.com/s/0fxwai3h84dczh0/mnist_rotation_new.zip?dl=1")
-		with open(zipFileName, "wb") as f :
-			f.write(request.read())
-		if not zipfile.is_zipfile(zipFileName):
-			print('ERROR: ' + zipFileName + ' is not a valid zip file.')
-			sys.exit(1)
-		print('Extracting rotated MNIST...')
-		wd = os.getcwd()
-		os.chdir(opt["data_dir"])
-		archive = zipfile.ZipFile(opt["data_dir"] + "/mnist_rotation_new.zip", mode='r')
-		archive.extractall()
-		archive.close()
-		os.chdir(wd)
+		download2FileAndExtract("https://www.dropbox.com/s/0fxwai3h84dczh0/mnist_rotation_new.zip?dl=1",
+			opt["data_dir"], "/mnist_rotation_new.zip")
 		print('Successfully retrieved rotated MNIST dataset.')
+	elif opt["datasetIdx"] == 'cifar10':
+		print('Downloading CIFAR10...')
+		download2FileAndExtract("https://www.dropbox.com/s/d07iifw0njuymk8/cifar_numpy.zip?dl=1",
+			opt["data_dir"], "/cifar_numpy.zip")
+		print('Successfully retrieved CIFAR10 dataset.')
 	else:
-		print('ERROR: Cannot download dataset ' + dataset_name)
+		print('ERROR: Cannot download dataset ' + opt["datasetIdx"])
 		sys.exit(1)
 
 def load_dataset(dir_name, subdir_name, prepend=''):

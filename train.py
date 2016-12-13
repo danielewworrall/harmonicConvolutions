@@ -66,6 +66,9 @@ def create_opt_data(opt):
 		opt['log_path'] = './logs/deep_mnist/trialA'
 		opt['checkpoint_path'] = './checkpoints/deep_mnist/trialA'
 	elif opt['datasetIdx'] == 'cifar10': 
+		# Download CIFAR10 if it doesn't exist
+		if not os.path.exists(opt['data_dir'] + '/cifar_numpy'):
+			download_dataset(opt)
 		# Load dataset
 		data = load_dataset(opt['data_dir'], 'cifar_numpy')
 		opt['is_classification'] = True
