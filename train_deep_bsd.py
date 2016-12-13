@@ -15,32 +15,6 @@ from scipy import misc
 import tensorflow as tf
 
 ###HELPER FUNCTIONS------------------------------------------------------------------
-
-def bsd_save_predictions(sess, x, opt, pred, pt, data, epoch):
-	"""Save predictions to output folder"""
-	X = data['valid_x']
-	Y = data['valid_y']
-	save_path = opt['test_path'] + '/T_' + str(epoch)
-	if not os.path.exists(save_path):
-		os.mkdir(save_path)
-	generator = pklbatcher(X, Y, opt['batch_size'], shuffle=False,
-						   augment=False, img_shape=(opt['dim'], opt['dim2']))
-	# Use sigmoid to map to [0,1]
-	bsd_map = tf.nn.sigmoid(pred['fuse'])
-	j = 0
-	for batch in generator:
-		batch_x, batch_y, excerpt = batch
-		output = sess.run(bsd_map, feed_dict={x: batch_x, pt: False})
-		for i in xrange(output.shape[0]):
-			save_name = save_path + '/' + str(excerpt[i]).replace('.jpg','.png')
-			im = output[i,:,:,0]
-			im = (255*im).astype('uint8')
-			if data['valid_x'][excerpt[i]]['transposed']:
-				im = im.T
-			skio.imsave(save_name, im)
-			j += 1
-	print('Saved predictions to: %s' % (save_path,))
-
 def train_model(opt, data):
 	"""Generalized training function
 	

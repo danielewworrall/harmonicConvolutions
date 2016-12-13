@@ -1,5 +1,7 @@
 # Harmonic Networks: Deep Translation and Rotation Equivariance
+
 > Please read the following information carefully and let us know if anything is missing/you have discovered a bug. We always welcome your feedback!
+
 This folder contains the basic material to construct Harmonic Networks (HNs). Please see our <a href="http://visual.cs.ucl.ac.uk/pubs/harmonicNets/index.html"> project page </a> for more details.
 * `train.py` is the main entry point for our code.
 * `model_assembly_train.py` contains our multi-gpu trainig routines that serve as an example of how our functions can interface with regular tensorflow code.
