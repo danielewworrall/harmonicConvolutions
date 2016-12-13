@@ -1,9 +1,18 @@
 # Harmonic Networks: Deep Translation and Rotation Equivariance
+> Please read the following information carefully and let us know if anything is missing/you have discovered a bug. We always welcome your feedback!
 This folder contains the basic material to construct Harmonic Networks (HNs). Please see our <a href="http://visual.cs.ucl.ac.uk/pubs/harmonicNets/index.html"> project page </a> for more details.
 * `train.py` is the main entry point for our code.
+* `model_assembly_train.py` contains our multi-gpu trainig routines that serve as an example of how our functions can interface with regular tensorflow code.
+* `io_helpers.py` contains our code for downloading, processing and batching datasets.
 * `harmonic_network_ops.py` contains core HN implementations.
 * `harmonic_network_helpers.py` contains handy functions for using these (such as block definitions).
 * `harmonic_network_models.py` contains the model definitions that are necessary to reproduce our results.
+
+All other scripts are for our purposes only and can be safely ignored by the user.
+
+____
+> NOTE: The model definitions and core functions are independent of our training code and can be used without it.
+____
 
 To run the MNIST example from the paper, navigate to the parent directory of this repo and type:
 ```python
