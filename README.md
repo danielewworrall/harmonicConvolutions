@@ -2,11 +2,11 @@
 
 > Please read the following information carefully and let us know if anything is missing/you have discovered a bug. We always welcome your feedback!
 
-This folder contains the basic material to construct Harmonic Networks (HNs). Please see our <a href="http://visual.cs.ucl.ac.uk/pubs/harmonicNets/index.html"> project page </a> for more details.
+This folder contains the basic material to construct Harmonic Networks (HNets). Please see our <a href="http://visual.cs.ucl.ac.uk/pubs/harmonicNets/index.html"> project page </a> for more details.
 * `train.py` is the main entry point for our code.
 * `model_assembly_train.py` contains our multi-gpu trainig routines that serve as an example of how our functions can interface with regular tensorflow code.
 * `io_helpers.py` contains our code for downloading, processing and batching datasets.
-* `harmonic_network_ops.py` contains core HN implementations.
+* `harmonic_network_ops.py` contains core HNet implementations.
 * `harmonic_network_helpers.py` contains handy functions for using these (such as block definitions).
 * `harmonic_network_models.py` contains the model definitions that are necessary to reproduce our results.
 
@@ -41,9 +41,9 @@ Todos which we are currently working on:
 - [ ] API simplication
 - [ ] Longer tutorial
 
-#HN Tensorflow Tutorial
+#HNet Tensorflow Tutorial
 
-The key component of our HN ops is the complex convolution, which we can approximate using 4 real-valued convolutions. This is implemented in the `complex_conv` function contained in `harmonic_network_ops.py`.
+The key component of our HNet ops is the complex convolution, which we can approximate using 4 real-valued convolutions. This is implemented in the `complex_conv` function contained in `harmonic_network_ops.py`.
 Using CUDNN, we can write this in tensorflow as follows (where r denotes a real and i an imaginary tensor):
 
 ```python
