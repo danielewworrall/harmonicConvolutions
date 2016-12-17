@@ -295,7 +295,7 @@ def get_learning_rate(opt, current, best, counter, learning_rate):
 	return (best, counter, learning_rate)
 
 #----------BSD-Specific Routines----------
-	def bsd_preprocess(im, tg):
+def bsd_preprocess(im, tg):
 	'''Data normalizations and augmentations'''
 	fliplr = (np.random.rand() > 0.5)
 	flipud = (np.random.rand() > 0.5)
