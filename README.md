@@ -4,7 +4,7 @@
 
 This folder contains the basic material to construct Harmonic Networks (HNets). Please see our <a href="http://visual.cs.ucl.ac.uk/pubs/harmonicNets/index.html"> project page </a> for more details.
 * `train.py` is the main entry point for our code.
-* `model_assembly_train.py` contains our multi-gpu trainig routines that serve as an example of how our functions can interface with regular tensorflow code.
+* `model_assembly_train.py` contains our multi-gpu training routines that serve as an example of how our functions can interface with regular tensorflow code.
 * `io_helpers.py` contains our code for downloading, processing and batching datasets.
 * `harmonic_network_ops.py` contains core HNet implementations.
 * `harmonic_network_helpers.py` contains handy functions for using these (such as block definitions).
@@ -20,11 +20,11 @@ To run the MNIST example from the paper, navigate to the parent directory of thi
 ```python
 python train.py 0 mnist deep_stable <yourDataDirectory>
 ```
-Here, `<yourDataDirectory>` is the folder into which the datasets will be downloaded, the `0` means we will be using GPU 0, `mnist` signifies the dataset to train on, and `deep_stable` the network mdoel as defined in `harmonic_network_models.py`.
+Here, `<yourDataDirectory>` is the folder into which the datasets will be downloaded, the `0` means we will be using GPU 0, `mnist` signifies the dataset to train on, and `deep_stable` the network model as defined in `harmonic_network_models.py`.
 You can train on more than one GPU by making the first argument a comma-separated list. For example `0,1,2` would run the training code on the first three GPUs of a system.
 
 Dependencies:
-* we require tensorflow 0.11 as documented <a href="https://www.tensorflow.org/versions/r0.11/api_docs/index.html">here</a>. Newer versions of the API may be supported in future.
+* we require Tensorflow 0.11 as documented <a href="https://www.tensorflow.org/versions/r0.11/api_docs/index.html">here</a>. Newer versions of the API may be supported in future.
 
 Please note that
 * this is work in progress, so pull often!
@@ -38,13 +38,13 @@ Todos which we have completed:
 Todos which we are currently working on:
 - [ ] Providing easy training code for our BSD experiments
 - [ ] Providing multi-threaded reads for data-feeding
-- [ ] API simplication
+- [ ] API simplification
 - [ ] Longer tutorial
 
 # HNet Tensorflow Tutorial
 ## Complex Convolutions
 The key component of our HNet ops is the complex convolution, which we can approximate using 4 real-valued convolutions. This is implemented in the `complex_conv` function contained in `harmonic_network_ops.py`.
-Using CUDNN, we can write this in tensorflow as follows (where r denotes a real and i an imaginary tensor):
+Using CUDNN, we can write this in Tensorflow as follows (where r denotes a real and i an imaginary tensor):
 
 ```python
 Rrr = tf.nn.conv2d(Xr, Qr, strides=strides, padding=padding)
@@ -57,7 +57,7 @@ return Rr, Ri
 ```
 
 This function is only useful if the input already has a real and an imaginary component. However, in most cases we wish to process a real-valued input such as an image and obtain another real-valued output for our loss function.
-This is why we prodive a special function for the first layer, `real_input_rotated_conv`, which returns a complex tensor but takes as input a real one, such as an image.
+This is why we provide a special function for the first layer, `real_input_rotated_conv`, which returns a complex tensor but takes as input a real one, such as an image.
 After the first layer, we use 'complex_input_rotated_conv' wish works on complex tensors. To obtain a real-valued final tensor from the network, we sum the magnitudes as follows:
 
 ```python
