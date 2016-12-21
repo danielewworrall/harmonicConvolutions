@@ -24,7 +24,7 @@ Here, `<yourDataDirectory>` is the folder into which the datasets will be downlo
 You can train on more than one GPU by making the first argument a comma-separated list. For example `0,1,2` would run the training code on the first three GPUs of a system.
 
 Dependencies:
-* we require at least tensorflow 0.12 as documented <a href="https://www.tensorflow.org/versions/r0.12/api_docs/index.html">here</a>. Newer versions of the API may be supported in future.
+* we require tensorflow 0.11 as documented <a href="https://www.tensorflow.org/versions/r0.11/api_docs/index.html">here</a>. Newer versions of the API may be supported in future.
 
 Please note that
 * this is work in progress, so pull often!
