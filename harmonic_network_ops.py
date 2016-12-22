@@ -40,6 +40,33 @@ def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
 		return tf.split(3, 2, R)
 
 
+def harmonic_conv(X, R, strides=(1,1,1,1), padding='VALID', name='N'):
+	"""Inter-order (cross-stream) convolutions can be implemented as single
+	convolutions. For this we store data as 6D tensors and filters as 8D
+	tensors, at convolution, we reshapes down to 4D tensors and expand again.
+	
+	X: tensor dict---reshaped to [mbatch,h,w,channels,complex,order]
+	R: tensor dict---reshaped to [h,w,in,in.comp,in.ord,out,out.comp,out.ord]
+	strides: as per tf convention (default (1,1,1,1))
+	padding: as per tf convention (default VALID)
+	name: (default N)
+	"""
+	with tf.name_scope('hconv'+str(name)) as scope:
+		# Build data tensor
+		for k, Xv in X.iteritems():
+			# Concat is IN THE WRONG ORDER!!!!!!!!!
+			Xm = tf.concat(3, Xv)
+		
+		Q = get_complex_filters(Q, filter_size=filter_size)
+		Z = {}
+		for m, q in Q.iteritems():
+			Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding,
+							  name='reic_real'+name)
+			Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding,
+							  name='reic_im'+name)
+			Z[m] = (Zr, Zi)
+		return Z
+
 def real_input_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
 						name='N'):
 	"""Equivariant complex convolution for a real input e.g. an image.
