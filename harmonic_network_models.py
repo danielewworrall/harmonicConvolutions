@@ -72,20 +72,20 @@ def deep_stable(opt, x, train_phase, device='/cpu:0'):
 	nf2 = int(nf*opt['filter_gain'])
 	nf3 = int(nf*(opt['filter_gain']**2.))
 	bs = opt['batch_size']
-	n = ((opt['filter_size']+1)/2)
-	tr1 = (n*(n+1))/2
-	tr2 = tr1 - 1
+	fs = opt['filter_size']
+	nch = opt['n_channels']
+	ncl = opt['n_classes']
 	
 	sm = opt['std_mult']
 	with tf.device(device):
 		weights = {
-			'w1' : get_weights_dict([[tr1,],[tr2,]], opt['n_channels'], nf, std_mult=sm, name='W1', device=device),
-			'w2' : get_weights_dict([[tr1,],[tr2,]], nf, nf, std_mult=sm, name='W2', device=device),
-			'w3' : get_weights_dict([[tr1,],[tr2,]], nf, nf2, std_mult=sm, name='W3', device=device),
-			'w4' : get_weights_dict([[tr1,],[tr2,]], nf2, nf2, std_mult=sm, name='W4', device=device),
-			'w5' : get_weights_dict([[tr1,],[tr2,]], nf2, nf3, std_mult=sm, name='W5', device=device),
-			'w6' : get_weights_dict([[tr1,],[tr2,]], nf3, nf3, std_mult=sm, name='W6', device=device),
-			'w7' : get_weights_dict([[tr1,],[tr2,]], nf3, opt['n_classes'], std_mult=sm, name='W7', device=device),
+			'w1' : get_weights_dict([fs,fs,nch,nf], order, std_mult=sm, name='W1', device=device),
+			'w2' : get_weights_dict([fs,fs,nf,nf], order, std_mult=sm, name='W2', device=device),
+			'w3' : get_weights_dict([fs,fs,nf,nf2], order, std_mult=sm, name='W3', device=device),
+			'w4' : get_weights_dict([fs,fs,nf2,nf2], order, std_mult=sm, name='W4', device=device),
+			'w5' : get_weights_dict([fs,fs,nf2,nf3], order, std_mult=sm, name='W5', device=device),
+			'w6' : get_weights_dict([fs,fs,nf3,nf3], order, std_mult=sm, name='W6', device=device),
+			'w7' : get_weights_dict([fs,fs,nf3,ncl], order, std_mult=sm, name='W7', device=device),
 		}
 		
 		biases = {
@@ -96,7 +96,10 @@ def deep_stable(opt, x, train_phase, device='/cpu:0'):
 			'b5' : get_bias_dict(nf3, order, name='b5', device=device),
 			'b6' : get_bias_dict(nf3, order, name='b6', device=device),
 			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[opt['n_classes']],
-				initializer=tf.constant_initializer(1e-2)),
+				initializer=tf.constant_initializer(1e-2))
+			}
+		
+		phases = {
 			'psi1' : get_phase_dict(1, nf, order, name='psi1', device=device),
 			'psi2' : get_phase_dict(nf, nf, order, name='psi2', device=device),
 			'psi3' : get_phase_dict(nf, nf2, order, name='psi3', device=device),
@@ -111,12 +114,12 @@ def deep_stable(opt, x, train_phase, device='/cpu:0'):
 	fms = []
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
-		cv1 = real_input_rotated_conv(x, weights['w1'], biases['psi1'],
+		cv1 = real_input_rotated_conv(x, weights['w1'], phases['psi1'],
 									  filter_size=opt['filter_size'], padding='SAME', name='1')
 		cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
 		fms.append(cv1)	
 		# LAYER 2
-		cv2 = complex_input_rotated_conv(cv1, weights['w2'], biases['psi2'],
+		cv2 = complex_input_rotated_conv(cv1, weights['w2'], phases['psi2'],
 										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, train_phase,
@@ -125,13 +128,13 @@ def deep_stable(opt, x, train_phase, device='/cpu:0'):
 	with tf.name_scope('block2') as scope:
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 3
-		cv3 = complex_input_rotated_conv(cv2, weights['w3'], biases['psi3'],
+		cv3 = complex_input_rotated_conv(cv2, weights['w3'], phases['psi3'],
 										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='3')
 		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
 		fms.append(cv3)
 		# LAYER 4
-		cv4 = complex_input_rotated_conv(cv3, weights['w4'], biases['psi4'],
+		cv4 = complex_input_rotated_conv(cv3, weights['w4'], phases['psi4'],
 										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='4')
 		cv4 = complex_batch_norm(cv4, tf.nn.relu, train_phase,
@@ -140,13 +143,13 @@ def deep_stable(opt, x, train_phase, device='/cpu:0'):
 	with tf.name_scope('block3') as scope:
 		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 5
-		cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
+		cv5 = complex_input_rotated_conv(cv4, weights['w5'], phases['psi5'],
 										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='5')
 		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
 		fms.append(cv5)
 		# LAYER 6
-		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
+		cv6 = complex_input_rotated_conv(cv5, weights['w6'], phases['psi6'],
 										 filter_size=opt['filter_size'], output_orders=[0,1],
 										 padding='SAME', name='4')
 		cv6 = complex_batch_norm(cv6, tf.nn.relu, train_phase,

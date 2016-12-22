@@ -359,6 +359,7 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:
 	W_init: numpy initial values (default None)
 	std_mult: multiplier for weight standard deviation (default 0.4)
 	name: (default W)
+	device: (default /cpu:0)
 	"""
 	with tf.device(device):
 		if W_init == None:

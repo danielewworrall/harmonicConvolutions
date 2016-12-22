@@ -23,7 +23,7 @@ def maxpool2d(X, k=2):
 	return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1],
 						  padding='VALID')
 
-def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W',
+def get_weights_dict_(comp_shape, in_shape, out_shape, std_mult=0.4, name='W',
 					 device='/cpu:0'):
 	"""Return a dict of weights for use with real_input_equi_conv. comp_shape is
 	a list of the number of elements per Fourier base. For 3x3 weights use
@@ -35,6 +35,27 @@ def get_weights_dict(comp_shape, in_shape, out_shape, std_mult=0.4, name='W',
 		weights_dict[i] = get_weights(shape, std_mult=std_mult,
 									  name=name+'_'+str(i), device=device)
 	return weights_dict
+
+
+def get_weights_dict(shape, max_order, std_mult=0.4, name='W', device='/cpu:0'):
+	"""Return a dict of weights.
+	
+	shape: list of filter shape [h,w,i,o] --- note we use h=w
+	max_order: returns weights for m=0,1,...,max_order
+	std_mult: He init scaled by std_mult (default 0.4)
+	name: (default 'W')
+	dev: (default /cpu:0)
+	"""
+	weights_dict = {}
+	radius = (shape[0]+1)/2
+	n_rings = (radius*(radius+1))/2
+	for i in xrange(max_order+1):
+		sh = [n_rings-(i>0)] + shape[2:]
+		nm = name + '_' + str(i)
+		weights_dict[i] = get_weights(sh, std_mult=std_mult, name=nm, device=device)
+	return weights_dict
+	
+
 
 def get_bias_dict(n_filters, order, name='b', device='/cpu:0'):
 	"""Return a dict of biases"""
