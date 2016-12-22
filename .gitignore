@@ -11,3 +11,4 @@ bsd/
 *.pdf
 *.npz
 *.npy
+rotated_mnist/

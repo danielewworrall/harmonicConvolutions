@@ -12,10 +12,15 @@ We assume that:
 import numpy as np
 import tensorflow as tf
 
+
+
 def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
-	"""Convolve a complex valued input X and complex-valued filter Q. Output is
-	computed as (Xr + iXi)*(Qr + iQi) = (Xr*Qr - Xi*Qi) + i(Xr*Qi + Xi*Qr),
-	where * denotes convolution.
+	"""Reimplement the complex convolution as a single convolution for a)
+	efficiency b) simple generalization to convolution over more complex groups
+	than SO(2) later on. The general principle is to store data tensors with an
+	extra 5th channel corresponding to real/imaginary behaviour. We then store
+	filters with a 5th channel in 4th position for real/imaginary input and a
+	6th channel in 6th position for real/imaginary output.
 	
 	X: complex input stored as (real, imaginary)
 	Q: complex filter stored as (real, imaginary)
@@ -24,15 +29,15 @@ def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
 	name: (default N)
 	"""
 	with tf.name_scope('complexConv'+name) as scope:
-		Xr, Xi = X
+		# Build data tensor
+		X_ = tf.concat(3, X)
+		# Build filter
 		Qr, Qi = Q
-		Rrr = tf.nn.conv2d(Xr, Qr, strides=strides, padding=padding, name='rr'+name)
-		Rii = tf.nn.conv2d(Xi, Qi, strides=strides, padding=padding, name='ii'+name)
-		Rri = tf.nn.conv2d(Xr, Qi, strides=strides, padding=padding, name='ri'+name)
-		Rir = tf.nn.conv2d(Xi, Qr, strides=strides, padding=padding, name='ir'+name)
-		Rr = Rrr - Rii
-		Ri = Rri + Rir
-		return Rr, Ri
+		Q_r = tf.concat(2, [Qr, -Qi])
+		Q_i = tf.concat(2, [Qi, Qr])
+		Q_ = tf.concat(3, [Q_r, Q_i])
+		R = tf.nn.conv2d(X_, Q_, strides=strides, padding=padding, name=name+'cconv')
+		return tf.split(3, 2, R)
 
 
 def real_input_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
