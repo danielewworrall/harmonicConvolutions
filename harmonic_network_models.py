@@ -68,9 +68,10 @@ def deep_stable(opt, x, train_phase, device='/cpu:0'):
 		cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
 		fms.append(cv1)	
 		# LAYER 2
-		cv2 = complex_input_rotated_conv(cv1, weights['w2'], phases['psi2'],
-										 filter_size=opt['filter_size'], output_orders=[0,1],
-										 padding='SAME', name='2')
+		cv2 = harmonic_conv(cv1, weights['w2'], phases['psi2'], max_order=1)
+		#cv2 = complex_input_rotated_conv(cv1, weights['w2'], phases['psi2'],
+		#								 filter_size=opt['filter_size'], output_orders=[0,1],
+		#								 padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, train_phase,
 								 name='batchNorm1', device=device)
 		fms.append(cv2)

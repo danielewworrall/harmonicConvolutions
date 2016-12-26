@@ -18,9 +18,8 @@ def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
 	"""Reimplement the complex convolution as a single convolution for a)
 	efficiency b) simple generalization to convolution over more complex groups
 	than SO(2) later on. The general principle is to store data tensors with an
-	extra 5th channel corresponding to real/imaginary behaviour. We then store
-	filters with a 5th channel in 4th position for real/imaginary input and a
-	6th channel in 6th position for real/imaginary output.
+	extra channel corresponding to real/imaginary behaviour. We then store
+	filters with an extra 2 input and output channels.
 	
 	X: complex input stored as (real, imaginary)
 	Q: complex filter stored as (real, imaginary)
@@ -40,32 +39,43 @@ def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
 		return tf.split(3, 2, R)
 
 
-def harmonic_conv(X, R, strides=(1,1,1,1), padding='VALID', name='N'):
+def harmonic_conv(X, Q, P, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 	"""Inter-order (cross-stream) convolutions can be implemented as single
 	convolutions. For this we store data as 6D tensors and filters as 8D
-	tensors, at convolution, we reshapes down to 4D tensors and expand again.
+	tensors, at convolution, we reshape down to 4D tensors and expand again.
 	
 	X: tensor dict---reshaped to [mbatch,h,w,channels,complex,order]
-	R: tensor dict---reshaped to [h,w,in,in.comp,in.ord,out,out.comp,out.ord]
+	Q: tensor dict---reshaped to [h,w,in,in.comp,in.ord,out,out.comp,out.ord]
+	P: tensor dict---phases
 	strides: as per tf convention (default (1,1,1,1))
 	padding: as per tf convention (default VALID)
 	name: (default N)
 	"""
 	with tf.name_scope('hconv'+str(name)) as scope:
 		# Build data tensor
-		for k, Xv in X.iteritems():
-			# Concat is IN THE WRONG ORDER!!!!!!!!!
-			Xm = tf.concat(3, Xv)
-		
-		Q = get_complex_filters(Q, filter_size=filter_size)
+		X_ = tf.concat(3, [tf.concat(3, Xv) for __, Xv in X.iteritems()])
+		# Build filter
+		Q_ = []
+		Q = get_complex_rotated_filters(Q, P, filter_size=3)
+		for output_order in xrange(max_order+1):
+			# For each output order build input
+			Qr = []
+			Qi = []
+			for input_order in xrange(max(X.keys())+1):
+				filter_order = output_order - input_order
+				sign = np.sign(filter_order)
+				filter_component = Q[np.abs(filter_order)]
+				Qr += [filter_component[0],-sign*filter_component[1]]
+				Qi += [filter_component[1],sign*filter_component[0]]
+			Q_ += [tf.concat(2, Qr), tf.concat(2, Qi)]
+		Q_ = tf.concat(3, Q_)
+		R = tf.nn.conv2d(X_, Q_, strides=strides, padding=padding, name=name+'cconv')
+		R = tf.split(3,max_order+1,R)
 		Z = {}
-		for m, q in Q.iteritems():
-			Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding,
-							  name='reic_real'+name)
-			Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding,
-							  name='reic_im'+name)
-			Z[m] = (Zr, Zi)
+		for output_order in xrange(max_order+1):
+			Z[output_order] = tf.split(3,2,R[output_order])
 		return Z
+
 
 def real_input_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
 						name='N'):
@@ -183,7 +193,7 @@ def complex_input_rotated_conv(X, R, psi, filter_size=3, output_orders=[0,],
 			for pair in v:
 				q_, x_ = pair					   # filter key, input key
 				order = q_ + x_
-				s, q = np.sign(q_), Q[np.abs(q_)]   # key sign, filter
+				s, q = np.sign(q_), Q[np.abs(q_)]  # key sign, filter
 				x = X[x_]						   # input
 				# For negative orders take conjugate of positive order filter.
 				Z_ = complex_conv(x, (q[0], s*q[1]), strides=strides,
