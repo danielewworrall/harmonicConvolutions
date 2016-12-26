@@ -39,7 +39,7 @@ def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
 		return tf.split(3, 2, R)
 
 
-def harmonic_conv(X, Q, P, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
+def harmonic_conv(X, Q, P, strides=(1,1,1,1), padding='VALID', filter_size=3, max_order=1, name='N'):
 	"""Inter-order (cross-stream) convolutions can be implemented as single
 	convolutions. For this we store data as 6D tensors and filters as 8D
 	tensors, at convolution, we reshape down to 4D tensors and expand again.
@@ -49,6 +49,8 @@ def harmonic_conv(X, Q, P, strides=(1,1,1,1), padding='VALID', max_order=1, name
 	P: tensor dict---phases
 	strides: as per tf convention (default (1,1,1,1))
 	padding: as per tf convention (default VALID)
+	filter_size: (default 3)
+	max_order: (default 1)
 	name: (default N)
 	"""
 	with tf.name_scope('hconv'+str(name)) as scope:
@@ -56,7 +58,7 @@ def harmonic_conv(X, Q, P, strides=(1,1,1,1), padding='VALID', max_order=1, name
 		X_ = tf.concat(3, [tf.concat(3, Xv) for __, Xv in X.iteritems()])
 		# Build filter
 		Q_ = []
-		Q = get_complex_rotated_filters(Q, P, filter_size=3)
+		Q = get_complex_rotated_filters(Q, P, filter_size=filter_size)
 		for output_order in xrange(max_order+1):
 			# For each output order build input
 			Qr = []
