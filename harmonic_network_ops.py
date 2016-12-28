@@ -79,7 +79,7 @@ def h_conv_(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 
 
 ##### NONLINEARITIES #####
-def complex_nonlinearity(X, fnc, eps=1e-4, name='b'):
+def h_nonlin(X, fnc, eps=1e-4, name='b', device='/cpu:0'):
 	"""Apply the nonlinearity described by the function handle fnc: R -> R+ to
 	the magnitude of X. CAVEAT: fnc must map to the non-negative reals R+.
 	
@@ -93,7 +93,8 @@ def complex_nonlinearity(X, fnc, eps=1e-4, name='b'):
 	"""
 	magnitude = sum_magnitudes(X, eps)
 	msh = magnitude.get_shape()
-	b = tf.get_variable('b'+name, shape=[1,1,1,msh[3],1,msh[5]])
+	with tf.device(device):
+		b = tf.get_variable('b'+name, shape=[1,1,1,msh[3],1,msh[5]])
 	
 	Rb = tf.add(magnitude, b)
 	c = tf.div(fnc(Rb), magnitude)
