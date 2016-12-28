@@ -54,6 +54,7 @@ def get_bias_dict(n_filters, order, name='b', device='/cpu:0'):
 			bias_dict[i] = bias
 	return bias_dict
 
+
 def get_phase_dict(n_in, n_out, order, name='b',device='/cpu:0'):
 	"""Return a dict of phase offsets"""
 	with tf.device(device):
@@ -66,6 +67,7 @@ def get_phase_dict(n_in, n_out, order, name='b',device='/cpu:0'):
 				initializer=tf.constant_initializer(init))
 			phase_dict[i] = phase
 	return phase_dict
+
 
 #----------ADDITIONAL FUNCTIONS FOR CREATING BLOCKS----------
 def up_block(x, d, w1, w2, p1, p2, b, pt, name, device):

@@ -18,14 +18,22 @@ def conv(X, W, strides, padding, name):
 	return tf.nn.conv2d(X, W, strides=strides, padding=padding, name=name)
 
 
-def h_conv_wrap(X, strides=(1,1,1,1), padding+'VALID', phase=True, max_order=1,
-				filter_size=3, name='N'):
+def h_conv(X, shape, strides=(1,1,1,1), padding='VALID', phase=True,
+				max_order=1, stddev=0.4, name='N', device='/cpu:0'):
 	"""EXPERIMENTAL"""
-	pass
+	d = device
+	mo = max_order
+	from harmonic_network_helpers import get_weights_dict, get_phase_dict
+	Q = get_weights_dict(shape, mo, std_mult=stddev, name='W'+name, device=d)
+	P = None
+	if phase == True:
+		P = get_phase_dict(shape[2], shape[3], mo, name='P'+name, device=d)
+	W = get_filters(Q, filter_size=shape[0], P=P)
+	R = h_conv_(X, W, strides=strides, padding=padding, max_order=mo, name=name)
+	return R
 
 
-def h_conv(X, Q, P=None, strides=(1,1,1,1), padding='VALID', filter_size=3,
-				  max_order=1, name='N'):
+def h_conv_(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 	"""Inter-order (cross-stream) convolutions can be implemented as single
 	convolutions. For this we store data as 6D tensors and filters as 8D
 	tensors, at convolution, we reshape down to 4D tensors and expand again.
@@ -44,8 +52,6 @@ def h_conv(X, Q, P=None, strides=(1,1,1,1), padding='VALID', filter_size=3,
 		Xsh = X.get_shape().as_list()
 		X_ = tf.reshape(X, tf.concat(0,[Xsh[:3],[-1]]))
 		
-		# Build filter
-		Q = get_filters(Q, filter_size=filter_size, P=P)
 		#   Construct the stream-convolutions as one big filter
 		Q_ = []
 		for output_order in xrange(max_order+1):
@@ -54,7 +60,7 @@ def h_conv(X, Q, P=None, strides=(1,1,1,1), padding='VALID', filter_size=3,
 			Qi = []
 			for input_order in xrange(Xsh[3]):
 				fo = output_order - input_order
-				c = Q[np.abs(fo)]
+				c = W[np.abs(fo)]
 				s = np.sign(fo)
 				# Choose a different filter depending on whether imput is real
 				if Xsh[4] == 2:
