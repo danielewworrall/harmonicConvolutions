@@ -167,41 +167,41 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 		cv1 = complex_nonlinearity(cv1, biases['b1'], tf.nn.relu)
 		fms.append(cv1)	
 		# LAYER 2
-		cv2 = harmonic_conv(cv1, weights['w2'], phases['psi2'], filter_size=fs,
-							max_order=1, padding='SAME', name='2')
+		cv2 = harmonic_conv(cv1, weights['w2'], P=phases['psi2'], filter_size=fs,
+							padding='SAME', name='2')
 		cv2 = complex_batch_norm(cv2, tf.nn.relu, train_phase,
 								 name='batchNorm1', device=device)
 		fms.append(cv2)
 	with tf.name_scope('block2') as scope:
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 3
-		cv3 = harmonic_conv(cv2, weights['w3'], phases['psi3'], filter_size=fs,
-							max_order=1, padding='SAME', name='3')
+		cv3 = harmonic_conv(cv2, weights['w3'], P=phases['psi3'], filter_size=fs,
+							padding='SAME', name='3')
 		cv3 = complex_nonlinearity(cv3, biases['b3'], tf.nn.relu)
 		fms.append(cv3)
 		# LAYER 4
-		cv4 = harmonic_conv(cv3, weights['w4'], phases['psi4'], filter_size=fs,
-							max_order=1, padding='SAME', name='4')
+		cv4 = harmonic_conv(cv3, weights['w4'], P=phases['psi4'], filter_size=fs,
+							padding='SAME', name='4')
 		cv4 = complex_batch_norm(cv4, tf.nn.relu, train_phase,
 								 name='batchNorm2', device=device)
 		fms.append(cv4)
 	with tf.name_scope('block3') as scope:
 		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		# LAYER 5
-		cv5 = harmonic_conv(cv4, weights['w5'], phases['psi5'], filter_size=fs,
-							max_order=1, padding='SAME', name='5')
+		cv5 = harmonic_conv(cv4, weights['w5'], P=phases['psi5'], filter_size=fs,
+							padding='SAME', name='5')
 		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
 		fms.append(cv5)
 		# LAYER 6
-		cv6 = harmonic_conv(cv5, weights['w6'], phases['psi6'], filter_size=fs,
-							max_order=1, padding='SAME', name='4')
+		cv6 = harmonic_conv(cv5, weights['w6'], P=phases['psi6'], filter_size=fs,
+							padding='SAME', name='4')
 		cv6 = complex_batch_norm(cv6, tf.nn.relu, train_phase,
 								 name='batchNorm3', device=device)
 		fms.append(cv6)
 	# LAYER 7
 	with tf.name_scope('block4') as scope:
-		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=fs,
-								 padding='SAME', name='7')
+		cv7 = harmonic_conv(cv6, weights['w7'], filter_size=fs, max_order=0,
+							padding='SAME', name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2])
 		return tf.nn.bias_add(cv7, biases['b7']) 
 
