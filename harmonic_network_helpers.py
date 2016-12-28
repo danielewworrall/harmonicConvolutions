@@ -23,19 +23,6 @@ def maxpool2d(X, k=2):
 	return tf.nn.max_pool(X, ksize=[1,k,k,1], strides=[1,k,k,1],
 						  padding='VALID')
 
-def get_weights_dict_(comp_shape, in_shape, out_shape, std_mult=0.4, name='W',
-					 device='/cpu:0'):
-	"""Return a dict of weights for use with real_input_equi_conv. comp_shape is
-	a list of the number of elements per Fourier base. For 3x3 weights use
-	[3,2,2,2]. I currently assume order increasing from 0.
-	"""
-	weights_dict = {}
-	for i, cs in enumerate(comp_shape):
-		shape = cs + [in_shape,out_shape]
-		weights_dict[i] = get_weights(shape, std_mult=std_mult,
-									  name=name+'_'+str(i), device=device)
-	return weights_dict
-
 
 def get_weights_dict(shape, max_order, std_mult=0.4, name='W', device='/cpu:0'):
 	"""Return a dict of weights.
@@ -55,7 +42,6 @@ def get_weights_dict(shape, max_order, std_mult=0.4, name='W', device='/cpu:0'):
 		weights_dict[i] = get_weights(sh, std_mult=std_mult, name=nm, device=device)
 	return weights_dict
 	
-
 
 def get_bias_dict(n_filters, order, name='b', device='/cpu:0'):
 	"""Return a dict of biases"""

@@ -18,6 +18,12 @@ def conv(X, W, strides, padding, name):
 	return tf.nn.conv2d(X, W, strides=strides, padding=padding, name=name)
 
 
+def h_conv_wrap(X, strides=(1,1,1,1), padding+'VALID', phase=True, max_order=1,
+				filter_size=3, name='N'):
+	"""EXPERIMENTAL"""
+	pass
+
+
 def h_conv(X, Q, P=None, strides=(1,1,1,1), padding='VALID', filter_size=3,
 				  max_order=1, name='N'):
 	"""Inter-order (cross-stream) convolutions can be implemented as single
@@ -67,7 +73,7 @@ def h_conv(X, Q, P=None, strides=(1,1,1,1), padding='VALID', filter_size=3,
 
 
 ##### NONLINEARITIES #####
-def complex_nonlinearity(X, b, fnc, eps=1e-4):
+def complex_nonlinearity(X, fnc, eps=1e-4, name='b'):
 	"""Apply the nonlinearity described by the function handle fnc: R -> R+ to
 	the magnitude of X. CAVEAT: fnc must map to the non-negative reals R+.
 	
@@ -79,15 +85,17 @@ def complex_nonlinearity(X, b, fnc, eps=1e-4):
 	fnc: function handle for a nonlinearity. MUST map to non-negative reals R+
 	eps: regularization since grad |Z| is infinite at zero (default 1e-4)
 	"""
-	b = tf.concat(3, [expand_ba(bv,5,0) for __, bv in b.iteritems()])
 	magnitude = sum_magnitudes(X, eps)
+	msh = magnitude.get_shape()
+	b = tf.get_variable('b'+name, shape=[1,1,1,msh[3],1,msh[5]])
+	
 	Rb = tf.add(magnitude, b)
 	c = tf.div(fnc(Rb), magnitude)
 	return c*X
 
 
-def h_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-4,
-					   name='complexBatchNorm', outerScope='complexBatchNormOuter', device='/cpu:0'):
+def h_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-4, name='hbn',
+				 device='/cpu:0'):
 	"""Batch normalization for the magnitudes of X
 	
 	X: dict of channels {rotation order: (real, imaginary)}
@@ -141,7 +149,7 @@ def batch_norm(X, train_phase, decay=0.99, name='batchNorm', device='/cpu:0'):
 	return normed
 
 
-def sum_magnitudes_(X, eps=1e-4, keep_dims=True):
+def sum_magnitudes(X, eps=1e-4, keep_dims=True):
 	"""Sum the magnitudes of each of the complex feature maps in X.
 	
 	Output U = sum_i |X_i|
@@ -153,11 +161,14 @@ def sum_magnitudes_(X, eps=1e-4, keep_dims=True):
 	return tf.sqrt(R + eps)
 
 
-def sum_magnitudes(X, eps=1e-4, keep_dims=True):
+def sum_magnitudes_(X, eps=1e-4, keep_dims=True):
 	"""Experimental"""
 	R = tf.reduce_sum(tf.square(X), reduction_indices=[4], keep_dims=keep_dims)
-	return tf.sqrt(R + eps)
-
+	R = tf.sqrt(R + 1e-4)
+	Z = tf.to_float(tf.equal(R,0.))
+	R = R*(1-Z) + Z
+	G = X/R
+	return G + tf.stop_gradient(R - G)
 
 
 ##### CREATING VARIABLES #####

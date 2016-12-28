@@ -137,16 +137,7 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 			'w7' : get_weights_dict([fs,fs,nf3,ncl], order, std_mult=sm, name='W7', device=device),
 		}
 		
-		b = {
-			'b1' : get_bias_dict(nf, order, name='b1', device=device),
-			'b2' : get_bias_dict(nf, order, name='b2', device=device),
-			'b3' : get_bias_dict(nf2, order, name='b3', device=device),
-			'b4' : get_bias_dict(nf2, order, name='b4', device=device),
-			'b5' : get_bias_dict(nf3, order, name='b5', device=device),
-			'b6' : get_bias_dict(nf3, order, name='b6', device=device),
-			'b7' : tf.get_variable('b7', dtype=tf.float32, shape=[opt['n_classes']],
-				initializer=tf.constant_initializer(1e-2))
-			}
+		bias = tf.get_variable('b7', shape=[opt['n_classes']], initializer=tf.constant_initializer(1e-2))
 		
 		P = {
 			'p1' : get_phase_dict(1, nf, order, name='p1', device=device),
@@ -163,21 +154,21 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
 		cv1 = h_conv(x, W['w1'], P['p1'], filter_size=fs, padding='SAME', name='1')
-		cv1 = complex_nonlinearity(cv1, b['b1'], tf.nn.relu)
+		cv1 = complex_nonlinearity(cv1, tf.nn.relu, name='1')
 		cv2 = h_conv(cv1, W['w2'], P=P['p2'], filter_size=fs, padding='SAME', name='2')
 		cv2 = h_batch_norm(cv2, tf.nn.relu, tp, name='bn1', device=device)
 
 	with tf.name_scope('block2') as scope:
 		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv3 = h_conv(cv2, W['w3'], P=P['p3'], filter_size=fs, padding='SAME', name='3')
-		cv3 = complex_nonlinearity(cv3, b['b3'], tf.nn.relu)
+		cv3 = complex_nonlinearity(cv3, tf.nn.relu, name='3')
 		cv4 = h_conv(cv3, W['w4'], P=P['p4'], filter_size=fs, padding='SAME', name='4')
 		cv4 = h_batch_norm(cv4, tf.nn.relu, tp, name='bn2', device=device)
 
 	with tf.name_scope('block3') as scope:
 		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv5 = h_conv(cv4, W['w5'], P=P['p5'], filter_size=fs, padding='SAME', name='5')
-		cv5 = complex_nonlinearity(cv5, b['b5'], tf.nn.relu)
+		cv5 = complex_nonlinearity(cv5, tf.nn.relu, name='5')
 		cv6 = h_conv(cv5, W['w6'], P=P['p6'], filter_size=fs, padding='SAME', name='6')
 		cv6 = h_batch_norm(cv6, tf.nn.relu, tp, name='bn3', device=device)
 
@@ -185,7 +176,7 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	with tf.name_scope('block4') as scope:
 		cv7 = h_conv(cv6, W['w7'], filter_size=fs, max_order=0, padding='SAME', name='7')
 		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2,3,4])
-		return tf.nn.bias_add(cv7, b['b7']) 
+		return tf.nn.bias_add(cv7, bias) 
 
 
 def deep_bsd(opt, x, train_phase, device='/cpu:0'):
