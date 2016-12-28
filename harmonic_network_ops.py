@@ -13,39 +13,18 @@ import numpy as np
 import tensorflow as tf
 
 
-
-def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
-	"""Reimplement the complex convolution as a single convolution for a)
-	efficiency b) simple generalization to convolution over more complex groups
-	than SO(2) later on. The general principle is to store data tensors with an
-	extra channel corresponding to real/imaginary behaviour. We then store
-	filters with an extra 2 input and output channels.
-	
-	X: complex input stored as (real, imaginary)
-	Q: complex filter stored as (real, imaginary)
-	strides: as per tf convention (default (1,1,1,1))
-	padding: as per tf convention (default VALID)
-	name: (default N)
-	"""
-	with tf.name_scope('complexConv'+name) as scope:
-		# Build data tensor
-		X_ = tf.concat(3, X)
-		# Build filter
-		Qr, Qi = Q
-		Q_r = tf.concat(2, [Qr, -Qi])
-		Q_i = tf.concat(2, [Qi, Qr])
-		Q_ = tf.concat(3, [Q_r, Q_i])
-		R = tf.nn.conv2d(X_, Q_, strides=strides, padding=padding, name=name+'cconv')
-		return tf.split(3, 2, R)
+def conv(X, W, strides, padding, name):
+	"""Shorthand for tf.nn.conv2d"""
+	return tf.nn.conv2d(X, W, strides=strides, padding=padding, name=name)
 
 
-def harmonic_conv(X, Q, P=None, strides=(1,1,1,1), padding='VALID', filter_size=3,
+def h_conv(X, Q, P=None, strides=(1,1,1,1), padding='VALID', filter_size=3,
 				  max_order=1, name='N'):
 	"""Inter-order (cross-stream) convolutions can be implemented as single
 	convolutions. For this we store data as 6D tensors and filters as 8D
 	tensors, at convolution, we reshape down to 4D tensors and expand again.
 	
-	X: tensor dict---reshaped to [mbatch,h,w,channels,complex,order]
+	X: tensor shape [mbatch,h,w,channels,complex,order]
 	Q: tensor dict---reshaped to [h,w,in,in.comp,in.ord,out,out.comp,out.ord]
 	P: tensor dict---phases
 	strides: as per tf convention (default (1,1,1,1))
@@ -56,220 +35,35 @@ def harmonic_conv(X, Q, P=None, strides=(1,1,1,1), padding='VALID', filter_size=
 	"""
 	with tf.name_scope('hconv'+str(name)) as scope:
 		# Build data tensor
-		X_ = tf.concat(3, [tf.concat(3, Xv) for __, Xv in X.iteritems()])
+		Xsh = X.get_shape().as_list()
+		X_ = tf.reshape(X, tf.concat(0,[Xsh[:3],[-1]]))
+		
 		# Build filter
+		Q = get_filters(Q, filter_size=filter_size, P=P)
+		#   Construct the stream-convolutions as one big filter
 		Q_ = []
-		if P is not None:
-			Q = get_complex_rotated_filters(Q, P, filter_size=filter_size)
-		else:
-			Q = get_complex_filters(Q, filter_size=filter_size)
 		for output_order in xrange(max_order+1):
 			# For each output order build input
 			Qr = []
 			Qi = []
-			for input_order in xrange(max(X.keys())+1):
-				filter_order = output_order - input_order
-				sign = np.sign(filter_order)
-				filter_component = Q[np.abs(filter_order)]
-				Qr += [filter_component[0],-sign*filter_component[1]]
-				Qi += [filter_component[1],sign*filter_component[0]]
+			for input_order in xrange(Xsh[3]):
+				fo = output_order - input_order
+				c = Q[np.abs(fo)]
+				s = np.sign(fo)
+				# Choose a different filter depending on whether imput is real
+				if Xsh[4] == 2:
+					Qr += [c[0],-s*c[1]]
+					Qi += [c[1],s*c[0]]
+				else:
+					Qr += [c[0]]
+					Qi += [c[1]]
 			Q_ += [tf.concat(2, Qr), tf.concat(2, Qi)]
 		Q_ = tf.concat(3, Q_)
-		R = tf.nn.conv2d(X_, Q_, strides=strides, padding=padding, name=name+'cconv')
-		R = tf.split(3,max_order+1,R)
-		Z = {}
-		for output_order in xrange(max_order+1):
-			Z[output_order] = tf.split(3,2,R[output_order])
-		return Z
-
-
-def real_input_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
-						name='N'):
-	"""Equivariant complex convolution for a real input e.g. an image.
-	
-	X: tf tensor
-	R: dict of filter coefficients {rotation order: (real, imaginary)}
-	filter_size: int of filter height/width (default 3) CAVEAT: ODD supported
-	strides: as per tf convention (default (1,1,1,1))
-	padding: as per tf convention (default VALID)
-	name: (default N)
-	
-	Returns dict filter responses {order: (real, imaginary)}
-	"""
-	with tf.name_scope('reic'+str(name)) as scope:
-		Q = get_complex_filters(R, filter_size=filter_size)
-		Z = {}
-		for m, q in Q.iteritems():
-			Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding,
-							  name='reic_real'+name)
-			Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding,
-							  name='reic_im'+name)
-			Z[m] = (Zr, Zi)
-		return Z
-
-
-def complex_input_conv(X, R, filter_size=3, output_orders=[0,],
-						   strides=(1,1,1,1), padding='VALID', name='N'):
-	"""Equivariant complex convolution for a complex input e.g. feature maps.
-	
-	X: dict of channels {rotation order: (real, imaginary)}
-	R: dict of filter coefficients {rotation order: (real, imaginary)}
-	filter_size: int of filter height/width (default 3) CAVEAT: ODD supported
-	output_orders: list of rotation orders to output (default [0,])  
-	strides: as per tf convention (default (1,1,1,1))
-	padding: as per tf convention (default VALID)
-	name: (default N)
-	
-	Returns dict filter responses {order: (real, imaginary)}
-	"""
-	with tf.name_scope('ceic'+str(name)) as scope:
-		# Perform initial scan to link up all filter orders with input image orders.
-		pairings = get_key_pairings(X, R, output_orders)
-		Q = get_complex_filters(R, filter_size=filter_size)
 		
-		Z = {}
-		for m, v in pairings.iteritems():
-			for pair in v:
-				q_, x_ = pair					   # filter key, input key
-				order = q_ + x_
-				s, q = np.sign(q_), Q[np.abs(q_)]   # key sign, filter
-				x = X[x_]						   # input
-				# For negative orders take conjugate of positive order filter.
-				Z_ = complex_conv(x, (q[0], s*q[1]), strides=strides,
-								  padding=padding, name=name)
-				if order not in Z.keys():
-					Z[order] = []
-				Z[order].append(Z_)
-		
-		# Z is a dictionary of convolutional responses from each previous layer
-		# feature map of rotation orders [A,B,...,C] to each feature map in this
-		# layer of rotation orders [X,Y,...,Z]. At each map M in [X,Y,...,Z] we
-		# sum the inputs from each F in [A,B,...,C].
-		return sum_complex_tensor_dict(Z)
-
-
-def real_input_rotated_conv(X, R, psi, filter_size=3, strides=(1,1,1,1), 
-							padding='VALID', name='N'):
-	"""Equivariant complex convolution for a real input e.g. an image.
-	
-	X: tf tensor
-	R: dict of filter coefficients {rotation order: (real, imaginary)}
-	psi: dict of filter phases {rotation order: phase}
-	filter_size: int of filter height/width (default 3) CAVEAT: ODD supported
-	strides: as per tf convention (default (1,1,1,1))
-	padding: as per tf convention (default VALID)
-	name: (default N)
-	
-	Returns dict filter responses {order: (real, imaginary)}
-	"""
-	with tf.name_scope('reic'+str(name)) as scope:
-		Q = get_complex_rotated_filters(R, psi, filter_size=filter_size)
-		Z = {}
-		for m, q in Q.iteritems():
-			Zr = tf.nn.conv2d(X, q[0], strides=strides, padding=padding,
-							  name='reic_real'+name)
-			Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding,
-							  name='reic_im'+name)
-			Z[m] = (Zr, Zi)
-		return Z
-
-
-def complex_input_rotated_conv(X, R, psi, filter_size=3, output_orders=[0,],
-						   strides=(1,1,1,1), padding='VALID', name='N'):
-	"""Equivariant complex convolution for a complex input e.g. feature maps.
-	
-	X: dict of channels {rotation order: (real, imaginary)}
-	R: dict of filter coefficients {rotation order: (real, imaginary)}
-	psi: dict of filter phases {rotation order: phase}
-	filter_size: int of filter height/width (default 3) CAVEAT: ODD supported
-	output_orders: list of rotation orders to output (default [0,])  
-	strides: as per tf convention (default (1,1,1,1))
-	padding: as per tf convention (default VALID)
-	name: (default N)
-	
-	Returns dict filter responses {order: (real, imaginary)}
-	"""
-	with tf.name_scope('ceic'+str(name)) as scope:
-		# Perform initial scan to link up all filter orders with input image orders.
-		pairings = get_key_pairings(X, R, output_orders)
-		Q = get_complex_rotated_filters(R, psi, filter_size=filter_size)
-		
-		Z = {}
-		for m, v in pairings.iteritems():
-			for pair in v:
-				q_, x_ = pair					   # filter key, input key
-				order = q_ + x_
-				s, q = np.sign(q_), Q[np.abs(q_)]  # key sign, filter
-				x = X[x_]						   # input
-				# For negative orders take conjugate of positive order filter.
-				Z_ = complex_conv(x, (q[0], s*q[1]), strides=strides,
-								  padding=padding, name=name)
-				if order not in Z.keys():
-					Z[order] = []
-				Z[order].append(Z_)
-		
-		# Z is a dictionary of convolutional responses from each previous layer
-		# feature map of rotation orders [A,B,...,C] to each feature map in this
-		# layer of rotation orders [X,Y,...,Z]. At each map M in [X,Y,...,Z] we
-		# sum the inputs from each F in [A,B,...,C].
-		return sum_complex_tensor_dict(Z)
-
-
-def get_key_pairings(X, R, output_orders):
-	"""Finds combinations of all inputs and filters, such that
-	input_order + filter_order = output_order
-	
-	X: dict of channels {rotation order: (real, imaginary)}
-	R: dict of filter coefficients {rotation order: (real, imaginary)}
-	output_orders: list of rotation orders to output 
-	
-	Returns {order : (r,x)} pairs.
-	"""
-	X_keys = np.asarray(X.keys())
-	R_keys = np.asarray(mirror_filter_keys(R.keys()))[:,np.newaxis]
-	# The compatibility matrix lists all sums of key pairings
-	compatibility = X_keys + R_keys
-	pairings = {}
-	for order in output_orders:
-		where = np.argwhere(compatibility == order)
-		pairings[order] = []
-		for k in where:
-			pairings[order].append((R_keys[k[0],0], X_keys[k[1]]))
-	return pairings
-
-
-def mirror_filter_keys(R_keys):
-	"""Add negative component to filter keys e.g. [0,1,2]->[-2,-1,0,1,2]
-	
-	R_keys: list of positive orders e.g. [0,1,2,...]
-	"""
-	new_keys = []
-	for key in R_keys:
-		if key == 0:
-			new_keys.append(key)
-		if key > 0:
-			new_keys.append(key)
-			new_keys.append(-key)
-	return sorted(new_keys)
-
-
-def sum_complex_tensor_dict(X):
-	"""X is a dict of lists of tuples of complex numbers {order: [(real,im), \
-	(real,im), ...]}. This function sums all the real parts and all the
-	imaginary parts for each order. I think there is a better way to do this by
-	representing each order as a single feature stack.
-	
-	X: dict of lists of complex tuples {order: [(real,im), (real,im), ...]}
-	"""
-	output = {}
-	for order, response_list in X.iteritems():
-		reals = []
-		ims = []
-		for re, im in response_list:
-			reals.append(re)
-			ims.append(im)
-		output[order] = (tf.add_n(reals), tf.add_n(ims))
-	return output
+		R = conv(X_, Q_, strides, padding, name+'cconv')
+		Rsh = R.get_shape().as_list()
+		ns = tf.concat(0, [Rsh[:3],[max_order+1,2],[Rsh[3]/(2*(max_order+1))]])
+		return tf.reshape(R, ns)
 
 
 ##### NONLINEARITIES #####
@@ -285,16 +79,14 @@ def complex_nonlinearity(X, b, fnc, eps=1e-4):
 	fnc: function handle for a nonlinearity. MUST map to non-negative reals R+
 	eps: regularization since grad |Z| is infinite at zero (default 1e-4)
 	"""
-	R = {}
-	for m, r in X.iteritems():
-		magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-		Rb = tf.nn.bias_add(magnitude, b[m])
-		c = fnc(Rb)/magnitude
-		R[m] = (r[0]*c, r[1]*c)
-	return R
+	b = tf.concat(3, [expand_ba(bv,5,0) for __, bv in b.iteritems()])
+	magnitude = sum_magnitudes(X, eps)
+	Rb = tf.add(magnitude, b)
+	c = tf.div(fnc(Rb), magnitude)
+	return c*X
 
 
-def complex_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-4,
+def h_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-4,
 					   name='complexBatchNorm', outerScope='complexBatchNormOuter', device='/cpu:0'):
 	"""Batch normalization for the magnitudes of X
 	
@@ -305,16 +97,10 @@ def complex_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-4,
 	eps: regularization since grad |Z| is infinite at zero (default 1e-4)
 	name: (default complexBatchNorm)
 	"""
-	#with tf.variable_scope(outerScope) as scope:
-	R = {}
-	idx = 0
-	for m, r in X.iteritems():
-		magnitude = tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps)
-		Rb = batch_norm(magnitude, train_phase, decay=decay, name=name+'_'+str(idx), device=device)
-		c = fnc(Rb)/magnitude
-		R[m] = (r[0]*c, r[1]*c)
-		idx += 1
-	return R
+	magnitude = sum_magnitudes(X, eps)
+	Rb = batch_norm(magnitude, train_phase, decay=decay, name=name, device=device)
+	c = tf.div(fnc(Rb), magnitude)
+	return c*X
 
 
 def batch_norm(X, train_phase, decay=0.99, name='batchNorm', device='/cpu:0'):
@@ -327,24 +113,22 @@ def batch_norm(X, train_phase, decay=0.99, name='batchNorm', device='/cpu:0'):
 	
 	Source: bgshi @ http://stackoverflow.com/questions/33949786/how-could-i-use-
 	batch-normalization-in-tensorflow"""
-	n_out = X.get_shape().as_list()[-1]
+	n_out = X.get_shape().as_list()[-3:]
 	
 	with tf.device(device):
-		beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=[n_out],
+		beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=n_out,
 			initializer=tf.constant_initializer(0.0))
-		gamma = tf.get_variable(name+'_gamma', dtype=tf.float32, shape=[n_out],
+		gamma = tf.get_variable(name+'_gamma', dtype=tf.float32, shape=n_out,
 			initializer=tf.constant_initializer(1.0))
-		pop_mean = tf.get_variable(name+'_pop_mean', dtype=tf.float32, shape=[n_out],
+		pop_mean = tf.get_variable(name+'_pop_mean', dtype=tf.float32, shape=n_out,
 			trainable=False)
-		pop_var = tf.get_variable(name+'_pop_var', dtype=tf.float32, shape=[n_out],
+		pop_var = tf.get_variable(name+'_pop_var', dtype=tf.float32, shape=n_out,
 			trainable=False)
-		batch_mean, batch_var = tf.nn.moments(X, [0,1,2],
-										  name=name + 'moments')
+		batch_mean, batch_var = tf.nn.moments(X, [0,1,2], name=name + 'moments')
 	ema = tf.train.ExponentialMovingAverage(decay=decay)
 
 	def mean_var_with_update():
 		ema_apply_op = ema.apply([batch_mean, batch_var])
-		#self.ema_mean, self.ema_var = self.ema.average(batch_mean), self.ema.average(batch_var)
 		pop_mean_op = tf.assign(pop_mean, ema.average(batch_mean))
 		pop_var_op = tf.assign(pop_var, ema.average(batch_var))
 
@@ -357,7 +141,7 @@ def batch_norm(X, train_phase, decay=0.99, name='batchNorm', device='/cpu:0'):
 	return normed
 
 
-def sum_magnitudes(X, eps=1e-4):
+def sum_magnitudes_(X, eps=1e-4, keep_dims=True):
 	"""Sum the magnitudes of each of the complex feature maps in X.
 	
 	Output U = sum_i |X_i|
@@ -365,24 +149,15 @@ def sum_magnitudes(X, eps=1e-4):
 	X: dict of channels {rotation order: (real, imaginary)}
 	eps: regularization since grad |Z| is infinite at zero (default 1e-4)
 	"""
-	R = []
-	for m, r in X.iteritems():
-		R.append(tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps))
-	return tf.add_n(R)
+	R = tf.reduce_sum(tf.square(X), reduction_indices=[4], keep_dims=keep_dims)
+	return tf.sqrt(R + eps)
 
 
-def stack_magnitudes(X, eps=1e-4):
-    """Stack the magnitudes of each of the complex feature maps in X.
-    
-    Output U = tf.concat(|X_0|, |X_1|, ...)
-    
-    X: dict of channels {rotation order: (real, imaginary)}
-    eps: regularization since grad |Z| is infinite at zero (default 1e-4)
-    """
-    R = []
-    for m, r in X.iteritems():
-        R.append(tf.sqrt(tf.square(r[0]) + tf.square(r[1]) + eps))
-    return tf.concat(3, R, name='concat')
+def sum_magnitudes(X, eps=1e-4, keep_dims=True):
+	"""Experimental"""
+	R = tf.reduce_sum(tf.square(X), reduction_indices=[4], keep_dims=keep_dims)
+	return tf.sqrt(R + eps)
+
 
 
 ##### CREATING VARIABLES #####
@@ -412,49 +187,28 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:
 
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####
-def get_complex_filters(R, filter_size):
-	"""Return a complex filter of the form u(r,t) = R(r)e^{imt}, using a
-	Cartesian representation so u(x,y) = X + iY, where m is rotation order
-	and t is rotation angle clockwise about the origin.
-	
-	R: dict of filter coefficients {rotation order: (real, imaginary)}
-	filter_size: int of filter height/width (default 3) CAVEAT: ODD supported 
-	"""
+def get_filters(R, filter_size, P=None):
+	"""Return a complex filter of the form $u(r,t,psi) = R(r)e^{im(t-psi)}"""
 	filters = {}
 	k = filter_size
 	for m, r in R.iteritems():
 		rsh = r.get_shape().as_list()
+		# Get the basis matrices
 		cosine, sine = get_complex_basis_matrices(k, order=m)
 		cosine = tf.reshape(cosine, tf.pack([k*k, rsh[0]]))
 		sine = tf.reshape(sine, tf.pack([k*k, rsh[0]]))
+		
 		# Project taps on to rotational basis
 		r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
 		ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
 		usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
+		
+		if P is not None:
+			# Rotate basis matrices
+			ucos = tf.cos(P[m])*ucos + tf.sin(P[m])*usin
+			usin = -tf.sin(P[m])*ucos + tf.cos(P[m])*usin
 		filters[m] = (ucos, usin)
 	return filters
-
-
-def get_complex_rotated_filters(R, psi, filter_size):
-    """Return a complex filter of the form $u(r,t,psi) = R(r)e^{im(t-psi)}"""
-    filters = {}
-    k = filter_size
-    for m, r in R.iteritems():
-        rsh = r.get_shape().as_list()
-        # Get the basis matrices
-        cmasks, smasks = get_complex_basis_matrices(filter_size, order=m)
-        # Reshape and project taps on to basis
-        cosine = tf.reshape(cmasks, tf.pack([k*k, rsh[0]]))
-        sine = tf.reshape(smasks, tf.pack([k*k, rsh[0]]))
-        # Project taps on to rotational basis
-        r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
-        ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
-        usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
-        # Rotate basis matrices
-        cosine = tf.cos(psi[m])*ucos + tf.sin(psi[m])*usin
-        sine = -tf.sin(psi[m])*ucos + tf.cos(psi[m])*usin
-        filters[m] = (cosine, sine)
-    return filters
 
 
 def get_complex_basis_matrices(filter_size, order=1):
@@ -504,6 +258,7 @@ def mean_pooling(X, ksize=(1,1,1,1), strides=(1,1,1,1)):
 	ksize: kernel size 4-tuple (default (1,1,1,1))
 	strides: stride size 4-tuple (default (1,1,1,1))
 	"""
+	"""
 	Y = {}
 	for k, v in X.iteritems():
 		y0 = tf.nn.avg_pool(v[0], ksize=ksize, strides=strides,
@@ -511,7 +266,15 @@ def mean_pooling(X, ksize=(1,1,1,1), strides=(1,1,1,1)):
 		y1 = tf.nn.avg_pool(v[1], ksize=ksize, strides=strides,
 							padding='VALID', name='mean_pooling')
 		Y[k] = (y0,y1)
-	return Y
+	"""
+	Xsh = X.get_shape()
+	# Collapse output the order, complex, and channel dimensions
+	X_ = tf.reshape(X, tf.concat(0,[Xsh[:3],[-1]]))
+	Y = tf.nn.avg_pool(X_, ksize=ksize, strides=strides, padding='VALID',
+					   name='mean_pooling')
+	Ysh = Y.get_shape()
+	new_shape = tf.concat(0, [Ysh[:3],Xsh[3:]])
+	return tf.reshape(Y, new_shape)
 
 
 def get_complex_basis_functions(filter_size, order):
@@ -529,3 +292,12 @@ def get_complex_basis_functions(filter_size, order):
 	I = np.sin(order*theta)
 	I = to_constant_float(I/(np.sum(I**2)+1e-6))
 	return tf.reshape(R, tf.pack([k,k,1,1])), tf.reshape(I, tf.pack([k,k,1,1]))
+
+
+def expand_ba(value, n_before, n_after):
+	"""Expand tensor with 1D n_before and n_after"""
+	for __ in xrange(n_before):
+		value = tf.expand_dims(value, 0)
+	for __ in xrange(n_after):
+		value = tf.expand_dims(value, -1)
+	return value
