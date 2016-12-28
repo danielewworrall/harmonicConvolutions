@@ -58,7 +58,7 @@ def create_opt_data(opt):
 		opt['n_filters'] = 8
 		opt['display_step'] = 10000/(opt['batch_size']*3.)
 		opt['is_classification'] = True
-		opt['combine_train_val'] = True
+		opt['combine_train_val'] = False
 		opt['dim'] = 28
 		opt['crop_shape'] = 0
 		opt['n_channels'] = 1
