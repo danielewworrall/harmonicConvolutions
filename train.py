@@ -85,6 +85,7 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['delay'] = 8
 		opt['psi_preconditioner'] = 7.8
 		opt['filter_gain'] = 2.1
+		opt['filter_size'] = 3
 		opt['n_filters'] = 32
 		opt['momentum'] = 0.93
 		opt['display_step'] = 25

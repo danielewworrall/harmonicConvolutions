@@ -32,7 +32,8 @@ def download2FileAndExtract(url, folder, fileName):
 	print('Extracting rotated MNIST...')
 	wd = os.getcwd()
 	os.chdir(folder)
-	archive = zipfile.ZipFile(zipFileName, mode='r')
+
+	archive = zipfile.ZipFile('.'+fileName, mode='r')
 	archive.extractall()
 	archive.close()
 	os.chdir(wd)
