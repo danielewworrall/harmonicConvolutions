@@ -4,6 +4,7 @@ import time
 import numpy as np
 import scipy as sp
 
+import progressbar
 import tensorflow as tf
 
 from io_helpers import *
@@ -183,10 +184,10 @@ def loop(mode, sess, opt, data, tf_nodes, step=0):
 	Y = data[mode+'_y']
 	is_training = (mode=='train')
 	n_GPUs = len(opt['deviceIdxs'])
-	generator = minibatcher(X, Y, n_GPUs*opt['batch_size'],
-							shuffle=is_training, augment=opt['augment'],
-							img_shape=(opt['dim'], opt['dim']),
-							crop_shape=opt['crop_shape'])
+	generator = minibatcher(X, Y, n_GPUs*opt['batch_size'], shuffle=is_training,
+									augment=opt['augment'],
+									img_shape=(opt['dim'],opt['dim'],opt['n_channels']),
+									crop_shape=opt['aug_crop'])
 	cost_total = 0.
 	acc_total = 0.
 	for i, batch in enumerate(generator):

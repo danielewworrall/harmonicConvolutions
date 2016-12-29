@@ -32,9 +32,7 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	with tf.device(device):
 		bias = tf.get_variable('b7', shape=[opt['n_classes']],
 							   initializer=tf.constant_initializer(1e-2))
-
-		size = opt['dim'] - 2*opt['crop_shape']
-		x = tf.reshape(x, shape=[bs,size,size,1,1,nch])
+		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,nch])
 	
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
@@ -84,8 +82,7 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 		bgap = tf.get_variable('bfc', shape=[opt['n_classes']],
 									  initializer=tf.constant_initializer(1e-2))
 
-		size = opt['dim'] - 2*opt['crop_shape']
-		x = tf.reshape(x, shape=[bs,size,size,1,1,opt['n_channels']])
+		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
 	
 	# Convolutional Layers
 	res1 = lite.conv(x, nf, fs, padding='SAME', name='in', device=device)
