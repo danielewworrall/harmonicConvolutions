@@ -90,17 +90,17 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	# Convolutional Layers
 	res1 = lite.conv(x, nf, fs, padding='SAME', name='in', device=device)
 	for i in xrange(N):
-		name = 'r1_'+str(N)
+		name = 'r1_'+str(i)
 		res1 = lite.res(res1, nf, fs, 2, train_phase, name=name, device=device)
 	res2 = lite.mp(res1, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp1')
 	
 	for i in xrange(N):
-		name = 'r2_'+str(N)
+		name = 'r2_'+str(i)
 		res2 = lite.res(res2, fg*nf, fs, 2, train_phase, name=name, device=device)
 	res3 = lite.mp(res2, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp2')
 	
 	for i in xrange(N):
-		name = 'r3_'+str(N)
+		name = 'r3_'+str(i)
 		res3 = lite.res(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=device)
 	res4 = lite.mp(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
 
