@@ -4,7 +4,6 @@ import time
 import numpy as np
 import scipy as sp
 
-import progressbar
 import tensorflow as tf
 
 from io_helpers import *
