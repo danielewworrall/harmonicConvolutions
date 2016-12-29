@@ -87,6 +87,7 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['filter_gain'] = 2
 		opt['filter_size'] = 3
 		opt['n_filters'] = 4*10	# Wide ResNet
+		opt['resnet_block_multiplicity'] = 3
 		opt['momentum'] = 0.93
 		opt['display_step'] = 25
 		opt['is_classification'] = True

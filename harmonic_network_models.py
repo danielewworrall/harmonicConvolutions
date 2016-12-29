@@ -75,7 +75,7 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	fg = opt['filter_gain']
 	bs = opt['batch_size']
 	fs = opt['filter_size']
-	N = 3
+	N = opt['resnet_block_multiplicity']
 	
 	with tf.device(device):
 		initializer = tf.contrib.layers.variance_scaling_initializer()
