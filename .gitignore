@@ -12,3 +12,4 @@ bsd/
 *.npz
 *.npy
 rotated_mnist/
+cifar/
