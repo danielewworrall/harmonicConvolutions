@@ -1,6 +1,7 @@
 import sys
 import os
 import numpy as np
+import tensorflow as tf
 
 from model_assembly_train import build_all_and_train
 from io_helpers import load_dataset, download_dataset
@@ -49,6 +50,7 @@ def create_opt_data(opt):
 		opt['n_epochs'] = 200
 		opt['batch_size'] = 46
 		opt['lr']  = 0.0076
+		opt['optimizer'] = tf.train.AdamOptimizer
 		opt['momentum'] = 0.93
 		opt['std_mult'] = 0.7
 		opt['delay'] = 12
@@ -79,10 +81,11 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['aug_crop'] = 3
 		opt['n_channels'] = 3
 		opt['n_classes'] = 10 
-		opt['n_epochs'] = 80
+		opt['n_epochs'] = 250
 		opt['batch_size'] = 32
 		opt['lr']  = 0.01
-		opt['std_mult'] = 0.7
+		opt['optimizer'] = tf.train.AdamOptimizer
+		opt['std_mult'] = 0.4
 		opt['delay'] = 8
 		opt['psi_preconditioner'] = 7.8
 		opt['filter_gain'] = 2

@@ -133,7 +133,11 @@ def get_io_placeholders(opt):
 
 def build_optimizer(cost, lr, opt):
 	"""Apply the psi_preconditioner"""
-	optim = tf.train.AdamOptimizer(learning_rate=lr)
+	#optim = tf.train.AdamOptimizer(learning_rate=lr)
+	if opt['optimizer'] == tf.train.MomentumOptimizer:
+		optim = opt['optimizer'](lr, opt['momentum'], use_nesterov=True)
+	else:
+		optim = opt['optimizer'](lr)
 	grads_and_vars = optim.compute_gradients(cost)
 	modified_gvs = []
 	for g, v in grads_and_vars:
