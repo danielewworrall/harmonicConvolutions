@@ -99,7 +99,8 @@ def h_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-4, name='hbn',
 	"""
 	with tf.name_scope(name) as scope:
 		magnitude = sum_magnitudes(X, eps)
-		Rb = batch_norm(magnitude, train_phase, decay=decay, name=name, device=device)
+		Rb = batch_norm(magnitude, train_phase, decay=decay, name=name,
+							 device=device)
 		c = tf.div(fnc(Rb), magnitude)
 		return c*X
 
@@ -116,7 +117,7 @@ def batch_norm(X, train_phase, decay=0.99, name='batchNorm', device='/cpu:0'):
 	batch-normalization-in-tensorflow"""
 	n_out = X.get_shape().as_list()[-3:]
 	
-	with tf.name_scope as scope:
+	with tf.name_scope(name) as scope:
 		with tf.device(device):
 			beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=n_out,
 										  initializer=tf.constant_initializer(0.0))
