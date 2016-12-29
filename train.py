@@ -54,7 +54,7 @@ def create_opt_data(opt):
 		opt['delay'] = 12
 		opt['psi_preconditioner'] = 7.8
 		opt['filter_gain'] = 2
-		opt['filter_size'] = 3
+		opt['filter_size'] = 3	# <<<< this should be 5!!!!!!!!!!!!!!!!
 		opt['n_filters'] = 8
 		opt['display_step'] = 10000/(opt['batch_size']*3.)
 		opt['is_classification'] = True
@@ -84,7 +84,7 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['std_mult'] = 0.7
 		opt['delay'] = 8
 		opt['psi_preconditioner'] = 7.8
-		opt['filter_gain'] = 2.1
+		opt['filter_gain'] = 2
 		opt['filter_size'] = 3
 		opt['n_filters'] = 32
 		opt['momentum'] = 0.93

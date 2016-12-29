@@ -196,7 +196,8 @@ def loop(mode, sess, opt, data, tf_nodes, step=0):
 		else:
 			cost_, acc_ = sess.run([tf_nodes['loss'], tf_nodes['accuracy']], feed_dict=fd)
 		if step % opt['display_step'] == 0:
-			print('  ' + mode + ' Acc.: %f' % acc_)
+			sys.stdout.write('  ' + mode + ' Acc.: %f\r' % acc_)
+			sys.stdout.flush()
 		cost_total += cost_
 		acc_total += acc_
 		step += 1
@@ -273,8 +274,10 @@ def construct_model_and_optimizer(opt, tf_nodes):
 
 		apply_gradient_op = optim.apply_gradients(grads)
 		train_op = tf.group(apply_gradient_op)
-		loss = tf.reduce_mean(tf.concat(0, lossesPerGPU))
-		accuracy = tf.reduce_mean(tf.concat(0, accuracyPerGPU))
+		loss = tf.reduce_mean(tf.pack(lossesPerGPU, axis=0))
+		accuracy = tf.reduce_mean(tf.pack(accuracyPerGPU, axis=0))
+		#loss = lossesPerGPU[0]
+		#accuracy = accuracyPerGPU[0]
 	return loss, accuracy, train_op
 
 
