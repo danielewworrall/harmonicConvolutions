@@ -18,22 +18,7 @@ def conv(X, W, strides, padding, name):
 	return tf.nn.conv2d(X, W, strides=strides, padding=padding, name=name)
 
 
-def h_conv(X, shape, strides=(1,1,1,1), padding='VALID', phase=True,
-				max_order=1, stddev=0.4, name='N', device='/cpu:0'):
-	"""EXPERIMENTAL"""
-	d = device
-	mo = max_order
-	from harmonic_network_helpers import get_weights_dict, get_phase_dict
-	Q = get_weights_dict(shape, mo, std_mult=stddev, name='W'+name, device=d)
-	P = None
-	if phase == True:
-		P = get_phase_dict(shape[2], shape[3], mo, name='P'+name, device=d)
-	W = get_filters(Q, filter_size=shape[0], P=P)
-	R = h_conv_(X, W, strides=strides, padding=padding, max_order=mo, name=name)
-	return R
-
-
-def h_conv_(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
+def h_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 	"""Inter-order (cross-stream) convolutions can be implemented as single
 	convolutions. For this we store data as 6D tensors and filters as 8D
 	tensors, at convolution, we reshape down to 4D tensors and expand again.
@@ -112,10 +97,11 @@ def h_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-4, name='hbn',
 	eps: regularization since grad |Z| is infinite at zero (default 1e-4)
 	name: (default complexBatchNorm)
 	"""
-	magnitude = sum_magnitudes(X, eps)
-	Rb = batch_norm(magnitude, train_phase, decay=decay, name=name, device=device)
-	c = tf.div(fnc(Rb), magnitude)
-	return c*X
+	with tf.name_scope(name) as scope:
+		magnitude = sum_magnitudes(X, eps)
+		Rb = batch_norm(magnitude, train_phase, decay=decay, name=name, device=device)
+		c = tf.div(fnc(Rb), magnitude)
+		return c*X
 
 
 def batch_norm(X, train_phase, decay=0.99, name='batchNorm', device='/cpu:0'):
@@ -130,17 +116,18 @@ def batch_norm(X, train_phase, decay=0.99, name='batchNorm', device='/cpu:0'):
 	batch-normalization-in-tensorflow"""
 	n_out = X.get_shape().as_list()[-3:]
 	
-	with tf.device(device):
-		beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=n_out,
-			initializer=tf.constant_initializer(0.0))
-		gamma = tf.get_variable(name+'_gamma', dtype=tf.float32, shape=n_out,
-			initializer=tf.constant_initializer(1.0))
-		pop_mean = tf.get_variable(name+'_pop_mean', dtype=tf.float32, shape=n_out,
-			trainable=False)
-		pop_var = tf.get_variable(name+'_pop_var', dtype=tf.float32, shape=n_out,
-			trainable=False)
-		batch_mean, batch_var = tf.nn.moments(X, [0,1,2], name=name + 'moments')
-	ema = tf.train.ExponentialMovingAverage(decay=decay)
+	with tf.name_scope as scope:
+		with tf.device(device):
+			beta = tf.get_variable(name+'_beta', dtype=tf.float32, shape=n_out,
+										  initializer=tf.constant_initializer(0.0))
+			gamma = tf.get_variable(name+'_gamma', dtype=tf.float32, shape=n_out,
+											initializer=tf.constant_initializer(1.0))
+			pop_mean = tf.get_variable(name+'_pop_mean', dtype=tf.float32,
+												shape=n_out, trainable=False)
+			pop_var = tf.get_variable(name+'_pop_var', dtype=tf.float32,
+											  shape=n_out, trainable=False)
+			batch_mean, batch_var = tf.nn.moments(X, [0,1,2], name=name+'moments')
+		ema = tf.train.ExponentialMovingAverage(decay=decay)
 
 	def mean_var_with_update():
 		ema_apply_op = ema.apply([batch_mean, batch_var])

@@ -276,8 +276,6 @@ def construct_model_and_optimizer(opt, tf_nodes):
 		train_op = tf.group(apply_gradient_op)
 		loss = tf.reduce_mean(tf.pack(lossesPerGPU, axis=0))
 		accuracy = tf.reduce_mean(tf.pack(accuracyPerGPU, axis=0))
-		#loss = lossesPerGPU[0]
-		#accuracy = accuracyPerGPU[0]
 	return loss, accuracy, train_op
 
 

@@ -8,6 +8,8 @@ helper functions in tensorflow.
 """
 import tensorflow as tf
 
+import harmonic_network_lite as lite
+
 from harmonic_network_helpers import *
 from harmonic_network_ops import *
 
@@ -68,56 +70,43 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 
 def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
-	# Sure layers weight & bias
-	order = 1
+	# Abbreviations
 	nf = opt['n_filters']
-	nf2 = int(nf*opt['filter_gain'])
-	nf3 = int(nf*(opt['filter_gain']**2.))
+	fg = opt['filter_gain']
 	bs = opt['batch_size']
 	fs = opt['filter_size']
-	nch = opt['n_channels']
-	ncl = opt['n_classes']
-	tp = train_phase
-	d = device
+	N = 3
 	
-	sm = opt['std_mult']
 	with tf.device(device):
-		bias = tf.get_variable('b7', shape=[opt['n_classes']],
-							   initializer=tf.constant_initializer(1e-2))
+		initializer = tf.contrib.layers.variance_scaling_initializer()
+		Wgap = tf.get_variable('Wfc', shape=[fg*fg*nf,opt['n_classes']],
+									  initializer=initializer)
+		bgap = tf.get_variable('bfc', shape=[opt['n_classes']],
+									  initializer=tf.constant_initializer(1e-2))
 
 		size = opt['dim'] - 2*opt['crop_shape']
-		x = tf.reshape(x, shape=[bs,size,size,1,1,nch])
+		x = tf.reshape(x, shape=[bs,size,size,1,1,opt['n_channels']])
 	
 	# Convolutional Layers
-	with tf.name_scope('block1') as scope:
-		cv1 = h_conv(x, [fs,fs,nch,nf], padding='SAME', name='1', device=d)
-		cv1 = h_nonlin(cv1, tf.nn.relu, name='1', device=d)
-		
-		cv2 = h_conv(cv1, [fs,fs,nf,nf], padding='SAME', name='2', device=d)
-		cv2 = h_batch_norm(cv2, tf.nn.relu, tp, name='bn1', device=d)
+	res1 = lite.conv(x, nf, fs, padding='SAME', name='in', device=device)
+	for i in xrange(N):
+		name = 'r1_'+str(N)
+		res1 = lite.res(res1, nf, fs, 2, train_phase, name=name, device=device)
+	res2 = lite.mp(res1, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp1')
+	
+	for i in xrange(N):
+		name = 'r2_'+str(N)
+		res2 = lite.res(res2, fg*nf, fs, 2, train_phase, name=name, device=device)
+	res3 = lite.mp(res2, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp2')
+	
+	for i in xrange(N):
+		name = 'r3_'+str(N)
+		res3 = lite.res(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=device)
+	res4 = lite.mp(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
 
-	with tf.name_scope('block2') as scope:
-		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv3 = h_conv(cv2, [fs,fs,nf,nf2], padding='SAME', name='3', device=d)
-		cv3 = h_nonlin(cv3, tf.nn.relu, name='3', device=d)
-		
-		cv4 = h_conv(cv3, [fs,fs,nf2,nf2], padding='SAME', name='4', device=d)
-		cv4 = h_batch_norm(cv4, tf.nn.relu, tp, name='bn2', device=d)
-
-	with tf.name_scope('block3') as scope:
-		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv5 = h_conv(cv4, [fs,fs,nf2,nf3], padding='SAME', name='5', device=d)
-		cv5 = h_nonlin(cv5, tf.nn.relu, name='5', device=d)
-		
-		cv6 = h_conv(cv5, [fs,fs,nf3,nf3], padding='SAME', name='6', device=d)
-		cv6 = h_batch_norm(cv6, tf.nn.relu, tp, name='bn3', device=d)
-
-	# LAYER 7
-	with tf.name_scope('block4') as scope:
-		cv7 = h_conv(cv6, [fs,fs,nf3,ncl], padding='SAME', phase=False,
-					 name='7', device=d)
-		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2,3,4])
-		return tf.nn.bias_add(cv7, bias)
+	with tf.name_scope('gap') as scope:
+		gap = tf.reduce_mean(sum_magnitudes(res4), reduction_indices=[1,2,3,4])
+		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap)
 
 
 def deep_bsd(opt, x, train_phase, device='/cpu:0'):
