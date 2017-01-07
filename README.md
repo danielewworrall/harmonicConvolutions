@@ -18,13 +18,13 @@ ____
 
 To run the MNIST example from the paper, navigate to the parent directory of this repo and type:
 ```python
-python train.py 0 mnist deep_stable <yourDataDirectory>
+python train.py 0 mnist deep_mnist <yourDataDirectory>
 ```
 Here, `<yourDataDirectory>` is the folder into which the datasets will be downloaded, the `0` means we will be using GPU 0, `mnist` signifies the dataset to train on, and `deep_stable` the network mdoel as defined in `harmonic_network_models.py`.
 You can train on more than one GPU by making the first argument a comma-separated list. For example `0,1,2` would run the training code on the first three GPUs of a system.
 
 Dependencies:
-* we require tensorflow 0.11 as documented <a href="https://www.tensorflow.org/versions/r0.11/api_docs/index.html">here</a>. Newer versions of the API may be supported in future.
+* we require tensorflow 0.12 as documented <a href="https://www.tensorflow.org/versions/r0.12/api_docs/index.html">here</a>. Newer versions of the API may be supported in future and older versions are not supported.
 
 Please note that
 * this is work in progress, so pull often!
