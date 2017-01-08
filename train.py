@@ -41,6 +41,7 @@ def create_opt_data(opt):
 		test = np.load(mnist_dir + '/rotated_test.npz')
 		data = {}
 		#dataset choice
+		opt['aug_crop'] = 0 #'crop margin'
 		data['train_x'] = train['x']
 		data['train_y'] = train['y']
 		data['valid_x'] = valid['x']

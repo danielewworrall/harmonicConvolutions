@@ -342,7 +342,9 @@ def train_model(opt, data, tf_nodes):
 	summary = tf.summary.FileWriter(opt['log_path'], sess.graph)
 	print('Summaries constructed...')
 	
-	sess.run(init)
+	sess.run(init, feed_dict={
+		tf_nodes['train_phase'] : True 
+	})
 	saver = tf.train.Saver()
 	start = time.time()
 	epoch = 0
