@@ -329,7 +329,7 @@ def train_model(opt, data, tf_nodes):
 	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
 
 	# Initializing the variables
-	init = tf.initialize_all_variables()
+	init = tf.global_variables_initializer()
 	if opt['combine_train_val']:
 		data['train_x'] = np.vstack([data['train_x'], data['valid_x']])
 		data['train_y'] = np.hstack([data['train_y'], data['valid_y']])
@@ -339,7 +339,7 @@ def train_model(opt, data, tf_nodes):
 	if n_GPUs == 1:
 		config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
 	sess = tf.Session(config=config)
-	summary = tf.train.SummaryWriter(opt['log_path'], sess.graph)
+	summary = tf.summary.FileWriter(opt['log_path'], sess.graph)
 	print('Summaries constructed...')
 	
 	sess.run(init)
@@ -395,7 +395,7 @@ def create_scalar_summary(name):
 	"""Create a scalar summary placeholder and op"""
 	ss = []
 	ss.append(tf.placeholder(tf.float32, [], name=name))
-	ss.append(tf.scalar_summary(name+'_summary', ss[0]))
+	ss.append(tf.summary.scalar(name+'_summary', ss[0]))
 	return ss
 
 def config_init():
