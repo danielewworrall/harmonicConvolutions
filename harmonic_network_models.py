@@ -59,7 +59,7 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	with tf.name_scope('block4') as scope:
 		cv7 = hn_lite.conv(cv6, ncl, fs, padding='SAME', phase=False,
 					 name='7', device=d)
-		cv7 = tf.reduce_mean(hn_lite.sumMags(cv7), reduction_indices=[1,2,3,4])
+		cv7 = tf.reduce_mean(hn_lite.sum_mags(cv7), reduction_indices=[1,2,3,4])
 		return tf.nn.bias_add(cv7, bias) 
 
 
@@ -99,7 +99,7 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	res4 = hn_lite.mp(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
 
 	with tf.name_scope('gap') as scope:
-		gap = tf.reduce_mean(hn_lite.sumMags(res4), reduction_indices=[1,2,3,4])
+		gap = tf.reduce_mean(hn_lite.sum_mags(res4), reduction_indices=[1,2,3,4])
 		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap)
 
 
