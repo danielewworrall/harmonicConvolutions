@@ -38,8 +38,71 @@ Todos which we have completed:
 Todos which we are currently working on:
 - [ ] Providing easy training code for our BSD experiments
 - [ ] Providing multi-threaded reads for data-feeding
-- [ ] API simplication
-- [ ] Longer tutorial
+- [x] API simplication
+- [x] Longer tutorial
 
 # HNet Tensorflow Tutorial
-To come
+Athough it is possible to use the low-level API exposed in 'harmonic_network_ops.py', we recommend using the new 'lite' API which provides an interface close to tensorflow's own. In this section, we will show how to build a model for MNIST and explain how each operation works and what we need to be careful of. We would like to note at the outset, that no special optimiser or training procedure is needed if the network is set up correctly.
+To get started with reproducing the network from the paper, we import the relevant functions as follows:
+```python
+import harmonic_network_lite as hn_lite
+```
+We can then construct an MNIST model as easily as this (We go through this code below):
+```python
+def deep_mnist(opt, x, train_phase, device='/cpu:0'):
+	order = 1 #We do not use high-order frequencies due to instabilities
+	# Number of Filters
+	nf = opt['n_filters']
+	nf2 = int(nf*opt['filter_gain'])
+	nf3 = int(nf*(opt['filter_gain']**2.))
+	bs = opt['batch_size']
+	fs = opt['filter_size']
+	nch = opt['n_channels']
+	ncl = opt['n_classes']
+	d = device
+	sm = opt['std_mult']
+
+	# Create bias for final layer
+	with tf.device(device):
+		bias = tf.get_variable('b7', shape=[opt['n_classes']],
+							   initializer=tf.constant_initializer(1e-2))
+		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,nch])
+	
+	# Convolutional Layers with pooling
+	with tf.name_scope('block1') as scope:
+		cv1 = hn_lite.conv(x, nf, fs, padding='SAME', name='1', device=d)
+		cv1 = hn_lite.nl(cv1, tf.nn.relu, name='1', device=d)
+		
+		cv2 = hn_lite.conv(cv1, nf, fs, padding='SAME', name='2', device=d)
+		cv2 = hn_lite.bn(cv2, train_phase, name='bn1', device=d)
+
+	with tf.name_scope('block2') as scope:
+		cv2 = hn_lite.mp(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv3 = hn_lite.conv(cv2, nf2, fs, padding='SAME', name='3', device=d)
+		cv3 = hn_lite.nl(cv3, tf.nn.relu, name='3', device=d)
+		
+		cv4 = hn_lite.conv(cv3, nf2, fs, padding='SAME', name='4', device=d)
+		cv4 = hn_lite.bn(cv4, train_phase, name='bn2', device=d)
+
+	with tf.name_scope('block3') as scope:
+		cv4 = hn_lite.mp(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv5 = hn_lite.conv(cv4, nf3, fs, padding='SAME', name='5', device=d)
+		cv5 = hn_lite.nl(cv5, tf.nn.relu, name='5', device=d)
+		
+		cv6 = hn_lite.conv(cv5, nf3, fs, padding='SAME', name='6', device=d)
+		cv6 = hn_lite.bn(cv6, train_phase, name='bn3', device=d)
+
+	# Final Layer
+	with tf.name_scope('block4') as scope:
+		print('block4')
+		cv7 = hn_lite.conv(cv6, ncl, fs, padding='SAME', phase=False,
+					 name='7', device=d)
+		real = hn_lite.sum_mags(cv7)
+		cv7 = tf.reduce_mean(real, reduction_indices=[1,2,3,4])
+		return tf.nn.bias_add(cv7, bias) 
+```
+The most important thing to note is what dimensionality each tensor in this graph has. Ignoring the final bias-add, our network has the following structure and data-flow:
+
+![MNIST H-Net Model](/docs/images/mnist_illustration.png)
+
+...
