@@ -3,6 +3,7 @@
 > Please read the following information carefully and let us know if anything is missing/you have discovered a bug. We always welcome your feedback!
 
 This folder contains the basic material to construct Harmonic Networks (HNets). Please see our <a href="http://visual.cs.ucl.ac.uk/pubs/harmonicNets/index.html"> project page </a> for more details.
+* `harmonic_network_lite.py` contains the new simple HNet API. These functions are most useful for constructing custom networks and do not depend on any special training routine or optimiser.
 * `train.py` is the main entry point for our code.
 * `model_assembly_train.py` contains our multi-gpu trainig routines that serve as an example of how our functions can interface with regular tensorflow code.
 * `io_helpers.py` contains our code for downloading, processing and batching datasets.
@@ -42,7 +43,8 @@ Todos which we are currently working on:
 - [x] Longer tutorial
 
 # HNet Tensorflow Tutorial
-Athough it is possible to use the low-level API exposed in 'harmonic_network_ops.py', we recommend using the new 'lite' API which provides an interface close to tensorflow's own. In this section, we will show how to build a model for MNIST and explain how each operation works and what we need to be careful of. We would like to note at the outset, that no special optimiser or training procedure is needed if the network is set up correctly.
+Athough it is possible to use the low-level API exposed in 'harmonic_network_ops.py', we recommend using the new 'lite' API, which provides an interface close to tensorflow's own. In this section, we will show how to build a model for MNIST and explain how each operation works and what we need to be careful of. We would like to note at the outset that no special optimiser or training procedure is needed if the network is set up correctly.
+
 To get started with reproducing the network from the paper, we import the relevant functions as follows:
 ```python
 import harmonic_network_lite as hn_lite
@@ -102,6 +104,7 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 		return tf.nn.bias_add(cv7, bias) 
 ```
 The most important thing to note is what dimensionality each tensor in this graph has. Ignoring the final bias-add, our network has the following structure and data-flow:
+
 
 ![MNIST H-Net Model](/docs/images/mnist_illustration.png)
 
