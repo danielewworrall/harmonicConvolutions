@@ -24,8 +24,8 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	nch = opt['n_channels']
 	ncl = opt['n_classes']
 	d = device
-	
 	sm = opt['std_mult']
+
 	with tf.device(device):
 		bias = tf.get_variable('b7', shape=[opt['n_classes']],
 							   initializer=tf.constant_initializer(1e-2))

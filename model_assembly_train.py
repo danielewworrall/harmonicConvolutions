@@ -241,7 +241,8 @@ def construct_model_and_optimizer(opt, tf_nodes):
 	cost, accuracy, training_op
 	"""
 	if len(opt['deviceIdxs']) == 1:
-		pred = opt['model'](opt, tf_nodes['io']['x'][0], tf_nodes['train_phase'])
+		dev = '/gpu:%d' % opt['deviceIdxs'][0]
+		pred = opt['model'](opt, tf_nodes['io']['x'][0], tf_nodes['train_phase'], device=dev)
 		loss = get_loss(opt, pred, tf_nodes['io']['y'][0])
 		accuracy = get_evaluation(pred, tf_nodes['io']['y'][0], opt)
 		train_op = build_optimizer(loss, tf_nodes['learning_rate'], opt)
@@ -259,7 +260,9 @@ def construct_model_and_optimizer(opt, tf_nodes):
 				print('Building Model on GPU: %d' % g)
 				with tf.name_scope('%s_%d' % (opt['model'].__name__, 0)) as scope:
 					# Forward pass
-					pred = opt['model'](opt, tf_nodes['io']['x'][linearGPUIdx], tf_nodes['train_phase'])
+					dev = '/gpu:%d' % g
+					pred = opt['model'](opt, tf_nodes['io']['x'][linearGPUIdx],
+						tf_nodes['train_phase'], device = dev)
 					loss = get_loss(opt, pred, tf_nodes['io']['y'][linearGPUIdx])
 					accuracy = get_evaluation(pred, tf_nodes['io']['y'][linearGPUIdx], opt)
 					# Reuse variables for the next tower
