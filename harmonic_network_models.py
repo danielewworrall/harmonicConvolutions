@@ -8,7 +8,7 @@ helper functions in tensorflow.
 """
 import tensorflow as tf
 
-import harmonic_network_lite as lite
+import harmonic_network_lite as hn_lite
 
 from harmonic_network_helpers import *
 
@@ -33,33 +33,33 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
-		cv1 = lite.conv(x, nf, fs, padding='SAME', name='1', device=d)
-		cv1 = lite.nl(cv1, tf.nn.relu, name='1', device=d)
+		cv1 = hn_lite.conv(x, nf, fs, padding='SAME', name='1', device=d)
+		cv1 = hn_lite.nl(cv1, tf.nn.relu, name='1', device=d)
 		
-		cv2 = lite.conv(cv1, nf, fs, padding='SAME', name='2', device=d)
-		cv2 = lite.bn(cv2, train_phase, name='bn1', device=d)
+		cv2 = hn_lite.conv(cv1, nf, fs, padding='SAME', name='2', device=d)
+		cv2 = hn_lite.bn(cv2, train_phase, name='bn1', device=d)
 
 	with tf.name_scope('block2') as scope:
-		cv2 = lite.mp(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv3 = lite.conv(cv2, nf2, fs, padding='SAME', name='3', device=d)
-		cv3 = lite.nl(cv3, tf.nn.relu, name='3', device=d)
+		cv2 = hn_lite.mp(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv3 = hn_lite.conv(cv2, nf2, fs, padding='SAME', name='3', device=d)
+		cv3 = hn_lite.nl(cv3, tf.nn.relu, name='3', device=d)
 		
-		cv4 = lite.conv(cv3, nf2, fs, padding='SAME', name='4', device=d)
-		cv4 = lite.bn(cv4, train_phase, name='bn2', device=d)
+		cv4 = hn_lite.conv(cv3, nf2, fs, padding='SAME', name='4', device=d)
+		cv4 = hn_lite.bn(cv4, train_phase, name='bn2', device=d)
 
 	with tf.name_scope('block3') as scope:
-		cv4 = lite.mp(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv5 = lite.conv(cv4, nf3, fs, padding='SAME', name='5', device=d)
-		cv5 = lite.nl(cv5, tf.nn.relu, name='5', device=d)
+		cv4 = hn_lite.mp(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv5 = hn_lite.conv(cv4, nf3, fs, padding='SAME', name='5', device=d)
+		cv5 = hn_lite.nl(cv5, tf.nn.relu, name='5', device=d)
 		
-		cv6 = lite.conv(cv5, nf3, fs, padding='SAME', name='6', device=d)
-		cv6 = lite.bn(cv6, train_phase, name='bn3', device=d)
+		cv6 = hn_lite.conv(cv5, nf3, fs, padding='SAME', name='6', device=d)
+		cv6 = hn_lite.bn(cv6, train_phase, name='bn3', device=d)
 
 	# LAYER 7
 	with tf.name_scope('block4') as scope:
-		cv7 = lite.conv(cv6, ncl, fs, padding='SAME', phase=False,
+		cv7 = hn_lite.conv(cv6, ncl, fs, padding='SAME', phase=False,
 					 name='7', device=d)
-		cv7 = tf.reduce_mean(lite.sm(cv7), reduction_indices=[1,2,3,4])
+		cv7 = tf.reduce_mean(hn_lite.sumMags(cv7), reduction_indices=[1,2,3,4])
 		return tf.nn.bias_add(cv7, bias) 
 
 
@@ -82,24 +82,24 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
 	
 	# Convolutional Layers
-	res1 = lite.conv(x, nf, fs, padding='SAME', name='in', device=device)
+	res1 = hn_lite.conv(x, nf, fs, padding='SAME', name='in', device=device)
 	for i in xrange(N):
 		name = 'r1_'+str(i)
-		res1 = lite.res(res1, nf, fs, 2, train_phase, name=name, device=device)
-	res2 = lite.mp(res1, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp1')
+		res1 = hn_lite.res(res1, nf, fs, 2, train_phase, name=name, device=device)
+	res2 = hn_lite.mp(res1, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp1')
 	
 	for i in xrange(N):
 		name = 'r2_'+str(i)
-		res2 = lite.res(res2, fg*nf, fs, 2, train_phase, name=name, device=device)
-	res3 = lite.mp(res2, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp2')
+		res2 = hn_lite.res(res2, fg*nf, fs, 2, train_phase, name=name, device=device)
+	res3 = hn_lite.mp(res2, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp2')
 	
 	for i in xrange(N):
 		name = 'r3_'+str(i)
-		res3 = lite.res(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=device)
-	res4 = lite.mp(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
+		res3 = hn_lite.res(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=device)
+	res4 = hn_lite.mp(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
 
 	with tf.name_scope('gap') as scope:
-		gap = tf.reduce_mean(sum_magnitudes(res4), reduction_indices=[1,2,3,4])
+		gap = tf.reduce_mean(hn_lite.sumMags(res4), reduction_indices=[1,2,3,4])
 		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap)
 
 
