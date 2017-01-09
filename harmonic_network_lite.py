@@ -45,6 +45,15 @@ def mp(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mp'):
 	with tf.name_scope(name) as scope:
 		return mean_pooling(x, ksize=ksize, strides=strides)
 
+def sm(X, eps=1e-4, keep_dims=True):
+	"""Sum the magnitudes of each of the complex feature maps in X.
+	
+	Output U = sum_i |X_i|
+	
+	X: dict of channels {rotation order: (real, imaginary)}
+	eps: regularization since grad |Z| is infinite at zero (default 1e-4)
+	"""
+	return sum_magnitudes(X, eps, keep_dims=True)
 
 def res(x, out_shape, ksize, depth, train_phase, fnc=tf.nn.relu, max_order=1,
 		  phase=True, name='res', device='/cpu:0'):

@@ -11,8 +11,6 @@ import tensorflow as tf
 import harmonic_network_lite as lite
 
 from harmonic_network_helpers import *
-from harmonic_network_ops import *
-
 
 def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
@@ -25,7 +23,6 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	fs = opt['filter_size']
 	nch = opt['n_channels']
 	ncl = opt['n_classes']
-	tp = train_phase
 	d = device
 	
 	sm = opt['std_mult']
@@ -37,32 +34,32 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	# Convolutional Layers
 	with tf.name_scope('block1') as scope:
 		cv1 = lite.conv(x, nf, fs, padding='SAME', name='1', device=d)
-		cv1 = h_nonlin(cv1, tf.nn.relu, name='1', device=d)
+		cv1 = lite.nl(cv1, tf.nn.relu, name='1', device=d)
 		
 		cv2 = lite.conv(cv1, nf, fs, padding='SAME', name='2', device=d)
-		cv2 = h_batch_norm(cv2, tf.nn.relu, tp, name='bn1', device=d)
+		cv2 = lite.bn(cv2, train_phase, name='bn1', device=d)
 
 	with tf.name_scope('block2') as scope:
-		cv2 = mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv2 = lite.mp(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv3 = lite.conv(cv2, nf2, fs, padding='SAME', name='3', device=d)
-		cv3 = h_nonlin(cv3, tf.nn.relu, name='3', device=d)
+		cv3 = lite.nl(cv3, tf.nn.relu, name='3', device=d)
 		
 		cv4 = lite.conv(cv3, nf2, fs, padding='SAME', name='4', device=d)
-		cv4 = h_batch_norm(cv4, tf.nn.relu, tp, name='bn2', device=d)
+		cv4 = lite.bn(cv4, train_phase, name='bn2', device=d)
 
 	with tf.name_scope('block3') as scope:
-		cv4 = mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv4 = lite.mp(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv5 = lite.conv(cv4, nf3, fs, padding='SAME', name='5', device=d)
-		cv5 = h_nonlin(cv5, tf.nn.relu, name='5', device=d)
+		cv5 = lite.nl(cv5, tf.nn.relu, name='5', device=d)
 		
 		cv6 = lite.conv(cv5, nf3, fs, padding='SAME', name='6', device=d)
-		cv6 = h_batch_norm(cv6, tf.nn.relu, tp, name='bn3', device=d)
+		cv6 = lite.bn(cv6, train_phase, name='bn3', device=d)
 
 	# LAYER 7
 	with tf.name_scope('block4') as scope:
 		cv7 = lite.conv(cv6, ncl, fs, padding='SAME', phase=False,
 					 name='7', device=d)
-		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1,2,3,4])
+		cv7 = tf.reduce_mean(lite.sm(cv7), reduction_indices=[1,2,3,4])
 		return tf.nn.bias_add(cv7, bias) 
 
 
