@@ -16,6 +16,7 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Sure layers weight & bias
 	order = 1
+	# Number of Filters
 	nf = opt['n_filters']
 	nf2 = int(nf*opt['filter_gain'])
 	nf3 = int(nf*(opt['filter_gain']**2.))
@@ -26,12 +27,13 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	d = device
 	sm = opt['std_mult']
 
+	# Create bias for final layer
 	with tf.device(device):
 		bias = tf.get_variable('b7', shape=[opt['n_classes']],
 							   initializer=tf.constant_initializer(1e-2))
 		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,nch])
 	
-	# Convolutional Layers
+	# Convolutional Layers with pooling
 	with tf.name_scope('block1') as scope:
 		cv1 = hn_lite.conv(x, nf, fs, padding='SAME', name='1', device=d)
 		cv1 = hn_lite.nl(cv1, tf.nn.relu, name='1', device=d)
@@ -55,11 +57,13 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 		cv6 = hn_lite.conv(cv5, nf3, fs, padding='SAME', name='6', device=d)
 		cv6 = hn_lite.bn(cv6, train_phase, name='bn3', device=d)
 
-	# LAYER 7
+	# Final Layer
 	with tf.name_scope('block4') as scope:
+		print('block4')
 		cv7 = hn_lite.conv(cv6, ncl, fs, padding='SAME', phase=False,
 					 name='7', device=d)
-		cv7 = tf.reduce_mean(hn_lite.sum_mags(cv7), reduction_indices=[1,2,3,4])
+		real = hn_lite.sum_mags(cv7)
+		cv7 = tf.reduce_mean(real, reduction_indices=[1,2,3,4])
 		return tf.nn.bias_add(cv7, bias) 
 
 
