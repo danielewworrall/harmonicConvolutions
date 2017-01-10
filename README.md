@@ -104,7 +104,7 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 		return tf.nn.bias_add(cv7, bias) 
 ```
 The most important thing to note is what dimensionality each tensor in this graph has. Ignoring the final bias-add, our network has the following structure and data-flow:
-*(Note that the dimensions shown below can be understood in words as **[batch_size, num_cols, num_rows, rotation_order, complex, num_channels]**)*
+_(Note that the dimensions shown below can be understood in words as **[batch_size, num_cols, num_rows, rotation_order, complex, num_channels]**)_
 
 
 ![MNIST H-Net Model](/docs/images/mnist_illustration.png)
