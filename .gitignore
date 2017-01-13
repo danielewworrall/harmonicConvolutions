@@ -5,7 +5,7 @@ pics/
 data/
 *.pyc
 results/
-*.png
+#*.png
 deepboundaries/
 bsd/
 *.pdf
