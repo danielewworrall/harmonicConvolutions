@@ -7,6 +7,7 @@ import scipy as sp
 import tensorflow as tf
 
 from io_helpers import *
+from io_pipelines import pipeline
 from harmonic_network_models import *
 
 #----------HELPER FUNCTIONS----------
@@ -129,6 +130,22 @@ def get_io_placeholders(opt):
 	if opt['is_bsd']:
 		io_x = tf.placeholder(tf.float32, [opt['batch_size'],None,None,3])
 		io_y = tf.placeholder(tf.float32, [opt['batch_size'],None,None,1], name='y')
+	return io_x, io_y
+
+def build_io_queues(opt, data, mode):
+	"""Build pipelines so we can take advantage of tensorflow's queues"""
+	if mode == 'train':
+		io_x, io_y = pipeline(data['train_files'], opt['batch_size'], opt['n_epochs'],
+			lambda x, y: x, y, shuffle=True)
+	else if mode == 'valid':
+		io_x, io_y = pipeline(data['valid_files'], opt['batch_size'], opt['n_epochs'],
+			lambda x, y: x, y, shuffle=False)
+	else if mode == 'test':
+		io_x, io_y = pipeline(data['test_files'], opt['batch_size'], opt['n_epochs'],
+			lambda x, y: x, y, shuffle=False)
+	else:
+		print('ERROR: build_io_queues() expect as mode one of: {train, valid, test}')
+		sys.exit(1)
 	return io_x, io_y
 
 def build_optimizer(cost, lr, opt):

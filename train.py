@@ -36,18 +36,12 @@ def create_opt_data(opt):
 			download_dataset(opt)
 		# Load dataset
 		mnist_dir = opt['data_dir'] + '/mnist_rotation_new'
-		train = np.load(mnist_dir + '/rotated_train.npz')
-		valid = np.load(mnist_dir + '/rotated_valid.npz')
-		test = np.load(mnist_dir + '/rotated_test.npz')
 		data = {}
 		#dataset choice
+		data['train_files'] = [mnist_dir + '/train.tfrecords']
+		data['valid_files'] = [mnist_dir + '/valid.tfrecords']
+		data['test_files'] = [mnist_dir + '/test.tfrecords']
 		opt['aug_crop'] = 0 #'crop margin'
-		data['train_x'] = train['x']
-		data['train_y'] = train['y']
-		data['valid_x'] = valid['x']
-		data['valid_y'] = valid['y']
-		data['test_x'] = test['x']
-		data['test_y'] = test['y']
 		opt['n_epochs'] = 200
 		opt['batch_size'] = 46
 		opt['lr']  = 0.0076
