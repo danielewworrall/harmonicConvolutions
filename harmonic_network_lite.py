@@ -9,7 +9,6 @@ import tensorflow as tf
 
 from harmonic_network_ops import *
 
-
 def conv2d(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 			 max_order=1, stddev=0.4, name='lconv', device='/cpu:0'):
 	"""Harmonic Convolution lite"""

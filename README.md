@@ -52,7 +52,7 @@ import harmonic_network_lite as hn_lite
 We can then construct an MNIST model as easily as this (We go through this code below):
 ```python
 def deep_mnist(opt, x, train_phase, device='/cpu:0'):
-	order = 1 #We do not use high-order frequencies due to instabilities
+	order = 1
 	# Number of Filters
 	nf = opt['n_filters']
 	nf2 = int(nf*opt['filter_gain'])
@@ -72,32 +72,32 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	
 	# Convolutional Layers with pooling
 	with tf.name_scope('block1') as scope:
-		cv1 = hn_lite.conv(x, nf, fs, padding='SAME', name='1', device=d)
-		cv1 = hn_lite.nl(cv1, tf.nn.relu, name='1', device=d)
+		cv1 = hn_lite.conv2d(x, nf, fs, padding='SAME', name='1', device=d)
+		cv1 = hn_lite.non_linearity(cv1, tf.nn.relu, name='1', device=d)
 		
-		cv2 = hn_lite.conv(cv1, nf, fs, padding='SAME', name='2', device=d)
-		cv2 = hn_lite.bn(cv2, train_phase, name='bn1', device=d)
+		cv2 = hn_lite.conv2d(cv1, nf, fs, padding='SAME', name='2', device=d)
+		cv2 = hn_lite.batch_norm(cv2, train_phase, name='bn1', device=d)
 
 	with tf.name_scope('block2') as scope:
-		cv2 = hn_lite.mp(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv3 = hn_lite.conv(cv2, nf2, fs, padding='SAME', name='3', device=d)
-		cv3 = hn_lite.nl(cv3, tf.nn.relu, name='3', device=d)
+		cv2 = hn_lite.mean_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv3 = hn_lite.conv2d(cv2, nf2, fs, padding='SAME', name='3', device=d)
+		cv3 = hn_lite.non_linearity(cv3, tf.nn.relu, name='3', device=d)
 		
-		cv4 = hn_lite.conv(cv3, nf2, fs, padding='SAME', name='4', device=d)
-		cv4 = hn_lite.bn(cv4, train_phase, name='bn2', device=d)
+		cv4 = hn_lite.conv2d(cv3, nf2, fs, padding='SAME', name='4', device=d)
+		cv4 = hn_lite.batch_norm(cv4, train_phase, name='bn2', device=d)
 
 	with tf.name_scope('block3') as scope:
-		cv4 = hn_lite.mp(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv5 = hn_lite.conv(cv4, nf3, fs, padding='SAME', name='5', device=d)
-		cv5 = hn_lite.nl(cv5, tf.nn.relu, name='5', device=d)
+		cv4 = hn_lite.mean_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv5 = hn_lite.conv2d(cv4, nf3, fs, padding='SAME', name='5', device=d)
+		cv5 = hn_lite.non_linearity(cv5, tf.nn.relu, name='5', device=d)
 		
-		cv6 = hn_lite.conv(cv5, nf3, fs, padding='SAME', name='6', device=d)
-		cv6 = hn_lite.bn(cv6, train_phase, name='bn3', device=d)
+		cv6 = hn_lite.conv2d(cv5, nf3, fs, padding='SAME', name='6', device=d)
+		cv6 = hn_lite.batch_norm(cv6, train_phase, name='bn3', device=d)
 
 	# Final Layer
 	with tf.name_scope('block4') as scope:
 		print('block4')
-		cv7 = hn_lite.conv(cv6, ncl, fs, padding='SAME', phase=False,
+		cv7 = hn_lite.conv2d(cv6, ncl, fs, padding='SAME', phase=False,
 					 name='7', device=d)
 		real = hn_lite.sum_mags(cv7)
 		cv7 = tf.reduce_mean(real, reduction_indices=[1,2,3,4])
