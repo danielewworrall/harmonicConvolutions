@@ -38,7 +38,7 @@ def create_opt_data(opt):
 		mnist_dir = opt['data_dir'] + '/mnist_rotation_new'
 		data = {}
 		#data feeding choice
-		opt['use_io_queues'] = False
+		opt['use_io_queues'] = True
 		if opt['use_io_queues']:
 			data['train_files'] = [mnist_dir + '/train.tfrecords']
 			data['valid_files'] = [mnist_dir + '/valid.tfrecords']

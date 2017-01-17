@@ -5,6 +5,8 @@ import urllib2
 
 import numpy as np
 
+import tensorflow as tf
+
 def read_decode(filename_string_queue):
 	 with tf.name_scope('IO') as scope:
 		reader = tf.TFRecordReader()
@@ -15,11 +17,23 @@ def read_decode(filename_string_queue):
 			features={
 			'x_raw': tf.FixedLenFeature([], tf.string),
 			'y_raw': tf.FixedLenFeature([], tf.string),
+			#x size
+			'x_shape': tf.FixedLenFeature([], tf.string),
+			#y size
+			'y_shape': tf.FixedLenFeature([], tf.string),
 			})
 		#decode (will still be a string at this point)
 		x = tf.decode_raw(features['x_raw'], tf.float32, name="decodeX")
+		x_shape = tf.reshape(tf.decode_raw(features['x_shape'], tf.int64, name='decode_x_shape'), [3])
+		x = tf.reshape(x, [28,28, 1, 1, 1])
+		#x = tf.squeeze(x) #remove singleton dimensions
 		#decode (will still be a string at this point)
 		y = tf.decode_raw(features['y_raw'], np.float32, name="decodeY")
+		y_shape = tf.reshape(tf.decode_raw(features['y_shape'], tf.int64, name='decode_y_shape'), [3])
+		#y = tf.reshape(y, [features['y_rows'], features['y_cols'], features['y_chans']])
+		y = tf.reshape(y, [1])
+		y = tf.squeeze(y) #remove singleton dimensions
+		y = tf.cast(y, tf.int64)
 		return x, y
 
 def pipeline(fileNames, batch_size, num_epochs, data_aug_function, shuffle=True):

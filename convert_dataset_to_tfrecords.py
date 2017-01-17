@@ -8,9 +8,6 @@ import tensorflow as tf
 def _int64_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
-def _int32_feature(value):
-    return tf.train.Feature(int32_list=tf.train.Int32List(value=[value]))
-
 def _bytes_feature(value):
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
@@ -20,10 +17,26 @@ def _float32_feature(value):
 def convert_write(X, Y, writer):
     x_serialised = X.astype(np.float32).tostring()
     y_serialised = Y.astype(np.float32).tostring()
-
+    #currently, we require a 3d shape for both X and Y
+    #so we add singleton dimensions as necessary 
+    x_shape = []
+    y_shape = []
+    for i in xrange(3):
+        if len(X.shape) <= i:
+            x_shape.append(1)
+        else:
+            x_shape.append(X.shape[i])
+        if len(Y.shape) <= i:
+            y_shape.append(1)
+        else:
+            y_shape.append(Y.shape[i])
+    x_shape_serialised = np.asarray(X.shape).astype(np.int64).tostring()
+    y_shape_serialised = np.asarray(Y.shape).astype(np.int64).tostring()
     example = tf.train.Example(features=tf.train.Features(feature={
     'x_raw': _bytes_feature(x_serialised),
-    'y_raw': _bytes_feature(y_serialised)}))
+    'y_raw': _bytes_feature(y_serialised),
+    'x_shape': _bytes_feature(x_shape_serialised),
+    'y_shape': _bytes_feature(y_shape_serialised),}))
 
     writer.write(example.SerializeToString())
 
