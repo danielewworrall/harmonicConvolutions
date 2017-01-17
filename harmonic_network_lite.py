@@ -10,7 +10,7 @@ import tensorflow as tf
 from harmonic_network_ops import *
 
 
-def conv(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
+def conv2d(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 			 max_order=1, stddev=0.4, name='lconv', device='/cpu:0'):
 	"""Harmonic Convolution lite"""
 	xsh = x.get_shape().as_list()
@@ -28,19 +28,19 @@ def conv(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 	return R
 
 
-def bn(x, train_phase, fnc=tf.nn.relu, decay=0.99, eps=1e-4, name='hbn',
+def batch_norm(x, train_phase, fnc=tf.nn.relu, decay=0.99, eps=1e-4, name='hbn',
 		 device='/cpu:0'):
 	"""Batch normalization for the magnitudes of X"""
 	return h_batch_norm(x, fnc, train_phase, decay=decay, eps=eps, name=name,
 							  device=device)
 
 
-def nl(x, fnc=tf.nn.relu, eps=1e-4, name='nl', device='/cpu:0'):
+def non_linearity(x, fnc=tf.nn.relu, eps=1e-4, name='nl', device='/cpu:0'):
 	"""Alter nonlinearity for the complex domains"""
 	return h_nonlin(x, fnc, eps=eps, name=name, device=device)
 
 
-def mp(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mp'):
+def mean_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mp'):
 	"""Mean pooling"""
 	with tf.name_scope(name) as scope:
 		return mean_pooling(x, ksize=ksize, strides=strides)
@@ -55,17 +55,17 @@ def sum_mags(X, eps=1e-4, keep_dims=True):
 	"""
 	return sum_magnitudes(X, eps, keep_dims=True)
 
-def res(x, out_shape, ksize, depth, train_phase, fnc=tf.nn.relu, max_order=1,
+def residual_block(x, out_shape, ksize, depth, train_phase, fnc=tf.nn.relu, max_order=1,
 		  phase=True, name='res', device='/cpu:0'):
 	"""Residual block"""
 	with tf.name_scope(name) as scope:
 		y = x
 		for i in xrange(depth):
-			y = conv(y, out_shape, ksize, padding='SAME', phase=phase,
+			y = conv2d(y, out_shape, ksize, padding='SAME', phase=phase,
 				  max_order=max_order, name=name+'_c'+str(i), device=device)
 			if i == (depth-1):
 				fnc = (lambda x: x)
-			y = bn(y, train_phase, fnc=fnc, name=name+'_nl'+str(i), device=device)
+			y = batch_norm(y, train_phase, fnc=fnc, name=name+'_nl'+str(i), device=device)
 		xsh = x.get_shape().as_list()
 		ysh = y.get_shape().as_list()
 		x = tf.pad(x, [[0,0],[0,0],[0,0],[0,0],[0,0],[0,ysh[5]-xsh[5]]])

@@ -35,32 +35,32 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	
 	# Convolutional Layers with pooling
 	with tf.name_scope('block1') as scope:
-		cv1 = hn_lite.conv(x, nf, fs, padding='SAME', name='1', device=d)
-		cv1 = hn_lite.nl(cv1, tf.nn.relu, name='1', device=d)
+		cv1 = hn_lite.conv2d(x, nf, fs, padding='SAME', name='1', device=d)
+		cv1 = hn_lite.non_linearity(cv1, tf.nn.relu, name='1', device=d)
 		
-		cv2 = hn_lite.conv(cv1, nf, fs, padding='SAME', name='2', device=d)
-		cv2 = hn_lite.bn(cv2, train_phase, name='bn1', device=d)
+		cv2 = hn_lite.conv2d(cv1, nf, fs, padding='SAME', name='2', device=d)
+		cv2 = hn_lite.batch_norm(cv2, train_phase, name='bn1', device=d)
 
 	with tf.name_scope('block2') as scope:
-		cv2 = hn_lite.mp(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv3 = hn_lite.conv(cv2, nf2, fs, padding='SAME', name='3', device=d)
-		cv3 = hn_lite.nl(cv3, tf.nn.relu, name='3', device=d)
+		cv2 = hn_lite.mean_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv3 = hn_lite.conv2d(cv2, nf2, fs, padding='SAME', name='3', device=d)
+		cv3 = hn_lite.non_linearity(cv3, tf.nn.relu, name='3', device=d)
 		
-		cv4 = hn_lite.conv(cv3, nf2, fs, padding='SAME', name='4', device=d)
-		cv4 = hn_lite.bn(cv4, train_phase, name='bn2', device=d)
+		cv4 = hn_lite.conv2d(cv3, nf2, fs, padding='SAME', name='4', device=d)
+		cv4 = hn_lite.batch_norm(cv4, train_phase, name='bn2', device=d)
 
 	with tf.name_scope('block3') as scope:
-		cv4 = hn_lite.mp(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv5 = hn_lite.conv(cv4, nf3, fs, padding='SAME', name='5', device=d)
-		cv5 = hn_lite.nl(cv5, tf.nn.relu, name='5', device=d)
+		cv4 = hn_lite.mean_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv5 = hn_lite.conv2d(cv4, nf3, fs, padding='SAME', name='5', device=d)
+		cv5 = hn_lite.non_linearity(cv5, tf.nn.relu, name='5', device=d)
 		
-		cv6 = hn_lite.conv(cv5, nf3, fs, padding='SAME', name='6', device=d)
-		cv6 = hn_lite.bn(cv6, train_phase, name='bn3', device=d)
+		cv6 = hn_lite.conv2d(cv5, nf3, fs, padding='SAME', name='6', device=d)
+		cv6 = hn_lite.batch_norm(cv6, train_phase, name='bn3', device=d)
 
 	# Final Layer
 	with tf.name_scope('block4') as scope:
 		print('block4')
-		cv7 = hn_lite.conv(cv6, ncl, fs, padding='SAME', phase=False,
+		cv7 = hn_lite.conv2d(cv6, ncl, fs, padding='SAME', phase=False,
 					 name='7', device=d)
 		real = hn_lite.sum_mags(cv7)
 		cv7 = tf.reduce_mean(real, reduction_indices=[1,2,3,4])
@@ -86,21 +86,21 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
 	
 	# Convolutional Layers
-	res1 = hn_lite.conv(x, nf, fs, padding='SAME', name='in', device=device)
+	res1 = hn_lite.conv2d(x, nf, fs, padding='SAME', name='in', device=device)
 	for i in xrange(N):
 		name = 'r1_'+str(i)
-		res1 = hn_lite.res(res1, nf, fs, 2, train_phase, name=name, device=device)
-	res2 = hn_lite.mp(res1, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp1')
+		res1 = hn_lite.residual_block(res1, nf, fs, 2, train_phase, name=name, device=device)
+	res2 = hn_lite.mean_pool(res1, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp1')
 	
 	for i in xrange(N):
 		name = 'r2_'+str(i)
-		res2 = hn_lite.res(res2, fg*nf, fs, 2, train_phase, name=name, device=device)
-	res3 = hn_lite.mp(res2, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp2')
+		res2 = hn_lite.residual_block(res2, fg*nf, fs, 2, train_phase, name=name, device=device)
+	res3 = hn_lite.mean_pool(res2, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp2')
 	
 	for i in xrange(N):
 		name = 'r3_'+str(i)
-		res3 = hn_lite.res(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=device)
-	res4 = hn_lite.mp(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
+		res3 = hn_lite.residual_block(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=device)
+	res4 = hn_lite.mean_pool(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
 
 	with tf.name_scope('gap') as scope:
 		gap = tf.reduce_mean(hn_lite.sum_mags(res4), reduction_indices=[1,2,3,4])
