@@ -150,7 +150,6 @@ def build_io_queues(opt, data, mode):
 
 def build_optimizer(cost, lr, opt):
 	"""Apply the psi_preconditioner"""
-	#optim = tf.train.AdamOptimizer(learning_rate=lr)
 	if opt['optimizer'] == tf.train.MomentumOptimizer:
 		optim = opt['optimizer'](lr, opt['momentum'], use_nesterov=True)
 	else:
@@ -189,13 +188,13 @@ def build_feed_dict(opt, batch, tf_nodes, is_training):
 
 
 def loop(mode, sess, opt, data, tf_nodes, step=0):
-	"""Runs the training loop
+	"""Runs the training/testing/validation loop
 	
 	mode: 'train' / 'valid' / 'test'
 	sess: tf-session
 	opt: opts dictionary
 	data: data dict
-	tf_nodes: dict of tensorflow constructed with build_model()
+	tf_nodes: dict of nodes constructed with build_model()
 	step: optional parameter specifying global step
 
 	Returns: cost, accuracy, new step 	for current epoch
@@ -250,7 +249,7 @@ def bsd_loop(mode, sess, opt, data, tf_nodes, step=0,
 
 def select_queue(tensor_list, is_training, is_testing):
 	#if we just have one tensor, separate queues are not being used
-	if len(tensorList) == 1:
+	if len(tensor_list) == 1:
 		return tensor_list[0]
 	result = tf.cond(is_training, lambda: tensor_list[0], #training queue
 			lambda: tf.cond(is_testing, 
@@ -279,8 +278,10 @@ def construct_model_and_optimizer(opt, tf_nodes):
 		train_op = build_optimizer(loss, tf_nodes['learning_rate'], opt)
 	else:
 		# Multi_GPU Optimizer
-		optim = tf.train.MomentumOptimizer(learning_rate=tf_nodes['learning_rate'],
-			momentum=opt['momentum'], use_nesterov=True)
+		if opt['optimizer'] == tf.train.MomentumOptimizer:
+			optim = opt['optimizer'](lr, opt['momentum'], use_nesterov=True)
+		else:
+			optim = opt['optimizer'](lr)
 		#setup model for each GPU
 		linearGPUIdx = 0
 		gradientsPerGPU = []
@@ -366,36 +367,7 @@ def build_model(opt, data):
 	tf_nodes['sum']['learning_rate'] = create_scalar_summary('learning_rate')
 	return tf_nodes
 
-
-def train_model(opt, data, tf_nodes):
-	"""Generalized training function
-	
-	opt: dict of options
-	data: dict of numpy data
-	tf_nodes: dict of nodes initialised in build_model()
-	"""
-	n_GPUs = len(opt['deviceIdxs'])
-	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
-
-	# Initializing the variables
-	init = tf.global_variables_initializer()
-	if opt['combine_train_val']:
-		data['train_x'] = np.vstack([data['train_x'], data['valid_x']])
-		data['train_y'] = np.hstack([data['train_y'], data['valid_y']])
-
-	# Configure tensorflow session
-	config = config_init()
-	if n_GPUs == 1:
-		config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
-	sess = tf.Session(config=config)
-	summary = tf.summary.FileWriter(opt['log_path'], sess.graph)
-	print('Summaries constructed...')
-	
-	sess.run(init, feed_dict={
-		tf_nodes['train_phase'] : True,
-		tf_nodes['test_phase'] : False
-	})
-	saver = tf.train.Saver()
+def loop_python_feeding(opt, data, tf_nodes, sess, saver, summary):
 	start = time.time()
 	epoch = 0
 	step = 0.
@@ -435,6 +407,48 @@ def train_model(opt, data, tf_nodes):
 		print('Testing')
 		__, tacc_total, __ = loop('test', sess, opt, data, tf_nodes)
 		print('Test accuracy: %f' % (tacc_total,))
+	
+	return tacc_total
+		
+def loop_queue_feeding(opt, data, tf_nodes, sess, saver, summary):
+	#training/test/validation using queues
+	return 0
+
+def train_model(opt, data, tf_nodes):
+	"""Generalized training function
+	
+	opt: dict of options
+	data: dict of numpy data
+	tf_nodes: dict of nodes initialised in build_model()
+	"""
+	n_GPUs = len(opt['deviceIdxs'])
+	print('Using Multi-GPU Model with %d devices.' % n_GPUs)
+
+	# Initializing the variables
+	init = tf.global_variables_initializer()
+	if opt['combine_train_val']:
+		data['train_x'] = np.vstack([data['train_x'], data['valid_x']])
+		data['train_y'] = np.hstack([data['train_y'], data['valid_y']])
+
+	# Configure tensorflow session
+	config = config_init()
+	if n_GPUs == 1:
+		config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
+	sess = tf.Session(config=config)
+	summary = tf.summary.FileWriter(opt['log_path'], sess.graph)
+	print('Summaries constructed...')
+	
+	sess.run(init, feed_dict={
+		tf_nodes['train_phase'] : True,
+		tf_nodes['test_phase'] : False
+	})
+	saver = tf.train.Saver()
+	if opt['use_io_queues']:
+		print('Training using queues')
+		tacc_total = loop_queue_feeding(opt, data, tf_nodes, sess, saver, summary)
+	else:
+		print('Training using python feeding')
+		tacc_total = loop_python_feeding(opt, data, tf_nodes, sess, saver, summary)
 	
 	# Save model and exit
 	save_path = saver.save(sess, opt['checkpoint_path'])
