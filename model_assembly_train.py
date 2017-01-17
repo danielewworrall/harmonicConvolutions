@@ -411,10 +411,88 @@ def loop_python_feeding(opt, data, tf_nodes, sess, saver, summary):
 		print('Test accuracy: %f' % (tacc_total,))
 	
 	return tacc_total
-		
+
+def loop_queue_run(opt, tf_nodes, sess, mode, step):
+	cost_total = 0.
+	acc_total = 0.
+	if mode == 'train':
+		is_training = True
+		is_testing = False
+	elif mode == 'valid':
+		is_training = False
+		is_testing = False
+	else:
+		is_training = False
+		is_testing = True
+
+	for i in xrange(100):
+		fd = {tf_nodes['learning_rate'] : opt['lr'], tf_nodes['train_phase'] : is_training,
+		tf_nodes['test_phase'] : is_testing}
+		if mode == 'train':
+			__, cost_, acc_ = sess.run([tf_nodes['train_op'], tf_nodes['loss'], tf_nodes['accuracy']], feed_dict=fd)
+		else:
+			cost_, acc_ = sess.run([tf_nodes['loss'], tf_nodes['accuracy']], feed_dict=fd)
+		if step % opt['display_step'] == 0:
+			sys.stdout.write('  ' + mode + ' Acc.: %f\r' % acc_)
+			sys.stdout.flush()
+		cost_total += cost_
+		acc_total += acc_
+		step += 1
+	return cost_total/(i+1.), acc_total/(i+1.), step
+
 def loop_queue_feeding(opt, data, tf_nodes, sess, saver, summary):
-	#training/test/validation using queues
-	return 0
+	# Create a coordinator
+	coord = tf.train.Coordinator()
+	#launch all queue runners
+	threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+	#training loop as usual
+	start = time.time()
+	epoch = 0
+	step = 0.
+	counter = 0
+	best = 0.
+	print('Starting training loop...')
+	while epoch < opt['n_epochs']:
+		# Need batch_size*n_GPUs amount of data
+		cost_total, acc_total, step = loop_queue_run(opt, tf_nodes, sess, 'train', step)
+		if not opt['combine_train_val']:
+			vloss_total, vacc_total, __ = loop_queue_run(opt, tf_nodes, sess, 'valid', step)
+
+			#build the feed-dict
+			fd = {tf_nodes['sum']['train_cost'][0] : cost_total,
+				tf_nodes['sum']['val_cost'][0] : vloss_total,
+				tf_nodes['sum']['val_acc'] [0] : vacc_total,
+				tf_nodes['sum']['learning_rate'][0] : opt['lr']}
+
+			summaries = sess.run([tf_nodes['sum']['train_cost'][1], tf_nodes['sum']['val_cost'][1],
+					tf_nodes['sum']['val_acc'] [1], tf_nodes['sum']['learning_rate'][1]],
+				feed_dict=fd)
+			for summ in summaries:
+				summary.add_summary(summ, step)
+			best, counter, opt['lr'] = get_learning_rate(opt, vacc_total, best, counter, opt['lr'])
+			print_train_validation(opt['trial_num'], counter, epoch, time.time()-start,
+				cost_total, vloss_total, acc_total, vacc_total)
+		else:
+			best, counter, opt['lr'] = get_learning_rate(opt, acc_total, best, counter, opt['lr'])
+			print_validation(opt['trial_num'], counter, epoch, time.time()-start, cost_total, acc_total)
+		epoch += 1
+
+		if (epoch) % opt['save_step'] == 0:
+			save_path = saver.save(sess, opt['checkpoint_path'])
+			print("Model saved in file: %s" % save_path)
+			
+	if (opt['datasetIdx'] == 'plankton') or (opt['datasetIdx'] == 'galaxies'):
+		tacc_total = vacc_total
+	else:
+		print('Testing')
+		__, tacc_total, __ = loop_queue_run(opt, tf_nodes, sess, 'test', step)
+		print('Test accuracy: %f' % (tacc_total,))
+
+	# When done, ask the threads to stop.
+	coord.request_stop()
+	# And wait for them to actually do it.
+	coord.join(threads)
+	return tacc_total
 
 def train_model(opt, data, tf_nodes):
 	"""Generalized training function
