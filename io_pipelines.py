@@ -16,14 +16,11 @@ def read_decode(filename_string_queue):
 			'x_raw': tf.FixedLenFeature([], tf.string),
 			'y_raw': tf.FixedLenFeature([], tf.string),
 			})
-
 		#decode (will still be a string at this point)
 		x = tf.decode_raw(features['x_raw'], tf.float32, name="decodeX")
-
 		#decode (will still be a string at this point)
 		y = tf.decode_raw(features['y_raw'], np.float32, name="decodeY")
-
-	return x, y
+		return x, y
 
 def pipeline(fileNames, batch_size, num_epochs, data_aug_function, shuffle=True):
 	with tf.name_scope('IO') as scope:

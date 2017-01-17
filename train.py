@@ -41,6 +41,7 @@ def create_opt_data(opt):
 		data['train_files'] = [mnist_dir + '/train.tfrecords']
 		data['valid_files'] = [mnist_dir + '/valid.tfrecords']
 		data['test_files'] = [mnist_dir + '/test.tfrecords']
+		opt['use_io_queues'] = True
 		opt['aug_crop'] = 0 #'crop margin'
 		opt['n_epochs'] = 200
 		opt['batch_size'] = 46

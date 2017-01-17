@@ -137,10 +137,10 @@ def build_io_queues(opt, data, mode):
 	if mode == 'train':
 		io_x, io_y = pipeline(data['train_files'], opt['batch_size'], opt['n_epochs'],
 			lambda x, y: x, y, shuffle=True)
-	else if mode == 'valid':
+	elif mode == 'valid':
 		io_x, io_y = pipeline(data['valid_files'], opt['batch_size'], opt['n_epochs'],
 			lambda x, y: x, y, shuffle=False)
-	else if mode == 'test':
+	elif mode == 'test':
 		io_x, io_y = pipeline(data['test_files'], opt['batch_size'], opt['n_epochs'],
 			lambda x, y: x, y, shuffle=False)
 	else:
@@ -248,6 +248,16 @@ def bsd_loop(mode, sess, opt, data, tf_nodes, step=0,
 		cost_total += cost_
 	return cost_total/(i+1.), step
 
+def select_queue(tensor_list, is_training, is_testing):
+	#if we just have one tensor, separate queues are not being used
+	if len(tensorList) == 1:
+		return tensor_list[0]
+	result = tf.cond(is_training, lambda: tensor_list[0], #training queue
+			lambda: tf.cond(is_testing, 
+				lambda: tf.identity(tensor_list[2]), #testing queue
+				lambda: tf.identity(tensor_list[1]))) #validation queue
+	return result
+
 def construct_model_and_optimizer(opt, tf_nodes):
 	"""Build the model and an single/multi-GPU optimizer
 	
@@ -259,9 +269,13 @@ def construct_model_and_optimizer(opt, tf_nodes):
 	"""
 	if len(opt['deviceIdxs']) == 1:
 		dev = '/gpu:%d' % opt['deviceIdxs'][0]
-		pred = opt['model'](opt, tf_nodes['io']['x'][0], tf_nodes['train_phase'], device=dev)
-		loss = get_loss(opt, pred, tf_nodes['io']['y'][0])
-		accuracy = get_evaluation(pred, tf_nodes['io']['y'][0], opt)
+		#first, setup branching for queues (just forwards if there are none)
+		selected_x = select_queue(tf_nodes['io']['x'], tf_nodes['train_phase'], tf_nodes['test_phase'])
+		selected_y = select_queue(tf_nodes['io']['y'], tf_nodes['train_phase'], tf_nodes['test_phase'])
+		#now create all necessary components
+		pred = opt['model'](opt, selected_x, tf_nodes['train_phase'], device=dev)
+		loss = get_loss(opt, pred, selected_y)
+		accuracy = get_evaluation(pred, selected_y, opt)
 		train_op = build_optimizer(loss, tf_nodes['learning_rate'], opt)
 	else:
 		# Multi_GPU Optimizer
@@ -272,16 +286,20 @@ def construct_model_and_optimizer(opt, tf_nodes):
 		gradientsPerGPU = []
 		lossesPerGPU = []
 		accuracyPerGPU = []
+		#first, setup branching for queues (just forwards if there are none)
+		selected_x = select_queue(tf_nodes['io']['x'], tf_nodes['train_phase'], tf_nodes['test_phase'])
+		selected_y = select_queue(tf_nodes['io']['y'], tf_nodes['train_phase'], tf_nodes['test_phase'])
+		#now create all necessary components per device
 		for g in opt['deviceIdxs']: #for every specified device
 			with tf.device('/gpu:%d' % g): #create a copy of the network
 				print('Building Model on GPU: %d' % g)
 				with tf.name_scope('%s_%d' % (opt['model'].__name__, 0)) as scope:
 					# Forward pass
 					dev = '/gpu:%d' % g
-					pred = opt['model'](opt, tf_nodes['io']['x'][linearGPUIdx],
+					pred = opt['model'](opt, selected_x,
 						tf_nodes['train_phase'], device = dev)
-					loss = get_loss(opt, pred, tf_nodes['io']['y'][linearGPUIdx])
-					accuracy = get_evaluation(pred, tf_nodes['io']['y'][linearGPUIdx], opt)
+					loss = get_loss(opt, pred, selected_y)
+					accuracy = get_evaluation(pred, selected_y, opt)
 					# Reuse variables for the next tower
 					tf.get_variable_scope().reuse_variables()
 					# Calculate gradients for minibatch on this gpus
@@ -317,16 +335,27 @@ def build_model(opt, data):
 	#tensorflow nodes
 	tf_nodes = {}
 	tf_nodes['io'] = {}
-	tf_nodes['io']['x'] = []
-	tf_nodes['io']['y'] = []
-	for g in opt['deviceIdxs']:
-		with tf.device('/gpu:%d' % g):
-			io_x, io_y = get_io_placeholders(opt)
-			tf_nodes['io']['x'].append(io_x)
-			tf_nodes['io']['y'].append(io_y)
+	if opt['use_io_queues']:
+		#here, we build one queue for each major training operation
+		io_x, io_y = build_io_queues(opt, data, 'train')
+		tf_nodes['io']['x'].append(io_x)
+		tf_nodes['io']['y'].append(io_y)
+		io_x, io_y = build_io_queues(opt, data, 'valid')
+		tf_nodes['io']['x'].append(io_x)
+		tf_nodes['io']['y'].append(io_y)
+		io_x, io_y = build_io_queues(opt, data, 'test')
+		tf_nodes['io']['x'].append(io_x)
+		tf_nodes['io']['y'].append(io_y)
+		print('Successfully created queues for data feeding.')
+	else:
+		io_x, io_y = get_io_placeholders(opt)
+		tf_nodes['io']['x'] = [io_x]
+		tf_nodes['io']['y'] = [io_y]
+
 	tf_nodes['learning_rate'] = tf.placeholder(tf.float32, name='learning_rate')
 	tf_nodes['train_phase'] = tf.placeholder(tf.bool, name='train_phase')
-	
+	tf_nodes['test_phase'] = tf.placeholder(tf.bool, name='test_phase')
+
 	# Construct model and optimizer
 	tf_nodes['loss'], tf_nodes['accuracy'], tf_nodes['train_op'] = construct_model_and_optimizer(opt, tf_nodes)
 
@@ -363,7 +392,8 @@ def train_model(opt, data, tf_nodes):
 	print('Summaries constructed...')
 	
 	sess.run(init, feed_dict={
-		tf_nodes['train_phase'] : True 
+		tf_nodes['train_phase'] : True,
+		tf_nodes['test_phase'] : False
 	})
 	saver = tf.train.Saver()
 	start = time.time()
