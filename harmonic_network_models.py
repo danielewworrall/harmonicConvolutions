@@ -59,7 +59,6 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 
 	# Final Layer
 	with tf.name_scope('block4') as scope:
-		print('block4')
 		cv7 = hn_lite.conv2d(cv6, ncl, fs, padding='SAME', phase=False,
 					 name='7', device=d)
 		real = hn_lite.sum_mags(cv7)

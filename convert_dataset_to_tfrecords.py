@@ -30,8 +30,8 @@ def convert_write(X, Y, writer):
             y_shape.append(1)
         else:
             y_shape.append(Y.shape[i])
-    x_shape_serialised = np.asarray(X.shape).astype(np.int64).tostring()
-    y_shape_serialised = np.asarray(Y.shape).astype(np.int64).tostring()
+    x_shape_serialised = np.asarray(x_shape).astype(np.int64).tostring()
+    y_shape_serialised = np.asarray(y_shape).astype(np.int64).tostring()
     example = tf.train.Example(features=tf.train.Features(feature={
     'x_raw': _bytes_feature(x_serialised),
     'y_raw': _bytes_feature(y_serialised),

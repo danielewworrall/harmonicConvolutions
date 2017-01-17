@@ -136,13 +136,16 @@ def build_io_queues(opt, data, mode):
 	"""Build pipelines so we can take advantage of tensorflow's queues"""
 	if mode == 'train':
 		io_x, io_y = pipeline(data['train_files'], opt['batch_size'], opt['n_epochs'],
-			(lambda x, y : [x, y]), shuffle=True)
+			(lambda x, y : [x, y]),
+			data['x_shape_target'], data['y_shape_target'], shuffle=True)
 	elif mode == 'valid':
 		io_x, io_y = pipeline(data['valid_files'], opt['batch_size'], opt['n_epochs'],
-			(lambda x, y : [x, y]), shuffle=False)
+			(lambda x, y : [x, y]),
+			data['x_shape_target'], data['y_shape_target'], shuffle=False)
 	elif mode == 'test':
 		io_x, io_y = pipeline(data['test_files'], opt['batch_size'], opt['n_epochs'],
-			(lambda x, y : [x, y]), shuffle=False)
+			(lambda x, y : [x, y]),
+			data['x_shape_target'], data['y_shape_target'], shuffle=False)
 	else:
 		print('ERROR: build_io_queues() expect as mode one of: {train, valid, test}')
 		sys.exit(1)

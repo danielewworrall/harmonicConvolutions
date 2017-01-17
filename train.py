@@ -38,7 +38,7 @@ def create_opt_data(opt):
 		mnist_dir = opt['data_dir'] + '/mnist_rotation_new'
 		data = {}
 		#data feeding choice
-		opt['use_io_queues'] = True
+		opt['use_io_queues'] = False
 		if opt['use_io_queues']:
 			data['train_files'] = [mnist_dir + '/train.tfrecords']
 			data['valid_files'] = [mnist_dir + '/valid.tfrecords']
@@ -47,6 +47,10 @@ def create_opt_data(opt):
 			data['train_items'] = get_num_items_in_tfrecords(data['train_files'])
 			data['valid_items'] = get_num_items_in_tfrecords(data['valid_files'])
 			data['test_items'] = get_num_items_in_tfrecords(data['test_files'])
+			#let's define some functions to reshape data
+			#note: [] means nothing will happen
+			data['x_shape_target'] = [28, 28, 1]
+			data['y_shape_target'] = [1]
 		else:
 			train = np.load(mnist_dir + '/rotated_train.npz')
 			valid = np.load(mnist_dir + '/rotated_valid.npz')
