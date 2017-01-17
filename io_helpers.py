@@ -10,6 +10,7 @@ import skimage.exposure as skiex
 import skimage.io as skio
 import skimage.transform as sktr
 
+import tensorflow as tf
 
 ##### HELPERS #####
 def checkFolder(dir):
@@ -19,6 +20,13 @@ def checkFolder(dir):
 	"""
 	if not os.path.exists(dir):
 		os.makedirs(dir)
+
+def get_num_items_in_tfrecords(files):
+	i = 0
+	for record_file in files:
+		for record in tf.python_io.tf_record_iterator(record_file):
+			i += 1
+	return i
 
 def download2FileAndExtract(url, folder, fileName):
 	checkFolder(folder)

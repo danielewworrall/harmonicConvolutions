@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 from model_assembly_train import build_all_and_train
-from io_helpers import load_dataset, download_dataset
+from io_helpers import load_dataset, download_dataset, get_num_items_in_tfrecords
 import harmonic_network_models
 
 def create_opt_data(opt):
@@ -43,6 +43,10 @@ def create_opt_data(opt):
 			data['train_files'] = [mnist_dir + '/train.tfrecords']
 			data['valid_files'] = [mnist_dir + '/valid.tfrecords']
 			data['test_files'] = [mnist_dir + '/test.tfrecords']
+			#get the number of items of each set
+			data['train_items'] = get_num_items_in_tfrecords(data['train_files'])
+			data['valid_items'] = get_num_items_in_tfrecords(data['valid_files'])
+			data['test_items'] = get_num_items_in_tfrecords(data['test_files'])
 		else:
 			train = np.load(mnist_dir + '/rotated_train.npz')
 			valid = np.load(mnist_dir + '/rotated_valid.npz')

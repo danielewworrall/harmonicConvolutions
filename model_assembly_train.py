@@ -412,20 +412,23 @@ def loop_python_feeding(opt, data, tf_nodes, sess, saver, summary):
 	
 	return tacc_total
 
-def loop_queue_run(opt, tf_nodes, sess, mode, step):
+def loop_queue_run(opt, data, tf_nodes, sess, mode, step):
 	cost_total = 0.
 	acc_total = 0.
 	if mode == 'train':
 		is_training = True
 		is_testing = False
+		num_its = data['train_items']
 	elif mode == 'valid':
 		is_training = False
 		is_testing = False
+		num_its = data['valid_items']
 	else:
 		is_training = False
 		is_testing = True
-
-	for i in xrange(100):
+		num_its = data['test_items']
+	#this rounding here is potentially problematic
+	for i in xrange(int(num_its / opt['batch_size'])):
 		fd = {tf_nodes['learning_rate'] : opt['lr'], tf_nodes['train_phase'] : is_training,
 		tf_nodes['test_phase'] : is_testing}
 		if mode == 'train':
@@ -454,9 +457,9 @@ def loop_queue_feeding(opt, data, tf_nodes, sess, saver, summary):
 	print('Starting training loop...')
 	while epoch < opt['n_epochs']:
 		# Need batch_size*n_GPUs amount of data
-		cost_total, acc_total, step = loop_queue_run(opt, tf_nodes, sess, 'train', step)
+		cost_total, acc_total, step = loop_queue_run(opt, data, tf_nodes, sess, 'train', step)
 		if not opt['combine_train_val']:
-			vloss_total, vacc_total, __ = loop_queue_run(opt, tf_nodes, sess, 'valid', step)
+			vloss_total, vacc_total, __ = loop_queue_run(opt, data, tf_nodes, sess, 'valid', step)
 
 			#build the feed-dict
 			fd = {tf_nodes['sum']['train_cost'][0] : cost_total,
@@ -485,7 +488,7 @@ def loop_queue_feeding(opt, data, tf_nodes, sess, saver, summary):
 		tacc_total = vacc_total
 	else:
 		print('Testing')
-		__, tacc_total, __ = loop_queue_run(opt, tf_nodes, sess, 'test', step)
+		__, tacc_total, __ = loop_queue_run(opt, data, tf_nodes, sess, 'test', step)
 		print('Test accuracy: %f' % (tacc_total,))
 
 	# When done, ask the threads to stop.
@@ -512,8 +515,6 @@ def train_model(opt, data, tf_nodes):
 
 	# Configure tensorflow session
 	config = config_init()
-	if n_GPUs == 1:
-		config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
 	sess = tf.Session(config=config)
 	summary = tf.summary.FileWriter(opt['log_path'], sess.graph)
 	print('Summaries constructed...')
