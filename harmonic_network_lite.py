@@ -103,7 +103,8 @@ def sum_magnitudes(x, eps=1e-4, keep_dims=True):
 	eps: regularization since grad |x| is infinite at zero (default 1e-4)
 	keep_dims: whether to collapse summed dimensions (default True)
 	"""
-	return sum_magnitudes(x, eps, keep_dims=True)
+	R = tf.reduce_sum(tf.square(x), reduction_indices=[4], keep_dims=keep_dims)
+	return tf.sqrt(R + eps)
 
 
 def residual_block(x, n_channels, ksize, depth, is_training, fnc=tf.nn.relu,

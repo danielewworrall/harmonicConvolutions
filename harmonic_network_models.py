@@ -102,7 +102,7 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	res4 = hn_lite.mean_pool(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
 
 	with tf.name_scope('gap') as scope:
-		gap = tf.reduce_mean(hn_lite.sum_mags(res4), reduction_indices=[1,2,3,4])
+		gap = tf.reduce_mean(hn_lite.sum_magnitudes(res4), reduction_indices=[1,2,3,4])
 		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap)
 
 
