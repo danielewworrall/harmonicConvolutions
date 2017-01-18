@@ -19,7 +19,7 @@ def main(opt, data, n):
         opt['aug_crop'] = np.random.randint(5)
         opt['n_epochs'] = 50 + np.random.randint(200)
         opt['batch_size'] = int(log_uniform(2,3,3))
-        opt['lr']  = log_uniform(10,-4,3)
+        opt['lr']  = log_uniform(10,-4,2.5)
         opt['optimizer'] = tf.train.AdamOptimizer
         opt['std_mult'] = 0.3+0.2*np.random.rand()
         opt['delay'] = 8
