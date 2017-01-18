@@ -9,17 +9,32 @@ import tensorflow as tf
 
 from harmonic_network_ops import *
 
-def conv2d(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
+def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 			 max_order=1, stddev=0.4, name='lconv', device='/cpu:0'):
-	"""Harmonic Convolution lite"""
+	"""Harmonic Convolution lite
+	
+	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	n_channels: number of output channels (int)
+	ksize: size of square filter (int)
+	strides: stride size (4-tuple: default (1,1,1,1))
+	padding: SAME or VALID (defult VALID)
+	phase: use a per-channel phase offset (default True)
+	max_order: maximum rotation order e.g. max_order=2 uses 0,1,2 (default 1)
+	stddev: scale of filter initialization wrt He initialization
+	name: (default 'lconv')
+	device: (default '/cpu:0')
+	"""
 	xsh = x.get_shape().as_list()
-	shape = [ksize, ksize, xsh[5], out_shape]
+	shape = [ksize, ksize, xsh[5], n_channels]
 	from harmonic_network_helpers import get_weights_dict, get_phase_dict
 	Q = get_weights_dict(shape, max_order, std_mult=stddev, name='W'+name,
 								device=device)
 	P = None
 	if phase == True:
-		P = get_phase_dict(xsh[5], out_shape, max_order, name='P'+name,
+		P = get_phase_dict(xsh[5], n_channels, max_order, name='P'+name,
 								 device=device)
 	W = get_filters(Q, filter_size=ksize, P=P)
 	R = h_conv(x, W, strides=strides, padding=padding, max_order=max_order,
@@ -27,44 +42,97 @@ def conv2d(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 	return R
 
 
-def batch_norm(x, train_phase, fnc=tf.nn.relu, decay=0.99, eps=1e-4, name='hbn',
+def batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-4, name='hbn',
 		 device='/cpu:0'):
-	"""Batch normalization for the magnitudes of X"""
-	return h_batch_norm(x, fnc, train_phase, decay=decay, eps=eps, name=name,
+	"""Batch normalization for the magnitudes of X
+	
+	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	is_training: tf bool indicating training status
+	fnc: nonlinearity applied to magnitudes (default tf.nn.relu)
+	decay: exponential decay rate of statistics trackers
+	eps: regularization for estimation of magnitudes
+	name: (default 'hbn')
+	device: (default '/cpu:0')
+	"""
+	return h_batch_norm(x, fnc, is_training, decay=decay, eps=eps, name=name,
 							  device=device)
 
 
-def non_linearity(x, fnc=tf.nn.relu, eps=1e-4, name='nl', device='/cpu:0'):
-	"""Alter nonlinearity for the complex domains"""
+def nonlinearity(x, fnc=tf.nn.relu, eps=1e-4, name='nl', device='/cpu:0'):
+	"""Alter nonlinearity for the complex domain
+	
+	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	fnc: nonlinearity applied to magnitudes (default tf.nn.relu)
+	eps: regularization since grad |x| is infinite at zero
+	name: (default 'nl')
+	device: (default '/cpu:0')
+	"""
 	return h_nonlin(x, fnc, eps=eps, name=name, device=device)
 
 
 def mean_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mp'):
-	"""Mean pooling"""
+	"""Mean pooling
+	
+	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	ksize: size of square filter (int)
+	strides: stride size (4-tuple: default (1,1,1,1))
+	name: (default 'mp')
+	"""
 	with tf.name_scope(name) as scope:
 		return mean_pooling(x, ksize=ksize, strides=strides)
 
-def sum_mags(X, eps=1e-4, keep_dims=True):
+
+def sum_magnitudes(x, eps=1e-4, keep_dims=True):
 	"""Sum the magnitudes of each of the complex feature maps in X.
 	
-	Output U = sum_i |X_i|
+	Output U = sum_i |x_i|
 	
-	X: dict of channels {rotation order: (real, imaginary)}
-	eps: regularization since grad |Z| is infinite at zero (default 1e-4)
+	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	eps: regularization since grad |x| is infinite at zero (default 1e-4)
+	keep_dims: whether to collapse summed dimensions (default True)
 	"""
-	return sum_magnitudes(X, eps, keep_dims=True)
+	return sum_magnitudes(x, eps, keep_dims=True)
 
-def residual_block(x, out_shape, ksize, depth, train_phase, fnc=tf.nn.relu, max_order=1,
-		  phase=True, name='res', device='/cpu:0'):
-	"""Residual block"""
+
+def residual_block(x, n_channels, ksize, depth, is_training, fnc=tf.nn.relu,
+						 max_order=1, phase=True, name='res', device='/cpu:0'):
+	"""Harmonic version of a residual block
+	
+	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	n_channels: number of output channels (int)
+	ksize: size of square filter (int)
+	depth: number of convolutions per block
+	is_training: tf bool indicating training status
+	fnc: nonlinearity applied to magnitudes (default tf.nn.relu)
+	max_order: maximum rotation order e.g. max_order=2 uses 0,1,2 (default 1)
+	phase: use a per-channel phase offset (default True)
+	name: (default 'res')
+	device: (default '/cpu:0')
+	"""
 	with tf.name_scope(name) as scope:
 		y = x
 		for i in xrange(depth):
-			y = conv2d(y, out_shape, ksize, padding='SAME', phase=phase,
+			y = conv2d(y, n_channels, ksize, padding='SAME', phase=phase,
 				  max_order=max_order, name=name+'_c'+str(i), device=device)
 			if i == (depth-1):
 				fnc = (lambda x: x)
-			y = batch_norm(y, train_phase, fnc=fnc, name=name+'_nl'+str(i), device=device)
+			y = batch_norm(y, is_training, fnc=fnc, name=name+'_nl'+str(i),
+								device=device)
 		xsh = x.get_shape().as_list()
 		ysh = y.get_shape().as_list()
 		x = tf.pad(x, [[0,0],[0,0],[0,0],[0,0],[0,0],[0,ysh[5]-xsh[5]]])
