@@ -70,9 +70,12 @@ class settings():
         self.__maybe_create('log_path', 'logs/current')
         self.__maybe_create('checkpoint_path', 'checkpoints/current')
         self.__maybe_create('is_bsd', False)
+        self.__maybe_create('train_data_fraction', 1.0)
         #now create options specific to datasets
         if self.__get('dataset') == 'rotated_mnist':
             self.__create_options_rotated_mnist()
+        if self.__get('dataset') == 'cifar10':
+            self.__create_options_cifar10()
         else:
             print('ERROR: no implemented')
             return False
@@ -80,23 +83,21 @@ class settings():
 
 
     def __create_options_rotated_mnist(self):
-        # Download MNIST if it doesn't exist
-        if not os.path.exists(self.__get('data_dir') + '/mnist_rotation_new'):
-            download_dataset(opt)
-        # Load dataset
+        #setup data feeding
         mnist_dir = self.__get('data_dir') + '/mnist_rotation_new'
         #data feeding choice
         self.__set('use_io_queues', True)
         if self.__get('use_io_queues'):
             #we can use this convenience function to get all the data
-            data = discover_and_setup_tfrecords(mnist_dir, self.data, use_train_fraction=0.5)
+            data = discover_and_setup_tfrecords(mnist_dir, 
+                self.data, use_train_fraction = self.__get('train_data_fraction'))
+            #define the types stored in the .tfrecords files
+            self.__data_set('x_type', tf.uint8)
+            self.__data_set('y_type', tf.int64)
             #let's define some functions to reshape data
             #note: [] means nothing will happen
             self.__data_set('x_target_shape', [28, 28, 1, 1, 1])
             self.__data_set('y_target_shape', [1]) #a 'squeeze' is automatically applied here
-            #define the types stored in the .tfrecords files
-            self.__data_set('x_type', tf.uint8)
-            self.__data_set('y_type', tf.int64)
             #set the data decoding function
             self.__data_set('data_decode_function', \
                 (lambda features : [tf.image.decode_jpeg(features['x_raw']), \
@@ -104,24 +105,73 @@ class settings():
             #set the data processing function
             self.__data_set('data_process_function', \
                 (lambda x, y : [tf.image.per_image_standardization(tf.cast(x, tf.float32)), y]))
-        self.__set('aug_crop', 0) #'crop margin'
-        self.__set('n_epochs', 200)
-        self.__set('batch_size', 46)
-        self.__set('lr', 0.0076)
-        self.__set('optimizer', tf.train.AdamOptimizer)
-        self.__set('momentum', 0.93)
-        self.__set('std_mult', 0.7)
-        self.__set('delay', 12)
-        self.__set('psi_preconditioner', 7.8)
-        self.__set('filter_gain', 2)
-        self.__set('filter_size', 3)
-        self.__set('n_filters', 8)
-        self.__set('display_step', 10000/self.__get('batch_size')*3.)
-        self.__set('is_classification', True)
-        self.__set('combine_train_val', False)
-        self.__set('dim', 28)
-        self.__set('crop_shape', 0)
-        self.__set('n_channels', 1)
-        self.__set('n_classes', 10)
-        self.__set('log_path', './logs/deep_mnist/trialA')
-        self.__set('checkpoint_path', './checkpoints/deep_mnist/trialA')
+        self.__maybe_create('aug_crop', 0) #'crop margin'
+        self.__maybe_create('n_epochs', 200)
+        self.__maybe_create('batch_size', 46)
+        self.__maybe_create('lr', 0.0076)
+        self.__maybe_create('optimizer', tf.train.AdamOptimizer)
+        self.__maybe_create('momentum', 0.93)
+        self.__maybe_create('std_mult', 0.7)
+        self.__maybe_create('delay', 12)
+        self.__maybe_create('psi_preconditioner', 7.8)
+        self.__maybe_create('filter_gain', 2)
+        self.__maybe_create('filter_size', 3)
+        self.__maybe_create('n_filters', 8)
+        self.__maybe_create('display_step', 10000/self.__get('batch_size')*3.)
+        self.__maybe_create('is_classification', True)
+        self.__maybe_create('combine_train_val', False)
+        self.__maybe_create('dim', 28)
+        self.__maybe_create('crop_shape', 0)
+        self.__maybe_create('n_channels', 1)
+        self.__maybe_create('n_classes', 10)
+        self.__maybe_create('log_path', './logs/deep_mnist/trialA')
+        self.__maybe_create('checkpoint_path', './checkpoints/deep_mnist/trialA')
+        
+    def __create_options_cifar10(self):
+        #setup data feeding
+        mnist_dir = self.__get('data_dir') + '/cifar10'
+        #data feeding choice
+        self.__set('use_io_queues', True)
+        if self.__get('use_io_queues'):
+            #we can use this convenience function to get all the data
+            data = discover_and_setup_tfrecords(mnist_dir, 
+                self.data, use_train_fraction = self.__get('train_data_fraction'))
+            #define the types stored in the .tfrecords files
+            self.__data_set('x_type', tf.uint8)
+            self.__data_set('y_type', tf.int64)
+            #let's define some functions to reshape data
+            #note: [] means nothing will happen
+            self.__data_set('x_target_shape', [32, 32, 3, 1, 1])
+            self.__data_set('y_target_shape', [1]) #a 'squeeze' is automatically applied here
+            #set the data decoding function
+            self.__data_set('data_decode_function', \
+                (lambda features : [tf.image.decode_jpeg(features['x_raw']), \
+                    tf.decode_raw(features['y_raw'], data['y_type'], name="decodeY")]))
+            #set the data processing function
+            self.__data_set('data_process_function', \
+                (lambda x, y : [tf.image.per_image_standardization(tf.cast(x, tf.float32)), y]))
+        self.__maybe_create('is_classification', True)
+        self.__maybe_create('dim', 32)
+        self.__maybe_create('crop_shape', 0)
+        self.__maybe_create('aug_crop', 3)
+        self.__maybe_create('n_channels', 3)
+        self.__maybe_create('n_classes', 10)
+        self.__maybe_create('n_epochs', 250)
+        self.__maybe_create('batch_size', 32)
+        self.__maybe_create('lr', 0.01)
+        self.__maybe_create('optimizer', tf.train.AdamOptimizer)
+        self.__maybe_create('std_mult', 0.4)
+        self.__maybe_create('delay', 8)
+        self.__maybe_create('psi_preconditioner', 7.8)
+        self.__maybe_create('filter_gain', 2)
+        self.__maybe_create('filter_size', 3)
+        self.__maybe_create('n_filters', 4*10)	# Wide ResNet
+        self.__maybe_create('resnet_block_multiplicity', 3)
+        self.__maybe_create('augment', True)
+        self.__maybe_create('momentum', 0.93)
+        self.__maybe_create('display_step', 25)
+        self.__maybe_create('is_classification', True)
+        self.__maybe_create('n_channels', 3)
+        self.__maybe_create('n_classes', 10)
+        self.__maybe_create('log_path', './logs/deep_cifar')
+        self.__maybe_create('checkpoint_path', './checkpoints/deep_cifar')
