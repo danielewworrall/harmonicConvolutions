@@ -23,7 +23,7 @@ def h_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 	convolution. For this we store data as 6D tensors and filters as 8D
 	tensors, at convolution, we reshape down to 4D tensors and expand again.
 	
-	X: tensor shape [mbatch,h,w,channels,complex,order]
+	X: tensor shape [mbatch,h,w,order,complex,channels]
 	Q: tensor dict---reshaped to [h,w,in,in.comp,in.ord,out,out.comp,out.ord]
 	P: tensor dict---phases
 	strides: as per tf convention (default (1,1,1,1))
@@ -307,7 +307,7 @@ def mean_pooling(x, ksize=(1,1,1,1), strides=(1,1,1,1)):
 	"""Implement mean pooling on complex-valued feature maps. The complex mean
 	on a local receptive field, is performed as mean(real) + i*mean(imag)
 	
-	x: tensor shape [mbatch,h,w,channels,complex,order]
+	x: tensor shape [mbatch,h,w,order,complex,channels]
 	ksize: kernel size 4-tuple (default (1,1,1,1))
 	strides: stride size 4-tuple (default (1,1,1,1))
 	"""
@@ -321,10 +321,35 @@ def mean_pooling(x, ksize=(1,1,1,1), strides=(1,1,1,1)):
 	return tf.reshape(Y, new_shape)
 
 
+def max_pooling(x, ksize=(1,1,1,1), strides=(1,1,1,1)):
+	"""Implement max pooling on complex-valued feature maps. The complex mean
+	on a local receptive field, is performed as mean(real) + i*mean(imag)
+	
+	x: tensor shape [mbatch,h,w,order,complex,channels]
+	ksize: kernel size 4-tuple (default (1,1,1,1))
+	strides: stride size 4-tuple (default (1,1,1,1))
+	"""
+	Xsh = x.get_shape()
+	R = tf.reduce_sum(tf.square(x), reduction_indices=[4], keep_dims=True)
+	R = tf.reshape(R, tf.concat(0,[Xsh[:3],[-1]]))
+	__, A = tf.nn.max_pool_with_argmax(R, ksize=ksize, strides=strides,
+												 padding='VALID', name='max_pooling')
+	xreal = tf.reshape(x[:,:,:,:,0,:], [-1])
+	ximag = tf.reshape(x[:,:,:,:,1,:], [-1])
+	real = tf.gather(xreal, A, name='gather_real')
+	imag = tf.gather(ximag, A, name='gather_imag')
+	
+	Ysh = A.get_shape()
+	new_shape = tf.concat(0, [Ysh[:3],tf.pack([Xsh[3],1,Xsh[5]])])
+	real = tf.reshape(real, new_shape)
+	imag = tf.reshape(imag, new_shape)
+	return tf.concat(4, [real, imag])
+
+
 def mean_max_pooling(x, ksize=(1,1,1,1), strides=(1,1,1,1)):
 	"""Mean pooling on the phase, max pooling on the magnitudes
 	
-	x: tensor shape [mbatch,h,w,channels,complex,order]
+	x: tensor shape [mbatch,h,w,order,complex,channels]
 	ksize: kernel size 4-tuple (default (1,1,1,1))
 	strides: stride size 4-tuple (default (1,1,1,1))
 	"""
@@ -341,15 +366,13 @@ def mean_max_pooling(x, ksize=(1,1,1,1), strides=(1,1,1,1)):
 	Ymax = tf.sqrt(R + 1e-4)
 	
 	Ysh = Ymean.get_shape()
-	mean_shape = tf.concat(0, [Ysh[:3],Xsh[3:]])
-	print Xsh
-	print Ysh
-	max_shape = tf.concat(0, [Ysh[:3],Xsh[3],1,Xsh[5]])
-	phases = tf.reshape(Ymean, mean_shape)
-	mags = tf.reshape(Ymax, max_shape)
+	meansh = tf.concat(0, [Ysh[:3],Xsh[3:]])
+	maxsh = tf.concat(0, [Ysh[:3],tf.pack([Xsh[3],1,Xsh[5]])])
+	phases = tf.reshape(Ymean, meansh)
+	mags = tf.reshape(Ymax, maxsh)
 	
 	# Merge pools
-	phase_mags = tf.reduce_sum(tf.square(phase), reduction_indices=[4], keep_dims=True)
+	phase_mags = tf.reduce_sum(tf.square(phases), reduction_indices=[4], keep_dims=True)
 	phases = phases / tf.sqrt(phase_mags + 1e-4)
 	return mags * phases
 

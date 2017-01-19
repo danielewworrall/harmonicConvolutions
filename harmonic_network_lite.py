@@ -13,7 +13,7 @@ def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 			 max_order=1, stddev=0.4, name='lconv', device='/cpu:0'):
 	"""Harmonic Convolution lite
 	
-	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	x: input tf tensor, shape [batchsize,height,width,order,complex,channels],
 	e.g. a real input tensor of rotation order 0 could have shape
 	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
 	have shape [32,121,121,32,2,3]
@@ -46,10 +46,10 @@ def batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-4, name='hbn',
 		 device='/cpu:0'):
 	"""Batch normalization for the magnitudes of X
 	
-	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	x: input tf tensor, shape [batchsize,height,width,order,complex,channels],
 	e.g. a real input tensor of rotation order 0 could have shape
-	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
-	have shape [32,121,121,32,2,3]
+	[16,32,32,1,1,3], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,3,2,32]
 	is_training: tf bool indicating training status
 	fnc: nonlinearity applied to magnitudes (default tf.nn.relu)
 	decay: exponential decay rate of statistics trackers
@@ -91,6 +91,21 @@ def mean_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mp'):
 		return mean_pooling(x, ksize=ksize, strides=strides)
 	
 
+def max_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mxp'):
+	"""Mean-max pooling
+	
+	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	ksize: size of square filter (int)
+	strides: stride size (4-tuple: default (1,1,1,1))
+	name: (default 'mp')
+	"""
+	with tf.name_scope(name) as scope:
+		return max_pooling(x, ksize=ksize, strides=strides)
+	
+
 def mean_max_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mxp'):
 	"""Mean-max pooling
 	
@@ -104,6 +119,7 @@ def mean_max_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mxp'):
 	"""
 	with tf.name_scope(name) as scope:
 		return mean_max_pooling(x, ksize=ksize, strides=strides)
+
 
 def sum_magnitudes(x, eps=1e-4, keep_dims=True):
 	"""Sum the magnitudes of each of the complex feature maps in X.

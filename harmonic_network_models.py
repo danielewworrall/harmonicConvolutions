@@ -35,30 +35,27 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	
 	# Convolutional Layers with pooling
 	with tf.name_scope('block1') as scope:
-		print x
 		cv1 = hn_lite.conv2d(x, nf, fs, padding='SAME', name='1', device=d)
 		cv1 = hn_lite.nonlinearity(cv1, tf.nn.relu, name='1', device=d)
-		print cv1
 		
 		cv2 = hn_lite.conv2d(cv1, nf, fs, padding='SAME', name='2', device=d)
 		cv2 = hn_lite.batch_norm(cv2, train_phase, name='bn1', device=d)
-		print cv2
 
 	with tf.name_scope('block2') as scope:
 		#cv2 = hn_lite.mean_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv2 = hn_lite.mean_max_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv2 = hn_lite.max_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv3 = hn_lite.conv2d(cv2, nf2, fs, padding='SAME', name='3', device=d)
 		cv3 = hn_lite.nonlinearity(cv3, tf.nn.relu, name='3', device=d)
-		
+
 		cv4 = hn_lite.conv2d(cv3, nf2, fs, padding='SAME', name='4', device=d)
 		cv4 = hn_lite.batch_norm(cv4, train_phase, name='bn2', device=d)
 
 	with tf.name_scope('block3') as scope:
 		#cv4 = hn_lite.mean_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv4 = hn_lite.mean_max_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv4 = hn_lite.max_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv5 = hn_lite.conv2d(cv4, nf3, fs, padding='SAME', name='5', device=d)
 		cv5 = hn_lite.nonlinearity(cv5, tf.nn.relu, name='5', device=d)
-		
+
 		cv6 = hn_lite.conv2d(cv5, nf3, fs, padding='SAME', name='6', device=d)
 		cv6 = hn_lite.batch_norm(cv6, train_phase, name='bn3', device=d)
 
