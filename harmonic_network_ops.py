@@ -47,7 +47,7 @@ def h_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 				fo = output_order - input_order
 				c = W[np.abs(fo)]
 				s = np.sign(fo)
-				# Choose a different filter depending on whether imput is real
+				# Choose a different filter depending on whether input is real
 				if Xsh[4] == 2:
 					Qr += [c[0],-s*c[1]]
 					Qi += [c[1],s*c[0]]
@@ -63,7 +63,8 @@ def h_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 		return tf.reshape(R, ns)
 	
 
-def rs_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
+def rs_conv(X, W, strides=(1,1,1,1), padding='VALID', max_rorder=1,
+				max_sorder=1, name='N'):
 	"""Inter-order (cross-stream) convolutions can be implemented as single
 	convolution. For this we store data as 7D tensors and filters as 10D
 	tensors, at convolution, we reshape down to 4D tensors and expand again.
@@ -74,10 +75,11 @@ def rs_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 	strides: as per tf convention (default (1,1,1,1))
 	padding: as per tf convention (default VALID)
 	filter_size: (default 3)
-	max_order: (default 1)
+	max_rorder: (default 1)
+	max_sorder: (default 1)
 	name: (default N)
 	"""
-	with tf.name_scope('hconv'+str(name)) as scope:
+	with tf.name_scope('rsconv'+str(name)) as scope:
 		# Build data tensor
 		Xsh = X.get_shape().as_list()
 		X_ = tf.reshape(X, tf.concat(0,[Xsh[:3],[-1]]))
@@ -92,7 +94,7 @@ def rs_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 				fo = output_order - input_order
 				c = W[np.abs(fo)]
 				s = np.sign(fo)
-				# Choose a different filter depending on whether imput is real
+				# Choose a different filter depending on whether input is real
 				if Xsh[4] == 2:
 					Qr += [c[0],-s*c[1]]
 					Qi += [c[1],s*c[0]]
