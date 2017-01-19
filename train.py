@@ -107,7 +107,7 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['psi_preconditioner'] = 7.8
 		opt['filter_gain'] = 2
 		opt['filter_size'] = 3
-		opt['n_filters'] = 4*10	# Wide ResNet
+		opt['n_filters'] = 4*4	# Wide ResNet
 		opt['resnet_block_multiplicity'] = 3
 		opt['augment'] = True
 		opt['momentum'] = 0.93
