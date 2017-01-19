@@ -1,3 +1,4 @@
+from __future__ import division
 import os
 import sys
 import zipfile
@@ -21,12 +22,58 @@ def checkFolder(dir):
 	if not os.path.exists(dir):
 		os.makedirs(dir)
 
-def get_num_items_in_tfrecords(files):
+def get_num_items_in_tfrecords_list(files):
 	i = 0
 	for record_file in files:
 		for record in tf.python_io.tf_record_iterator(record_file):
 			i += 1
 	return i
+
+def get_all_tfrecords(directory):
+	train_files = []
+	valid_files = []
+	test_files = []
+	for file in os.listdir(directory):
+		if file.endswith(".tfrecords"):
+			if file.startswith("train"):
+				train_files.append(directory + '/' + file)
+			elif file.startswith("valid"):
+				valid_files.append(directory + '/' + file)
+			elif file.startswith("test"):
+				test_files.append(directory + '/' + file)
+	return train_files, valid_files, test_files
+
+def discover_and_setup_tfrecords(directory, data, use_train_fraction=1.0):
+	train_files, valid_files, test_files = get_all_tfrecords(directory)
+	if use_train_fraction < 1.0:
+		num_examples = get_num_items_in_tfrecords_list(train_files)
+		single_file = get_num_items_in_tfrecords_list([train_files[0]])
+		num_examples_target = num_examples * use_train_fraction
+		low = int(num_examples_target / single_file)
+		high = low + 1
+		if num_examples_target - (low * single_file) < num_examples_target - (high * single_file):
+			num_files = low
+		else:
+			num_files = high
+		perm = np.random.permutation(len(train_files))
+		new_train_files = []
+		for i in xrange(num_files):
+			new_train_files.append(train_files[perm[i]])
+		#overwrite original array
+		train_files = new_train_files
+		print('Given a fraction of ' + str(use_train_fraction) + \
+			', we use ' + str(num_files) + \
+			' number of files with ' + str(get_num_items_in_tfrecords_list(train_files)) + \
+			' number of training examples out of ' + str(num_examples))
+
+	data['train_files'] = train_files
+	data['valid_files'] = valid_files
+	data['test_files'] = test_files
+	#get the number of items of each set
+	data['train_items'] = get_num_items_in_tfrecords_list(data['train_files'])
+	data['valid_items'] = get_num_items_in_tfrecords_list(data['valid_files'])
+	data['test_items'] = get_num_items_in_tfrecords_list(data['test_files'])
+	return data
 
 def download2FileAndExtract(url, folder, fileName):
 	checkFolder(folder)

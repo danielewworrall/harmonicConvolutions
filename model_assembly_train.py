@@ -9,6 +9,7 @@ import tensorflow as tf
 from io_helpers import *
 from io_pipelines import pipeline
 from harmonic_network_models import *
+from settings import settings
 
 #----------HELPER FUNCTIONS----------
 def print_train_validation(trial_num, counter, epoch, time,
@@ -135,17 +136,11 @@ def get_io_placeholders(opt):
 def build_io_queues(opt, data, mode):
 	"""Build pipelines so we can take advantage of tensorflow's queues"""
 	if mode == 'train':
-		io_x, io_y = pipeline(data['train_files'], opt['batch_size'], opt['n_epochs'],
-			(lambda x, y : [x, y]),
-			data['x_shape_target'], data['y_shape_target'], shuffle=True)
+		io_x, io_y = pipeline(data['train_files'], opt, data, shuffle=True)
 	elif mode == 'valid':
-		io_x, io_y = pipeline(data['valid_files'], opt['batch_size'], opt['n_epochs'],
-			(lambda x, y : [x, y]),
-			data['x_shape_target'], data['y_shape_target'], shuffle=False)
+		io_x, io_y = pipeline(data['valid_files'], opt, data, shuffle=False)
 	elif mode == 'test':
-		io_x, io_y = pipeline(data['test_files'], opt['batch_size'], opt['n_epochs'],
-			(lambda x, y : [x, y]),
-			data['x_shape_target'], data['y_shape_target'], shuffle=False)
+		io_x, io_y = pipeline(data['test_files'], opt, data, shuffle=False)
 	else:
 		print('ERROR: build_io_queues() expect as mode one of: {train, valid, test}')
 		sys.exit(1)
@@ -560,7 +555,9 @@ def config_init():
 	return config
 
 #----------Main Entry Point for Training----------
-def build_all_and_train(opt, data):
+def build_all_and_train(settings):
+	opt = settings.get_options()
+	data = settings.get_data_options()
 	# Check that save paths exist
 	opt['log_path'] = opt['log_path'] + '/trial' + str(opt['trial_num'])
 	opt['checkpoint_path'] = opt['checkpoint_path'] + '/trial' + \
