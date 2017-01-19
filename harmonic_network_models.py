@@ -7,9 +7,9 @@ helper functions in tensorflow.
 
 """
 import tensorflow as tf
+arg_scope = tf.contrib.framework.arg_scope
 
 import harmonic_network_lite as hn_lite
-
 from harmonic_network_helpers import *
 
 def deep_mnist(opt, x, train_phase, device='/cpu:0'):
@@ -24,7 +24,6 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	fs = opt['filter_size']
 	nch = opt['n_channels']
 	ncl = opt['n_classes']
-	d = device
 	sm = opt['std_mult']
 
 	# Create bias for final layer
@@ -33,37 +32,38 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 							   initializer=tf.constant_initializer(1e-2))
 		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,nch])
 	
-	# Convolutional Layers with pooling
-	with tf.name_scope('block1') as scope:
-		cv1 = hn_lite.conv2d(x, nf, fs, padding='SAME', name='1', device=d)
-		cv1 = hn_lite.non_linearity(cv1, tf.nn.relu, name='1', device=d)
-		
-		cv2 = hn_lite.conv2d(cv1, nf, fs, padding='SAME', name='2', device=d)
-		cv2 = hn_lite.batch_norm(cv2, train_phase, name='bn1', device=d)
+	with arg_scope([hn_lite.conv2d, hn_lite.non_linearity, hn_lite.batch_norm], device=device):
+		# Convolutional Layers with pooling
+		with tf.name_scope('block1') as scope:
+			cv1 = hn_lite.conv2d(x, nf, fs, padding='SAME', name='1')
+			cv1 = hn_lite.non_linearity(cv1, tf.nn.relu, name='1')
+			
+			cv2 = hn_lite.conv2d(cv1, nf, fs, padding='SAME', name='2')
+			cv2 = hn_lite.batch_norm(cv2, train_phase, name='bn1')
 
-	with tf.name_scope('block2') as scope:
-		cv2 = hn_lite.mean_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv3 = hn_lite.conv2d(cv2, nf2, fs, padding='SAME', name='3', device=d)
-		cv3 = hn_lite.non_linearity(cv3, tf.nn.relu, name='3', device=d)
-		
-		cv4 = hn_lite.conv2d(cv3, nf2, fs, padding='SAME', name='4', device=d)
-		cv4 = hn_lite.batch_norm(cv4, train_phase, name='bn2', device=d)
+		with tf.name_scope('block2') as scope:
+			cv2 = hn_lite.mean_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+			cv3 = hn_lite.conv2d(cv2, nf2, fs, padding='SAME', name='3')
+			cv3 = hn_lite.non_linearity(cv3, tf.nn.relu, name='3')
+			
+			cv4 = hn_lite.conv2d(cv3, nf2, fs, padding='SAME', name='4')
+			cv4 = hn_lite.batch_norm(cv4, train_phase, name='bn2')
 
-	with tf.name_scope('block3') as scope:
-		cv4 = hn_lite.mean_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv5 = hn_lite.conv2d(cv4, nf3, fs, padding='SAME', name='5', device=d)
-		cv5 = hn_lite.non_linearity(cv5, tf.nn.relu, name='5', device=d)
-		
-		cv6 = hn_lite.conv2d(cv5, nf3, fs, padding='SAME', name='6', device=d)
-		cv6 = hn_lite.batch_norm(cv6, train_phase, name='bn3', device=d)
+		with tf.name_scope('block3') as scope:
+			cv4 = hn_lite.mean_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+			cv5 = hn_lite.conv2d(cv4, nf3, fs, padding='SAME', name='5')
+			cv5 = hn_lite.non_linearity(cv5, tf.nn.relu, name='5')
+			
+			cv6 = hn_lite.conv2d(cv5, nf3, fs, padding='SAME', name='6')
+			cv6 = hn_lite.batch_norm(cv6, train_phase, name='bn3')
 
-	# Final Layer
-	with tf.name_scope('block4') as scope:
-		cv7 = hn_lite.conv2d(cv6, ncl, fs, padding='SAME', phase=False,
-					 name='7', device=d)
-		real = hn_lite.sum_mags(cv7)
-		cv7 = tf.reduce_mean(real, reduction_indices=[1,2,3,4])
-		return tf.nn.bias_add(cv7, bias) 
+		# Final Layer
+		with tf.name_scope('block4') as scope:
+			cv7 = hn_lite.conv2d(cv6, ncl, fs, padding='SAME', phase=False,
+						name='7')
+			real = hn_lite.sum_mags(cv7)
+			cv7 = tf.reduce_mean(real, reduction_indices=[1,2,3,4])
+			return tf.nn.bias_add(cv7, bias) 
 
 
 def deep_cifar(opt, x, train_phase, device='/cpu:0'):

@@ -8,7 +8,9 @@ import numpy as np
 import tensorflow as tf
 
 from harmonic_network_ops import *
+arg_scope = tf.contrib.framework.arg_scope
 
+@tf.contrib.framework.add_arg_scope
 def conv2d(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 			 max_order=1, stddev=0.4, name='lconv', device='/cpu:0'):
 	"""Harmonic Convolution lite"""
@@ -27,6 +29,7 @@ def conv2d(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 	return R
 
 
+@tf.contrib.framework.add_arg_scope
 def batch_norm(x, train_phase, fnc=tf.nn.relu, decay=0.99, eps=1e-4, name='hbn',
 		 device='/cpu:0'):
 	"""Batch normalization for the magnitudes of X"""
@@ -34,6 +37,7 @@ def batch_norm(x, train_phase, fnc=tf.nn.relu, decay=0.99, eps=1e-4, name='hbn',
 							  device=device)
 
 
+@tf.contrib.framework.add_arg_scope
 def non_linearity(x, fnc=tf.nn.relu, eps=1e-4, name='nl', device='/cpu:0'):
 	"""Alter nonlinearity for the complex domains"""
 	return h_nonlin(x, fnc, eps=eps, name=name, device=device)
@@ -54,6 +58,7 @@ def sum_mags(X, eps=1e-4, keep_dims=True):
 	"""
 	return sum_magnitudes(X, eps, keep_dims=True)
 
+@tf.contrib.framework.add_arg_scope
 def residual_block(x, out_shape, ksize, depth, train_phase, fnc=tf.nn.relu, max_order=1,
 		  phase=True, name='res', device='/cpu:0'):
 	"""Residual block"""
