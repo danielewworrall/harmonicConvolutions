@@ -10,6 +10,7 @@ class settings():
     def __init__(self, opt):
         self.opt = opt
         self.data = {}
+        self.__maybe_create('num_threads_per_queue', 1)
         #check that we have all the required options
         if 'deviceIdxs' in self.opt and \
             'dataset' in self.opt and \

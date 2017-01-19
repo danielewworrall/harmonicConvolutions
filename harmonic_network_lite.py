@@ -77,39 +77,4 @@ def residual_block(x, out_shape, ksize, depth, train_phase, fnc=tf.nn.relu, max_
 		ysh = y.get_shape().as_list()
 		x = tf.pad(x, [[0,0],[0,0],[0,0],[0,0],[0,0],[0,ysh[5]-xsh[5]]])
 		return y + x
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+		

@@ -52,9 +52,11 @@ def pipeline(fileNames, opt, data, shuffle=True):
 		if shuffle:
 			image_batch, label_batch = tf.train.shuffle_batch(
 				[image, label], batch_size=opt['batch_size'],
-				capacity=capacity, min_after_dequeue=min_after_capacity)
+				capacity=capacity, min_after_dequeue=min_after_capacity,
+				num_threads=opt['num_threads_per_queue'])
 		else:
 			image_batch, label_batch = tf.train.batch([image,
-				label], batch_size=opt['batch_size'], capacity=capacity)
+				label], batch_size=opt['batch_size'], capacity=capacity,
+				num_threads=opt['num_threads_per_queue'])
 
 	return image_batch, label_batch
