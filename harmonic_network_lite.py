@@ -8,8 +8,6 @@ import numpy as np
 import tensorflow as tf
 
 from harmonic_network_ops import *
-arg_scope = tf.contrib.framework.arg_scope
-
 
 @tf.contrib.framework.add_arg_scope
 def conv2d(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
