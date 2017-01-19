@@ -10,6 +10,7 @@ import tensorflow as tf
 from harmonic_network_ops import *
 arg_scope = tf.contrib.framework.arg_scope
 
+
 @tf.contrib.framework.add_arg_scope
 def conv2d(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 			 max_order=1, stddev=0.4, name='lconv', device='/cpu:0'):
@@ -43,11 +44,14 @@ def non_linearity(x, fnc=tf.nn.relu, eps=1e-4, name='nl', device='/cpu:0'):
 	return h_nonlin(x, fnc, eps=eps, name=name, device=device)
 
 
+@tf.contrib.framework.add_arg_scope
 def mean_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mp'):
 	"""Mean pooling"""
 	with tf.name_scope(name) as scope:
 		return mean_pooling(x, ksize=ksize, strides=strides)
 
+
+@tf.contrib.framework.add_arg_scope
 def sum_mags(X, eps=1e-4, keep_dims=True):
 	"""Sum the magnitudes of each of the complex feature maps in X.
 	
@@ -57,6 +61,7 @@ def sum_mags(X, eps=1e-4, keep_dims=True):
 	eps: regularization since grad |Z| is infinite at zero (default 1e-4)
 	"""
 	return sum_magnitudes(X, eps, keep_dims=True)
+
 
 @tf.contrib.framework.add_arg_scope
 def residual_block(x, out_shape, ksize, depth, train_phase, fnc=tf.nn.relu, max_order=1,
