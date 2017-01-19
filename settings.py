@@ -28,6 +28,7 @@ class settings():
 
     def __maybe_create(self, key, value):
         if key in self.opt:
+            print('NOTE: Option [' + key + '] is specified by user. Not using default.')
             return
         else:
             self.opt[key] = value
@@ -53,32 +54,18 @@ class settings():
     def create_options(self):
         # Default configuration
         self.__maybe_create('save_step', 10)
-        self.__maybe_create('display_step', 1e6)
-        self.__maybe_create('lr', 3e-2)
-        self.__maybe_create('batch_size', 50)
-        self.__maybe_create('n_epochs', 100)
-        self.__maybe_create('n_filters', 8)
         self.__maybe_create('trial_num', 'A')
-        self.__maybe_create('combine_train_val', False)
-        self.__maybe_create('std_mult', 0.3)
-        self.__maybe_create('filter_gain', 2)
-        self.__maybe_create('momentum', 0.93)
-        self.__maybe_create('psi_preconditioner', 3.4)
-        self.__maybe_create('delay', 8)
         self.__maybe_create('lr_div', 10)
         self.__maybe_create('augment', False)
-        self.__maybe_create('crop_shape', 0)
-        self.__maybe_create('log_path', 'logs/current')
-        self.__maybe_create('checkpoint_path', 'checkpoints/current')
         self.__maybe_create('is_bsd', False)
         self.__maybe_create('train_data_fraction', 1.0)
         #now create options specific to datasets
         if self.__get('dataset') == 'rotated_mnist':
             self.__create_options_rotated_mnist()
-        if self.__get('dataset') == 'cifar10':
+        elif self.__get('dataset') == 'cifar10':
             self.__create_options_cifar10()
         else:
-            print('ERROR: no implemented')
+            print('ERROR: not implemented')
             return False
         return True
 

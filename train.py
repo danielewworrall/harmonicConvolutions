@@ -20,6 +20,8 @@ if __name__ == '__main__':
 	opt['dataset'] = sys.argv[2]
 	opt['model'] = sys.argv[3]
 	opt['data_dir'] = sys.argv[4]
+
+	#opt['num_threads_per_queue'] = 4
 	#create configuration for different tests
 	options = settings(opt)
 	options.create_options()
