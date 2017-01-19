@@ -89,7 +89,21 @@ def mean_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mp'):
 	"""
 	with tf.name_scope(name) as scope:
 		return mean_pooling(x, ksize=ksize, strides=strides)
+	
 
+def mean_max_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mxp'):
+	"""Mean-max pooling
+	
+	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	ksize: size of square filter (int)
+	strides: stride size (4-tuple: default (1,1,1,1))
+	name: (default 'mp')
+	"""
+	with tf.name_scope(name) as scope:
+		return mean_max_pooling(x, ksize=ksize, strides=strides)
 
 def sum_magnitudes(x, eps=1e-4, keep_dims=True):
 	"""Sum the magnitudes of each of the complex feature maps in X.

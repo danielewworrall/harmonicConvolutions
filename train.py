@@ -72,7 +72,7 @@ def create_opt_data(opt):
 		opt['delay'] = 12
 		opt['psi_preconditioner'] = 7.8
 		opt['filter_gain'] = 2
-		opt['filter_size'] = 3	# <<<< this should be 5!!!!!!!!!!!!!!!!
+		opt['filter_size'] = 5	# <<<< this should be 5!!!!!!!!!!!!!!!!
 		opt['n_filters'] = 8
 		opt['display_step'] = 10000/(opt['batch_size']*3.)
 		opt['is_classification'] = True
@@ -90,7 +90,8 @@ so the current version will be unstable unless otherwise noted!""")
 		if not os.path.exists(opt['data_dir'] + '/cifar_numpy'):
 			download_dataset(opt)
 		# Load dataset
-		data = load_dataset(opt['data_dir'], 'cifar_numpy')
+		#data = load_dataset(opt['data_dir'], 'cifar_numpy')
+		data = load_dataset(opt['data_dir'], 'cifar_preproc')
 		opt['is_classification'] = True
 		opt['dim'] = 32
 		opt['crop_shape'] = 0
@@ -106,7 +107,7 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['psi_preconditioner'] = 7.8
 		opt['filter_gain'] = 2
 		opt['filter_size'] = 3
-		opt['n_filters'] = 4*10	# Wide ResNet
+		opt['n_filters'] = 4*4	# Wide ResNet
 		opt['resnet_block_multiplicity'] = 3
 		opt['augment'] = True
 		opt['momentum'] = 0.93

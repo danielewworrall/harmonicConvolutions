@@ -303,31 +303,55 @@ def get_complex_basis_matrices(filter_size, order=1):
 
 
 ##### SPECIAL FUNCTIONS #####
-def mean_pooling(X, ksize=(1,1,1,1), strides=(1,1,1,1)):
+def mean_pooling(x, ksize=(1,1,1,1), strides=(1,1,1,1)):
 	"""Implement mean pooling on complex-valued feature maps. The complex mean
 	on a local receptive field, is performed as mean(real) + i*mean(imag)
 	
-	X: dict of channels {rotation order: (real, imaginary)}
+	x: tensor shape [mbatch,h,w,channels,complex,order]
 	ksize: kernel size 4-tuple (default (1,1,1,1))
 	strides: stride size 4-tuple (default (1,1,1,1))
 	"""
-	"""
-	Y = {}
-	for k, v in X.iteritems():
-		y0 = tf.nn.avg_pool(v[0], ksize=ksize, strides=strides,
-							padding='VALID', name='mean_pooling')
-		y1 = tf.nn.avg_pool(v[1], ksize=ksize, strides=strides,
-							padding='VALID', name='mean_pooling')
-		Y[k] = (y0,y1)
-	"""
-	Xsh = X.get_shape()
+	Xsh = x.get_shape()
 	# Collapse output the order, complex, and channel dimensions
-	X_ = tf.reshape(X, tf.concat(0,[Xsh[:3],[-1]]))
+	X_ = tf.reshape(x, tf.concat(0,[Xsh[:3],[-1]]))
 	Y = tf.nn.avg_pool(X_, ksize=ksize, strides=strides, padding='VALID',
 					   name='mean_pooling')
 	Ysh = Y.get_shape()
 	new_shape = tf.concat(0, [Ysh[:3],Xsh[3:]])
 	return tf.reshape(Y, new_shape)
+
+
+def mean_max_pooling(x, ksize=(1,1,1,1), strides=(1,1,1,1)):
+	"""Mean pooling on the phase, max pooling on the magnitudes
+	
+	x: tensor shape [mbatch,h,w,channels,complex,order]
+	ksize: kernel size 4-tuple (default (1,1,1,1))
+	strides: stride size 4-tuple (default (1,1,1,1))
+	"""
+	Xsh = x.get_shape()
+	# mean pooling
+	X_ = tf.reshape(x, tf.concat(0,[Xsh[:3],[-1]]))
+	Ymean = tf.nn.avg_pool(X_, ksize=ksize, strides=strides, padding='VALID',
+					   name='mean_pooling')
+	# max pooling
+	R = tf.reduce_sum(tf.square(x), reduction_indices=[4], keep_dims=True)
+	R = tf.reshape(R, tf.concat(0,[Xsh[:3],[-1]]))
+	R = tf.nn.max_pool(R, ksize=ksize, strides=strides, padding='VALID',
+					   name='max_pooling')
+	Ymax = tf.sqrt(R + 1e-4)
+	
+	Ysh = Ymean.get_shape()
+	mean_shape = tf.concat(0, [Ysh[:3],Xsh[3:]])
+	print Xsh
+	print Ysh
+	max_shape = tf.concat(0, [Ysh[:3],Xsh[3],1,Xsh[5]])
+	phases = tf.reshape(Ymean, mean_shape)
+	mags = tf.reshape(Ymax, max_shape)
+	
+	# Merge pools
+	phase_mags = tf.reduce_sum(tf.square(phase), reduction_indices=[4], keep_dims=True)
+	phases = phases / tf.sqrt(phase_mags + 1e-4)
+	return mags * phases
 
 
 def get_complex_basis_functions(filter_size, order):
