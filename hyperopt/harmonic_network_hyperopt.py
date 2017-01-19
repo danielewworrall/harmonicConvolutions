@@ -16,7 +16,7 @@ def main(opt, data, n):
     """Train the networks"""
     for i in xrange(n):
         opt['use_io_queues'] = False
-        opt['aug_crop'] = np.random.randint(5)
+        opt['aug_crop'] = np.random.randint(4) + 1
         opt['n_epochs'] = 50 + np.random.randint(200)
         opt['batch_size'] = int(log_uniform(2,3,3))
         opt['lr']  = log_uniform(10,-4,2.5)
