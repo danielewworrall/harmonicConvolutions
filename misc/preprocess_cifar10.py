@@ -8,17 +8,15 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 def main():
-    folder = './cifar10/cifar_numpy/'
-    folderp = './cifar10/cifar_preproc/'
+    folder = '../cifar10/cifar_numpy/'
+    folderp = '../cifar10/cifar_preproc/'
     fnames = ['trainX.npy','validX.npy','testX.npy']
     train = np.load(folder+fnames[0])
     valid = np.load(folder+fnames[1])
     test = np.load(folder+fnames[2])
-    print train.shape
-    print valid.shape
-    print test.shape
+
     data = np.vstack([train, valid])
-    # Global contrast normalization parameters
+    # Global contrast normalization parameters---recalculate stats for both sets
     mean, stddev = GCN(data)
     data = (data-mean)/(stddev + 1e-6)
     mean, stddev = GCN(test)
@@ -29,9 +27,7 @@ def main():
     test = ZCA(test, U, s)
     train = data[:44500,...]
     valid = data[44500:,...]
-    print train.shape
-    print valid.shape
-    print test.shape
+
     np.save(folderp+fnames[0], train)
     np.save(folderp+fnames[1], valid)
     np.save(folderp+fnames[2], test)

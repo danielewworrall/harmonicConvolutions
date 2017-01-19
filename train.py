@@ -90,7 +90,8 @@ so the current version will be unstable unless otherwise noted!""")
 		if not os.path.exists(opt['data_dir'] + '/cifar_numpy'):
 			download_dataset(opt)
 		# Load dataset
-		data = load_dataset(opt['data_dir'], 'cifar_numpy')
+		#data = load_dataset(opt['data_dir'], 'cifar_numpy')
+		data = load_dataset(opt['data_dir'], 'cifar_preproc')
 		opt['is_classification'] = True
 		opt['dim'] = 32
 		opt['crop_shape'] = 0
