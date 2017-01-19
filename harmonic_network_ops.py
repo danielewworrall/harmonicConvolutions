@@ -35,6 +35,28 @@ def complex_conv(X, Q, strides=(1,1,1,1), padding='VALID', name='N'):
 		return Rr, Ri
 
 
+def complex_deconv(X, Q, output_shape, strides=(1, 1, 1, 1), padding='VALID', name='N'):
+	"""Convolve a complex valued input X and complex-valued filter Q. Output is
+	computed as (Xr + iXi)*(Qr + iQi) = (Xr*Qr - Xi*Qi) + i(Xr*Qi + Xi*Qr),
+	where * denotes convolution.
+
+	X: complex input stored as (real, imaginary)
+	Q: complex filter stored as (real, imaginary)
+	strides: as per tf convention (default (1,1,1,1))
+	padding: as per tf convention (default VALID)
+	name: (default N)
+	"""
+	with tf.name_scope('complexConv' + name) as scope:
+		Xr, Xi = X
+		Qr, Qi = Q
+		Rrr = tf.nn.conv2d_transpose(Xr, Qr, output_shape, strides=strides, padding=padding, name='rr' + name)
+		Rii = tf.nn.conv2d_transpose(Xi, Qi, output_shape, strides=strides, padding=padding, name='ii' + name)
+		Rri = tf.nn.conv2d_transpose(Xr, Qi, output_shape, strides=strides, padding=padding, name='ri' + name)
+		Rir = tf.nn.conv2d_transpose(Xi, Qr, output_shape, strides=strides, padding=padding, name='ir' + name)
+		Rr = Rrr - Rii
+		Ri = Rri + Rir
+		return Rr, Ri
+
 def real_input_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
 						name='N'):
 	"""Equivariant complex convolution for a real input e.g. an image.
@@ -56,6 +78,31 @@ def real_input_conv(X, R, filter_size=3, strides=(1,1,1,1), padding='VALID',
 							  name='reic_real'+name)
 			Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding,
 							  name='reic_im'+name)
+			Z[m] = (Zr, Zi)
+		return Z
+
+
+def real_input_deconv(X, R, output_shape, filter_size=3, strides=(1, 1, 1, 1), padding='VALID',
+					name='N'):
+	"""Equivariant complex convolution for a real input e.g. an image.
+
+	X: tf tensor
+	R: dict of filter coefficients {rotation order: (real, imaginary)}
+	filter_size: int of filter height/width (default 3) CAVEAT: ODD supported
+	strides: as per tf convention (default (1,1,1,1))
+	padding: as per tf convention (default VALID)
+	name: (default N)
+
+	Returns dict filter responses {order: (real, imaginary)}
+	"""
+	with tf.name_scope('reic' + str(name)) as scope:
+		Q = get_complex_filters(R, filter_size=filter_size)
+		Z = {}
+		for m, q in Q.iteritems():
+			Zr = tf.nn.conv2d_transpose(X, q[0], output_shape, strides=strides, padding=padding,
+							  name='reic_real' + name)
+			Zi = tf.nn.conv2d_transpose(X, q[1], output_shape, strides=strides, padding=padding,
+							  name='reic_im' + name)
 			Z[m] = (Zr, Zi)
 		return Z
 
@@ -100,6 +147,46 @@ def complex_input_conv(X, R, filter_size=3, output_orders=[0,],
 		return sum_complex_tensor_dict(Z)
 
 
+def complex_input_deconv(X, R, output_shape, filter_size=3, output_orders=[0, ],
+					   strides=(1, 1, 1, 1), padding='VALID', name='N'):
+	"""Equivariant complex convolution for a complex input e.g. feature maps.
+
+	X: dict of channels {rotation order: (real, imaginary)}
+	R: dict of filter coefficients {rotation order: (real, imaginary)}
+	filter_size: int of filter height/width (default 3) CAVEAT: ODD supported
+	output_orders: list of rotation orders to output (default [0,])
+	strides: as per tf convention (default (1,1,1,1))
+	padding: as per tf convention (default VALID)
+	name: (default N)
+
+	Returns dict filter responses {order: (real, imaginary)}
+	"""
+	with tf.name_scope('ceic' + str(name)) as scope:
+		# Perform initial scan to link up all filter orders with input image orders.
+		pairings = get_key_pairings(X, R, output_orders)
+		Q = get_complex_filters(R, filter_size=filter_size)
+
+		Z = {}
+		for m, v in pairings.iteritems():
+			for pair in v:
+				q_, x_ = pair  # filter key, input key
+				order = q_ + x_
+				s, q = np.sign(q_), Q[np.abs(q_)]  # key sign, filter
+				x = X[x_]  # input
+				# For negative orders take conjugate of positive order filter.
+				Z_ = complex_deconv(x, (q[0], s * q[1]), output_shape, strides=strides,
+								  padding=padding, name=name)
+				if order not in Z.keys():
+					Z[order] = []
+				Z[order].append(Z_)
+
+		# Z is a dictionary of convolutional responses from each previous layer
+		# feature map of rotation orders [A,B,...,C] to each feature map in this
+		# layer of rotation orders [X,Y,...,Z]. At each map M in [X,Y,...,Z] we
+		# sum the inputs from each F in [A,B,...,C].
+		return sum_complex_tensor_dict(Z)
+
+
 def real_input_rotated_conv(X, R, psi, filter_size=3, strides=(1,1,1,1), 
 							padding='VALID', name='N'):
 	"""Equivariant complex convolution for a real input e.g. an image.
@@ -122,6 +209,32 @@ def real_input_rotated_conv(X, R, psi, filter_size=3, strides=(1,1,1,1),
 							  name='reic_real'+name)
 			Zi = tf.nn.conv2d(X, q[1], strides=strides, padding=padding,
 							  name='reic_im'+name)
+			Z[m] = (Zr, Zi)
+		return Z
+
+
+def real_input_rotated_deconv(X, R, psi, output_shape, filter_size=3, strides=(1, 1, 1, 1),
+							padding='VALID', name='N'):
+	"""Equivariant complex convolution for a real input e.g. an image.
+
+	X: tf tensor
+	R: dict of filter coefficients {rotation order: (real, imaginary)}
+	psi: dict of filter phases {rotation order: phase}
+	filter_size: int of filter height/width (default 3) CAVEAT: ODD supported
+	strides: as per tf convention (default (1,1,1,1))
+	padding: as per tf convention (default VALID)
+	name: (default N)
+
+	Returns dict filter responses {order: (real, imaginary)}
+	"""
+	with tf.name_scope('reic' + str(name)) as scope:
+		Q = get_complex_rotated_filters(R, psi, filter_size=filter_size)
+		Z = {}
+		for m, q in Q.iteritems():
+			Zr = tf.nn.conv2d_transpose(X, q[0], output_shape, strides=strides, padding=padding,
+							  name='reic_real' + name)
+			Zi = tf.nn.conv2d_transpose(X, q[1], output_shape, strides=strides, padding=padding,
+							  name='reic_im' + name)
 			Z[m] = (Zr, Zi)
 		return Z
 
@@ -160,6 +273,47 @@ def complex_input_rotated_conv(X, R, psi, filter_size=3, output_orders=[0,],
 					Z[order] = []
 				Z[order].append(Z_)
 		
+		# Z is a dictionary of convolutional responses from each previous layer
+		# feature map of rotation orders [A,B,...,C] to each feature map in this
+		# layer of rotation orders [X,Y,...,Z]. At each map M in [X,Y,...,Z] we
+		# sum the inputs from each F in [A,B,...,C].
+		return sum_complex_tensor_dict(Z)
+
+
+def complex_input_rotated_deconv(X, R, psi, output_shape, filter_size=3, output_orders=[0, ],
+							   strides=(1, 1, 1, 1), padding='VALID', name='N'):
+	"""Equivariant complex convolution for a complex input e.g. feature maps.
+
+	X: dict of channels {rotation order: (real, imaginary)}
+	R: dict of filter coefficients {rotation order: (real, imaginary)}
+	psi: dict of filter phases {rotation order: phase}
+	filter_size: int of filter height/width (default 3) CAVEAT: ODD supported
+	output_orders: list of rotation orders to output (default [0,])
+	strides: as per tf convention (default (1,1,1,1))
+	padding: as per tf convention (default VALID)
+	name: (default N)
+
+	Returns dict filter responses {order: (real, imaginary)}
+	"""
+	with tf.name_scope('ceic' + str(name)) as scope:
+		# Perform initial scan to link up all filter orders with input image orders.
+		pairings = get_key_pairings(X, R, output_orders)
+		Q = get_complex_rotated_filters(R, psi, filter_size=filter_size)
+
+		Z = {}
+		for m, v in pairings.iteritems():
+			for pair in v:
+				q_, x_ = pair  # filter key, input key
+				order = q_ + x_
+				s, q = np.sign(q_), Q[np.abs(q_)]  # key sign, filter
+				x = X[x_]  # input
+				# For negative orders take conjugate of positive order filter.
+				Z_ = complex_deconv(x, (q[0], s * q[1]), output_shape, strides=strides,
+								  padding=padding, name=name)
+				if order not in Z.keys():
+					Z[order] = []
+				Z[order].append(Z_)
+
 		# Z is a dictionary of convolutional responses from each previous layer
 		# feature map of rotation orders [A,B,...,C] to each feature map in this
 		# layer of rotation orders [X,Y,...,Z]. At each map M in [X,Y,...,Z] we
