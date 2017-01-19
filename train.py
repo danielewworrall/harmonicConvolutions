@@ -10,7 +10,7 @@ if __name__ == '__main__':
 	if len(sys.argv) != 5:
 		print('Please provide:')
 		print('     -comma-separated list of device IDxs to use')
-		print('     -dataset name (mnist / cifar10 /  plankton / galaxies / bsd)')
+		print('     -dataset name (rotated_mnist / cifar10)')
 		print('     -model name (as defined in harmonic_network_models.py)')
 		print('     -parent data directory')
 		sys.exit(1)
