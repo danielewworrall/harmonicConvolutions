@@ -51,6 +51,12 @@ class settings():
     def get_data_options(self):
         return self.data
 
+    def set_option(key, value):
+        self.__set(key, value)
+    
+    def set_data_option(key, value):
+        self.__data_set(key, value)
+
     def create_options(self):
         # Default configuration
         self.__maybe_create('save_step', 10)
