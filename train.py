@@ -8,7 +8,7 @@ import harmonicconvolutions.harmonic_network_models
 
 def create_opt_data(opt):
 	# Default configuration
-	opt['model'] = getattr(harmonic_network_models, opt['model'])
+	opt['model'] = getattr(harmonicconvolutions.harmonic_network_models, opt['model'])
 	opt['save_step'] = 10
 	opt['display_step'] = 1e6
 	opt['lr'] = 3e-2
