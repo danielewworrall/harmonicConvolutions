@@ -8,8 +8,8 @@ helper functions in tensorflow.
 """
 import tensorflow as tf
 
-from harmonic_network_helpers import *
-from harmonic_network_ops import *
+from harmonicconvolutions.harmonic_network_helpers import *
+from harmonicconvolutions.harmonic_network_ops import *
 
 def deep_Z(opt, x, train_phase, device='/cpu:0'):
 	"""A standard neural net"""
@@ -582,3 +582,145 @@ def deep_unet(opt, x, train_phase, device='/cpu:0'):
 					psis['u2_2'], biases['u2'], train_phase, name='up2', device=device)
 	out =  up_block(out, d1, weights['u1_1'], weights['u1_2'], psis['u1_1'],
 					psis['u1_2'], biases['u1'], train_phase, name='up1', device=device)
+
+def deep_autoencoder(opt, x, train_phase, device='/cpu:.0'):
+	"""
+	Naive Autoencoder Based on deep_stable
+	"""
+
+	"""High frequency convolutions are unstable, so get rid of them"""
+	# Sure layers weight & bias
+	order = 1
+	nf = opt['n_filters']
+	nf2 = int(nf * opt['filter_gain'])
+	nf3 = int(nf * (opt['filter_gain'] ** 2.))
+	bs = opt['batch_size']
+	n = ((opt['filter_size'] + 1) / 2)
+	tr1 = (n * (n + 1)) / 2
+	tr2 = tr1 - 1
+
+
+
+
+	sm = opt['std_mult']
+
+	"""
+	For autoencoder we have recognition and generation layers and a latent space in the middle.
+
+	For this example, we fix the stride to be 1.
+	"""
+
+	# Reshape input picture -- square inputs for now
+	size = opt['dim'] - 2 * opt['crop_shape']
+	x = tf.reshape(x, shape=[bs, size, size, opt['n_channels']])
+
+	with tf.device(device):
+		weights = {
+			'r_w1': get_weights_dict([[tr1, ], [tr2, ]], opt['n_channels'], nf, std_mult=sm, name='R_W1', device=device),
+			'r_w2': get_weights_dict([[tr1, ], [tr2, ]], nf, nf, std_mult=sm, name='R_W2', device=device),
+			'r_w3': get_weights_dict([[tr1, ], [tr2, ]], nf, nf, std_mult=sm, name='R_W3', device=device),
+			# I don't think this is actually how we want to do it.for
+			# We probably want to have some greater than 1 stride and then sum over the orders for the latent
+			'r_w4': get_weights_dict([[tr1, ], [tr2, ]], nf, opt['latent_dim'], std_mult=sm, name='R_W4', device=device),
+			# latent space has 1 channel.
+			'g_w1': get_weights_dict([[tr1, ], [tr2, ]], 1, nf, std_mult=sm, name='G_W1', device=device),
+			'g_w2': get_weights_dict([[tr1, ], [tr2, ]], nf, nf, std_mult=sm, name='G_W2', device=device),
+			'g_w3': get_weights_dict([[tr1, ], [tr2, ]], nf, nf, std_mult=sm, name='G_W3', device=device),
+			'g_w4': get_weights_dict([[tr1, ], [tr2, ]], nf, size, std_mult=sm, name='G_W4', device=device)
+		}
+
+		biases = {
+			'r_b1': get_bias_dict(nf, order, name='R_b1', device=device),
+			'r_b2': get_bias_dict(nf, order, name='R_b2', device=device),
+			'r_b3': get_bias_dict(nf, order, name='R_b3', device=device),
+			'r_b4': get_bias_dict(opt['latent_dim'], order, name='R_b3', device=device),
+			'g_b1': get_bias_dict(nf, order, name='G_b1', device=device),
+			'g_b2': get_bias_dict(nf, order, name='G_b2', device=device),
+			'g_b3': get_bias_dict(nf, order, name='G_b3', device=device),
+			'g_b4': get_bias_dict(size, order, name='G_b4', device=device),
+			'r_psi1': get_phase_dict(1, nf, order, name='psi1', device=device),
+			'r_psi2': get_phase_dict(nf, nf, order, name='psi2', device=device),
+			'r_psi3': get_phase_dict(nf, nf, order, name='psi3', device=device),
+			'g_psi1': get_phase_dict(1, nf, order, name='psi1', device=device),
+			'g_psi2': get_phase_dict(nf, nf, order, name='psi2', device=device),
+			'g_psi3': get_phase_dict(nf, nf, order, name='psi3', device=device),
+		}
+
+
+		weights = {
+			'w1': get_weights_dict([[tr1, ], [tr2, ]], opt['n_channels'], nf, std_mult=sm, name='W1', device=device),
+			'w2': get_weights_dict([[tr1, ], [tr2, ]], nf, nf, std_mult=sm, name='W2', device=device),
+			'w3': get_weights_dict([[tr1, ], [tr2, ]], nf, nf2, std_mult=sm, name='W3', device=device),
+			'w4': get_weights_dict([[tr1, ], [tr2, ]], nf2, nf2, std_mult=sm, name='W4', device=device),
+			'w5': get_weights_dict([[tr1, ], [tr2, ]], nf2, nf3, std_mult=sm, name='W5', device=device),
+			'w6': get_weights_dict([[tr1, ], [tr2, ]], nf3, nf3, std_mult=sm, name='W6', device=device),
+			'w7': get_weights_dict([[tr1, ], [tr2, ]], nf3, opt['n_classes'], std_mult=sm, name='W7', device=device),
+		}
+
+		biases = {
+			'b1': get_bias_dict(nf, order, name='b1', device=device),
+			'b2': get_bias_dict(nf, order, name='b2', device=device),
+			'b3': get_bias_dict(nf2, order, name='b3', device=device),
+			'b4': get_bias_dict(nf2, order, name='b4', device=device),
+			'b5': get_bias_dict(nf3, order, name='b5', device=device),
+			'b6': get_bias_dict(nf3, order, name='b6', device=device),
+			'b7': tf.get_variable('b7', dtype=tf.float32, shape=[opt['n_classes']],
+								  initializer=tf.constant_initializer(1e-2)),
+			'psi1': get_phase_dict(1, nf, order, name='psi1', device=device),
+			'psi2': get_phase_dict(nf, nf, order, name='psi2', device=device),
+			'psi3': get_phase_dict(nf, nf2, order, name='psi3', device=device),
+			'psi4': get_phase_dict(nf2, nf2, order, name='psi4', device=device),
+			'psi5': get_phase_dict(nf2, nf3, order, name='psi5', device=device),
+			'psi6': get_phase_dict(nf3, nf3, order, name='psi6', device=device)
+		}
+
+	fms = []
+	# Convolutional Layers
+	with tf.name_scope('block1') as scope:
+		cv1 = real_input_rotated_conv(x, weights['r_w1'], biases['r_psi1'],
+									  filter_size=opt['filter_size'], padding='SAME', name='1')
+		cv1 = complex_nonlinearity(cv1, biases['r_b1'], tf.nn.relu)
+		fms.append(cv1)
+		# LAYER 2
+		cv2 = complex_input_rotated_conv(cv1, weights['r_w2'], biases['r_psi2'],
+										 filter_size=opt['filter_size'], output_orders=[0, 1],
+										 padding='SAME', name='2')
+		cv2 = complex_batch_norm(cv2, tf.nn.relu, train_phase,
+								 name='batchNorm1', device=device)
+		fms.append(cv2)
+	with tf.name_scope('block2') as scope:
+		#cv2 = mean_pooling(cv2, ksize=(1, 2, 2, 1), strides=(1, 2, 2, 1))
+		# LAYER 3
+		cv3 = complex_input_rotated_conv(cv2, weights['r_w3'], biases['r_psi3'],
+										 filter_size=opt['filter_size'], output_orders=[0, 1],
+										 padding='SAME', name='3')
+		cv3 = complex_nonlinearity(cv3, biases['r_b3'], tf.nn.relu)
+		fms.append(cv3)
+		# LAYER 4
+		cv4 = complex_input_rotated_conv(cv3, weights['r_w4'], biases['r_psi4'],
+										 filter_size=opt['filter_size'], output_orders=[0, 1],
+										 padding='SAME', name='4')
+		cv4 = complex_batch_norm(cv4, tf.nn.relu, train_phase,
+								 name='batchNorm2', device=device)
+		fms.append(cv4)
+	with tf.name_scope('block3') as scope:
+		#cv4 = mean_pooling(cv4, ksize=(1, 2, 2, 1), strides=(1, 2, 2, 1))
+		# LAYER 5
+		cv5 = complex_input_rotated_conv(cv4, weights['w5'], biases['psi5'],
+										 filter_size=opt['filter_size'], output_orders=[0, 1],
+										 padding='SAME', name='5')
+		cv5 = complex_nonlinearity(cv5, biases['b5'], tf.nn.relu)
+		fms.append(cv5)
+		# LAYER 6
+		cv6 = complex_input_rotated_conv(cv5, weights['w6'], biases['psi6'],
+										 filter_size=opt['filter_size'], output_orders=[0, 1],
+										 padding='SAME', name='4')
+		cv6 = complex_batch_norm(cv6, tf.nn.relu, train_phase,
+								 name='batchNorm3', device=device)
+		fms.append(cv6)
+	# LAYER 7
+	with tf.name_scope('block4') as scope:
+		cv7 = complex_input_conv(cv6, weights['w7'], filter_size=opt['filter_size'],
+								 padding='SAME', name='7')
+		cv7 = tf.reduce_mean(sum_magnitudes(cv7), reduction_indices=[1, 2])
+		return tf.nn.bias_add(cv7, biases['b7'])  # , fms

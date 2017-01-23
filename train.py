@@ -2,9 +2,9 @@ import sys
 import os
 import numpy as np
 
-from model_assembly_train import build_all_and_train
-from io_helpers import load_dataset, download_dataset
-import harmonic_network_models
+from harmonicconvolutions.model_assembly_train import build_all_and_train
+from harmonicconvolutions.io_helpers import load_dataset, download_dataset
+import harmonicconvolutions.harmonic_network_models
 
 def create_opt_data(opt):
 	# Default configuration

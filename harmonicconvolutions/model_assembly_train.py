@@ -6,8 +6,8 @@ import scipy as sp
 
 import tensorflow as tf
 
-from io_helpers import *
-from harmonic_network_models import *
+from harmonicconvolutions.io_helpers import *
+from harmonicconvolutions.harmonic_network_models import *
 
 #----------HELPER FUNCTIONS----------
 def print_train_validation(trial_num, counter, epoch, time,
