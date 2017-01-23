@@ -68,6 +68,42 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 		return tf.nn.bias_add(cv7, bias)
 
 
+def Zresidual_block(x, n_channels, ksize, depth, is_training, fnc=tf.nn.relu,
+						 max_order=1, phase=True, name='res', device='/cpu:0'):
+	"""Harmonic version of a residual block
+	
+	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	n_channels: number of output channels (int)
+	ksize: size of square filter (int)
+	depth: number of convolutions per block
+	is_training: tf bool indicating training status
+	fnc: nonlinearity applied to magnitudes (default tf.nn.relu)
+	max_order: maximum rotation order e.g. max_order=2 uses 0,1,2 (default 1)
+	phase: use a per-channel phase offset (default True)
+	name: (default 'res')
+	device: (default '/cpu:0')
+	"""
+	from harmonic_network_ops import Zbn
+	
+	with tf.name_scope(name) as scope:
+		y = x
+		for i in xrange(depth):
+			ysh = y.get_shape().as_list()
+			W = get_weights([ksize,ksize,ysh[3],n_channels], std_mult=1.,
+				name=name+'W_c'+str(i), device=device)
+			y = tf.nn.conv2d(y, W, (1,1,1,1), 'SAME', name=name+'_c'+str(i))
+			y = Zbn(y, is_training, decay=0.99, name=name+'_nl'+str(i),
+					 device=device)
+			if i != (depth-1):
+				y = tf.nn.relu(y)
+		xsh = x.get_shape().as_list()
+		x = tf.pad(x, [[0,0],[0,0],[0,0],[0,ysh[3]-xsh[3]]])
+		return y + x
+
+
 def wide_resnet(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Abbreviations
@@ -93,17 +129,17 @@ def wide_resnet(opt, x, train_phase, device='/cpu:0'):
 		res1 = tf.nn.conv2d(x, Win, (1,1,1,1), 'SAME', name='Win_conv')
 	for i in xrange(N):
 		name = 'r1_'+str(i)
-		res1 = hn_lite.Zresidual_block(res1, nf, fs, 2, train_phase, name=name, device=d)
+		res1 = Zresidual_block(res1, nf, fs, 2, train_phase, name=name, device=d)
 	res2 =tf.nn.max_pool(res1, (1,2,2,1), (1,2,2,1), 'VALID', name='mp1')
 	
 	for i in xrange(N):
 		name = 'r2_'+str(i)
-		res2 = hn_lite.Zresidual_block(res2, fg*nf, fs, 2, train_phase, name=name, device=d)
+		res2 = Zresidual_block(res2, fg*nf, fs, 2, train_phase, name=name, device=d)
 	res3 =tf.nn.max_pool(res2, (1,2,2,1), (1,2,2,1), 'VALID', name='mp2')
 	
 	for i in xrange(N):
 		name = 'r3_'+str(i)
-		res3 = hn_lite.Zresidual_block(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=d)
+		res3 = Zresidual_block(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=d)
 	res4 =tf.nn.max_pool(res3, (1,2,2,1), (1,2,2,1), 'VALID', name='mp3')
 
 	with tf.name_scope('gap') as scope:
