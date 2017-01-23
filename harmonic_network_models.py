@@ -42,8 +42,8 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 		cv2 = hn_lite.batch_norm(cv2, train_phase, name='bn1', device=d)
 
 	with tf.name_scope('block2') as scope:
-		#cv2 = hn_lite.mean_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv2 = hn_lite.max_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv2 = hn_lite.mean_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
+		#cv2 = hn_lite.max_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv3 = hn_lite.conv2d(cv2, nf2, fs, padding='SAME', name='3', device=d)
 		cv3 = hn_lite.nonlinearity(cv3, tf.nn.relu, name='3', device=d)
 
@@ -51,8 +51,8 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 		cv4 = hn_lite.batch_norm(cv4, train_phase, name='bn2', device=d)
 
 	with tf.name_scope('block3') as scope:
-		#cv4 = hn_lite.mean_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv4 = hn_lite.max_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+		cv4 = hn_lite.mean_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
+		#cv4 = hn_lite.max_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
 		cv5 = hn_lite.conv2d(cv4, nf3, fs, padding='SAME', name='5', device=d)
 		cv5 = hn_lite.nonlinearity(cv5, tf.nn.relu, name='5', device=d)
 
@@ -65,7 +65,50 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 					 name='7', device=d)
 		real = hn_lite.sum_magnitudes(cv7)
 		cv7 = tf.reduce_mean(real, reduction_indices=[1,2,3,4])
-		return tf.nn.bias_add(cv7, bias) 
+		return tf.nn.bias_add(cv7, bias)
+
+
+def wide_resnet(opt, x, train_phase, device='/cpu:0'):
+	"""High frequency convolutions are unstable, so get rid of them"""
+	# Abbreviations
+	nf = opt['n_filters']
+	fg = opt['filter_gain']
+	bs = opt['batch_size']
+	fs = opt['filter_size']
+	N = opt['resnet_block_multiplicity']
+	d = device
+	
+	with tf.device(device):
+		initializer = tf.contrib.layers.variance_scaling_initializer()
+		Win = get_weights([fs,fs,3,nf], std_mult=1., name='Win', device=device)
+		Wgap = tf.get_variable('Wfc', shape=[fg*fg*nf,opt['n_classes']],
+									  initializer=initializer)
+		bgap = tf.get_variable('bfc', shape=[opt['n_classes']],
+									  initializer=tf.constant_initializer(1e-2))
+
+		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],opt['n_channels']])
+	
+	# Convolutional Layers
+	with tf.device(d):
+		res1 = tf.nn.conv2d(x, Win, (1,1,1,1), 'SAME', name='Win_conv')
+	for i in xrange(N):
+		name = 'r1_'+str(i)
+		res1 = hn_lite.Zresidual_block(res1, nf, fs, 2, train_phase, name=name, device=d)
+	res2 =tf.nn.max_pool(res1, (1,2,2,1), (1,2,2,1), 'VALID', name='mp1')
+	
+	for i in xrange(N):
+		name = 'r2_'+str(i)
+		res2 = hn_lite.Zresidual_block(res2, fg*nf, fs, 2, train_phase, name=name, device=d)
+	res3 =tf.nn.max_pool(res2, (1,2,2,1), (1,2,2,1), 'VALID', name='mp2')
+	
+	for i in xrange(N):
+		name = 'r3_'+str(i)
+		res3 = hn_lite.Zresidual_block(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=d)
+	res4 =tf.nn.max_pool(res3, (1,2,2,1), (1,2,2,1), 'VALID', name='mp3')
+
+	with tf.name_scope('gap') as scope:
+		gap = tf.reduce_mean(res4, reduction_indices=[1,2])
+		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap)
 
 
 def deep_cifar(opt, x, train_phase, device='/cpu:0'):

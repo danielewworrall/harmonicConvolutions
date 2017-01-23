@@ -72,7 +72,7 @@ def create_opt_data(opt):
 		opt['delay'] = 12
 		opt['psi_preconditioner'] = 7.8
 		opt['filter_gain'] = 2
-		opt['filter_size'] = 5	# <<<< this should be 5!!!!!!!!!!!!!!!!
+		opt['filter_size'] = 5	
 		opt['n_filters'] = 8
 		opt['display_step'] = 10000/(opt['batch_size']*3.)
 		opt['is_classification'] = True
@@ -91,8 +91,9 @@ so the current version will be unstable unless otherwise noted!""")
 			download_dataset(opt)
 		# Load dataset
 		#data = load_dataset(opt['data_dir'], 'cifar_numpy')
-		data = load_dataset(opt['data_dir'], 'cifar_preproc')
+		data = load_dataset(opt['data_dir'], 'cifar_taco')
 		opt['is_classification'] = True
+		opt['use_io_queues'] = False
 		opt['dim'] = 32
 		opt['crop_shape'] = 0
 		opt['aug_crop'] = 3
