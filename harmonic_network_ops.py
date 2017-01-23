@@ -61,53 +61,6 @@ def h_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 		Rsh = R.get_shape().as_list()
 		ns = tf.concat(0, [Rsh[:3],[max_order+1,2],[Rsh[3]/(2*(max_order+1))]])
 		return tf.reshape(R, ns)
-	
-
-def rs_conv(X, W, strides=(1,1,1,1), padding='VALID', max_rorder=1,
-				max_sorder=1, name='N'):
-	"""Inter-order (cross-stream) convolutions can be implemented as single
-	convolution. For this we store data as 7D tensors and filters as 10D
-	tensors, at convolution, we reshape down to 4D tensors and expand again.
-	
-	X: tensor shape [mbatch,h,w,channel,group,r_order,s_order]
-	Q: tensor dict---reshaped to [h,w,in,in.comp,in.r_ord,in.s_ord,out,out.comp,out.r_ord,out.s_ord]
-	P: tensor dict---phases
-	strides: as per tf convention (default (1,1,1,1))
-	padding: as per tf convention (default VALID)
-	filter_size: (default 3)
-	max_rorder: (default 1)
-	max_sorder: (default 1)
-	name: (default N)
-	"""
-	with tf.name_scope('rsconv'+str(name)) as scope:
-		# Build data tensor
-		Xsh = X.get_shape().as_list()
-		X_ = tf.reshape(X, tf.concat(0,[Xsh[:3],[-1]]))
-		
-		#   Construct the stream-convolutions as one big filter
-		Q_ = []
-		for output_order in xrange(max_order+1):
-			# For each output order build input
-			Qr = []
-			Qi = []
-			for input_order in xrange(Xsh[3]):
-				fo = output_order - input_order
-				c = W[np.abs(fo)]
-				s = np.sign(fo)
-				# Choose a different filter depending on whether input is real
-				if Xsh[4] == 2:
-					Qr += [c[0],-s*c[1]]
-					Qi += [c[1],s*c[0]]
-				else:
-					Qr += [c[0]]
-					Qi += [c[1]]
-			Q_ += [tf.concat(2, Qr), tf.concat(2, Qi)]
-		Q_ = tf.concat(3, Q_)
-		
-		R = conv(X_, Q_, strides, padding, name+'cconv')
-		Rsh = R.get_shape().as_list()
-		ns = tf.concat(0, [Rsh[:3],[max_order+1,2],[Rsh[3]/(2*(max_order+1))]])
-		return tf.reshape(R, ns)
 
 
 ##### NONLINEARITIES #####
@@ -274,8 +227,9 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:
 	with tf.device(device):
 		if W_init == None:
 			stddev = std_mult*np.sqrt(2.0 / np.prod(filter_shape[:3]))
+			W_init = tf.random_normal_initializer(stddev=stddev)
 		return tf.get_variable(name, dtype=tf.float32, shape=filter_shape,
-				initializer=tf.random_normal_initializer(stddev=stddev))
+				initializer=W_init)
 
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####

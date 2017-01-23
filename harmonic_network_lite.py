@@ -138,7 +138,8 @@ def sum_magnitudes(x, eps=1e-4, keep_dims=True):
 
 
 def residual_block(x, n_channels, ksize, depth, is_training, fnc=tf.nn.relu,
-						 max_order=1, phase=True, name='res', device='/cpu:0'):
+						 stddev=0.4, max_order=1, phase=True, name='res',
+						 device='/cpu:0'):
 	"""Harmonic version of a residual block
 	
 	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
@@ -159,7 +160,8 @@ def residual_block(x, n_channels, ksize, depth, is_training, fnc=tf.nn.relu,
 		y = x
 		for i in xrange(depth):
 			y = conv2d(y, n_channels, ksize, padding='SAME', phase=phase,
-				  max_order=max_order, name=name+'_c'+str(i), device=device)
+				  max_order=max_order, name=name+'_c'+str(i), device=device,
+				  stddev=stddev)
 			if i == (depth-1):
 				fnc = (lambda x: x)
 			y = batch_norm(y, is_training, fnc=fnc, name=name+'_nl'+str(i),

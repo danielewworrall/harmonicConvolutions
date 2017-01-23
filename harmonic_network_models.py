@@ -155,6 +155,7 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	bs = opt['batch_size']
 	fs = opt['filter_size']
 	N = opt['resnet_block_multiplicity']
+	sm = opt['std_mult']
 	
 	with tf.device(device):
 		initializer = tf.contrib.layers.variance_scaling_initializer()
@@ -165,26 +166,31 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 
 		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
 	
+	activations = []
+	
 	# Convolutional Layers
 	res1 = hn_lite.conv2d(x, nf, fs, padding='SAME', name='in', device=device)
 	for i in xrange(N):
 		name = 'r1_'+str(i)
-		res1 = hn_lite.residual_block(res1, nf, fs, 2, train_phase, name=name, device=device)
+		res1 = hn_lite.residual_block(res1, nf, fs, 2, train_phase, stddev=sm, name=name, device=device)
 	res2 = hn_lite.mean_pool(res1, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp1')
+	activations.append(res2)
 	
 	for i in xrange(N):
 		name = 'r2_'+str(i)
-		res2 = hn_lite.residual_block(res2, fg*nf, fs, 2, train_phase, name=name, device=device)
+		res2 = hn_lite.residual_block(res2, fg*nf, fs, 2, train_phase, stddev=sm, name=name, device=device)
 	res3 = hn_lite.mean_pool(res2, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp2')
+	activations.append(res3)
 	
 	for i in xrange(N):
 		name = 'r3_'+str(i)
-		res3 = hn_lite.residual_block(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=device)
+		res3 = hn_lite.residual_block(res3, fg*fg*nf, fs, 2, train_phase, stddev=sm, name=name, device=device)
 	res4 = hn_lite.mean_pool(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
+	activations.append(res4)
 
 	with tf.name_scope('gap') as scope:
 		gap = tf.reduce_mean(hn_lite.sum_magnitudes(res4), reduction_indices=[1,2,3,4])
-		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap)
+		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap) #, activations
 
 
 def deep_bsd(opt, x, train_phase, device='/cpu:0'):
