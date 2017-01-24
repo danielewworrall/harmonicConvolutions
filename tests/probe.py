@@ -5,79 +5,58 @@ import sys
 import time
 sys.path.append('../')
 
-import harmonic_network_models as hnm
 import numpy as np
-import tensorflow as tf
+#import tensorflow as tf
+
+from matplotlib import pyplot as plt
 
 
 def get_data():
-	from io_helpers import load_dataset
-	return load_dataset('../cifar10/', 'cifar_taco')
-
-
-def define_settings():
-	opt = {}
-	opt['model'] = getattr(hnm, 'deep_cifar')
-	opt['is_classification'] = True
-	opt['dim'] = 32
-	opt['n_classes'] = 10 
-	opt['batch_size'] = 40
-	opt['std_mult'] = 1.
-	opt['filter_gain'] = 2
-	opt['filter_size'] = 3
-	opt['n_filters'] = 4*4	# Wide ResNet
-	opt['resnet_block_multiplicity'] = 3
-	opt['momentum'] = 0.93
-	opt['n_channels'] = 3
-	return opt
-
-
-def running_mean(x, running_mean, counter, increment):
-	R = np.sqrt(np.sum(x**2, axis=4) + 1e-4)
-	mean = np.mean(x, axis=(1,2))
-	mean_sum = np.sum(mean, axis=0)
-	running_mean = (counter*running_mean + mean_sum)/(counter+increment)
-	return running_mean
-
-
-def running_power(x, running_power, counter, increment):
-	R = np.sum(x**2, axis=4)
-	power = np.mean(R, axis=(1,2))
-	mean_power = np.sum(power, axis=0)
-	running_power = (counter*running_power + mean_power)/(counter+increment)
-	return running_power
+	import skimage.color as skco
+	import skimage.io as skio
+	im = skio.imread('../images/scene.jpg')
+	return skco.rgb2gray(im)
 	
 
 def main():
-	bs = 40
-	opt = define_settings()
-	is_training = tf.placeholder(tf.bool, name='is_training')
-	x = tf.placeholder(tf.float32, [bs,3072], name='x')
-	y = hnm.deep_cifar(opt, x, is_training, device='/gpu:0')
+	x = 800
+	y = 534
+	k = 100
 	
 	data = get_data()
-	train_x = data['train_x']
-	trsh = train_x.shape
-	permutation = np.random.permutation(trsh[0])
-	train_x = train_x[permutation,...]
+	sample_points = plot_circle((x, y), k)
 	
-	rm = [0,0,0]
-	rp = [0,0,0]
-	counter = 0
+	plt.figure(1)
+	plt.imshow(data, cmap='gray')
+	plt.plot(sample_points[:,0], sample_points[:,1], color='r')
 	
-	with tf.Session() as sess:
-		init_op = tf.global_variables_initializer()
-		sess.run(init_op, feed_dict={is_training: True})
-		
-		for batch in np.split(train_x, trsh[0]/bs):
-			Y, activations = sess.run(y, feed_dict={x : batch, is_training : True})
-			for i in xrange(3):
-				rm[i] = running_mean(activations[i], rm[i], counter, bs)
-				rp[i] = running_power(activations[i], rp[i], counter, bs)
-			counter += bs
-		
-		for i in xrange(3):
-			print np.sqrt(rp[i] - rm[i]**2)
+	plt.figure(2)
+	samples = interpolation(data, sample_points)
+	plt.plot(samples)
+	
+	plt.figure(3)
+	samples_FFT = np.fft.fft(samples)
+	plt.plot(np.absolute(samples_FFT))
+	plt.show()
+
+
+def plot_circle(center, radius, k=100):
+	x, y = center
+	lin = np.linspace(0, 2*np.pi*(k/(k+1.)), k)
+	sample_points = (x + radius*np.cos(lin), y + radius*np.sin(lin))
+	return np.vstack(sample_points).T
+
+
+def interpolation(image, sample_points):
+	sample_points = xy2ij(sample_points, image.shape)
+	sample_points = np.floor(sample_points).astype(np.int32)
+	return image[sample_points[:,0], sample_points[:,1]]
+
+
+def xy2ij(sample_points, imsh):
+	J = sample_points[:,0]
+	I = imsh[0] - sample_points[:,1]
+	return np.vstack((I,J)).T
 
 
 if __name__ == '__main__':
