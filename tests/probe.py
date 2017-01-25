@@ -37,6 +37,11 @@ def main():
 	plt.figure(3)
 	samples_FFT = np.fft.fft(samples)
 	plt.plot(np.absolute(samples_FFT))
+	
+	plt.figure(4)
+	samples_FFT[2:] *= 0
+	samples_smoothed = np.fft.ifft(samples_FFT)
+	plt.plot(np.absolute(samples_smoothed))
 	plt.show()
 
 
