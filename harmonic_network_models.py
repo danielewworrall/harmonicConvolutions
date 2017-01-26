@@ -264,7 +264,7 @@ def wide_resnet(opt, x, train_phase, device='/cpu:0'):
 		bgap = tf.get_variable('bfc', shape=[opt['n_classes']],
 									  initializer=tf.constant_initializer(1e-2))
 
-		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],opt['n_channels']])
+		#x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],opt['n_channels']])
 	
 	# Convolutional Layers
 	with tf.device(d):

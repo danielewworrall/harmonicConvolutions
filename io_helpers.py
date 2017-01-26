@@ -1,8 +1,12 @@
 from __future__ import division
 import os
+from os import path
 import sys
 import zipfile
 import urllib2
+import pickle
+import ntpath
+import copy
 
 import numpy as np
 import scipy.ndimage.interpolation as sciint
@@ -22,11 +26,57 @@ def checkFolder(dir):
 	if not os.path.exists(dir):
 		os.makedirs(dir)
 
+#the simple solution from here:
+#http://stackoverflow.com/questions/19201290/how-to-save-a-dictionary-to-a-file-in-python
+def save_dict(obj, file):
+    with open(file, 'wb') as f:
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+
+def load_dict(file):
+    with open(file, 'rb') as f:
+        return pickle.load(f)
+
 def get_num_items_in_tfrecords_list(files):
+	#guard against empty lists
+	if len(files) == 0:
+		return 0
 	i = 0
-	for record_file in files:
-		for record in tf.python_io.tf_record_iterator(record_file):
-			i += 1
+	overwrite_meta = False
+	meta_name = os.path.dirname(files[0]) + '/meta.plk'
+	print('Looking for meta-file ' + meta_name)
+	#if the meta-file exists we use its information
+	#we also potentially amend it for missing entries
+	if os.path.isfile(meta_name):
+		print('Meta information found for dataset.')
+		dataset_records = load_dict(meta_name)
+		for record_file in files:
+			if ntpath.basename(record_file) in dataset_records:
+				i += dataset_records[ntpath.basename(record_file)]
+			else: #count manually if this has not been cached
+				overwrite_meta = True
+				print('WARNING: meta-file [' + meta_name \
+					+ "] does not contain a record for [ " + record_file + " ], creating...")
+				local_num_records = 0
+				for record in tf.python_io.tf_record_iterator(record_file):
+					local_num_records += 1
+				dataset_records[ntpath.basename(record_file)] = local_num_records
+				i += local_num_records
+		if overwrite_meta:
+			save_dict(dataset_records, meta_name)
+		return i
+	#otherwise, we can need to create it
+	else:
+		print('No meta information for dataset found, caching for future use.')
+		dataset_records = {}
+		for record_file in files:
+			local_num_records = 0
+			print("Processing [ " + record_file + " ]")
+			for record in tf.python_io.tf_record_iterator(record_file):
+				local_num_records += 1
+			dataset_records[ntpath.basename(record_file)] = local_num_records
+			i += local_num_records
+		#finally save the counts to a file
+		save_dict(dataset_records, meta_name)
 	return i
 
 def get_all_tfrecords(directory):
@@ -41,10 +91,16 @@ def get_all_tfrecords(directory):
 				valid_files.append(directory + '/' + file)
 			elif file.startswith("test"):
 				test_files.append(directory + '/' + file)
+	train_files.sort()
+	valid_files.sort()
+	test_files.sort()
 	return train_files, valid_files, test_files
 
 def discover_and_setup_tfrecords(directory, data, use_train_fraction=1.0):
 	train_files, valid_files, test_files = get_all_tfrecords(directory)
+	if len(test_files) == 0:
+		test_files = copy.deepcopy(valid_files)
+
 	if use_train_fraction < 1.0:
 		num_examples = get_num_items_in_tfrecords_list(train_files)
 		single_file = get_num_items_in_tfrecords_list([train_files[0]])
@@ -73,6 +129,9 @@ def discover_and_setup_tfrecords(directory, data, use_train_fraction=1.0):
 	data['train_items'] = get_num_items_in_tfrecords_list(data['train_files'])
 	data['valid_items'] = get_num_items_in_tfrecords_list(data['valid_files'])
 	data['test_items'] = get_num_items_in_tfrecords_list(data['test_files'])
+	print('Num train examples: ', data['train_items'])
+	print('Num validation examples: ', data['valid_items'])
+	print('Num test examples: ', data['test_items'])
 	return data
 
 def download2FileAndExtract(url, folder, fileName):

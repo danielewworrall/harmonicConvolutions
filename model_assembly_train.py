@@ -414,6 +414,7 @@ def loop_queue_run(opt, data, tf_nodes, sess, mode, step):
 	cost_total = 0.
 	acc_total = 0.
 	if mode == 'train':
+		print('TRAIN')
 		is_training = True
 		is_testing = False
 		num_its = data['train_items']
@@ -426,7 +427,8 @@ def loop_queue_run(opt, data, tf_nodes, sess, mode, step):
 		is_testing = True
 		num_its = data['test_items']
 	#this rounding here is potentially problematic
-	for i in xrange(int(num_its / opt['batch_size'])):
+	for i in xrange(int(num_its / opt['batch_size']) - 1):
+		print('ITERATION: ' + str(i))
 		fd = {tf_nodes['learning_rate'] : opt['lr'], tf_nodes['train_phase'] : is_training,
 		tf_nodes['test_phase'] : is_testing}
 		if mode == 'train':
