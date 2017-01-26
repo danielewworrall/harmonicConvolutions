@@ -70,6 +70,8 @@ class settings():
             self.__create_options_rotated_mnist()
         elif self.__get('dataset') == 'cifar10':
             self.__create_options_cifar10()
+        elif self.__get('dataset') == 'imagenet':
+            self.__create_options_imagenet_baseline()
         else:
             print('ERROR: not implemented')
             return False
@@ -181,14 +183,12 @@ class settings():
             #rescale smaller size with this factor
             tf.cond(tf.greater(tf.shape(c)[0], tf.shape(c)[1]), 
                 tf.image.resize_images(x, [tf.shape(c)[0], random_size, tf.shape(c)[2]]),
-                tf.image/resize_images(x, [random_size, tf.shape(c)[1], tf.shape(c)[2]]),
+                tf.image/resize_images(x, [random_size, tf.shape(c)[1], tf.shape(c)[2]]))
 
             #random flip
             x = tf.image.flip_left_right(x)
-            
             #random crop
             x = tf.random_crop(x, [224, 224, 3])
-
             #colour augmentation
             #this is a little more involved that I first thought
             #lets pick the inception colour distortion
@@ -204,7 +204,7 @@ class settings():
 
     def __create_options_imagenet_baseline(self):
         #setup data feeding
-        mnist_dir = self.__get('data_dir') + '/imagenet'
+        mnist_dir = self.__get('data_dir') + ''
         #data feeding choice
         self.__set('use_io_queues', True)
         if self.__get('use_io_queues'):
@@ -248,5 +248,5 @@ class settings():
         self.__maybe_create('is_classification', True)
         self.__maybe_create('n_channels', 3)
         self.__maybe_create('n_classes', 10)
-        self.__maybe_create('log_path', './logs/deep_cifar')
+        self.__maybe_create('log_path', './logs/imagenet')
         self.__maybe_create('checkpoint_path', './checkpoints/deep_cifar')
