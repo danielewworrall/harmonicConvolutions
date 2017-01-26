@@ -146,8 +146,8 @@ def process_image_list(image_list, labels, writer_max_size, max_items_in_record,
     num_errors = 0
     num_grey_scale = 0
     for i in xrange(num_examples):
-        if num_errors > 5:
-            break
+        #if num_errors > 5:
+        #    break
         idx = perm[i]
         image_name = image_list[idx]
         label = labels[idx]

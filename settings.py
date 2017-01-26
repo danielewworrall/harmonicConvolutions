@@ -169,3 +169,84 @@ class settings():
         self.__maybe_create('n_classes', 10)
         self.__maybe_create('log_path', './logs/deep_cifar')
         self.__maybe_create('checkpoint_path', './checkpoints/deep_cifar')
+
+    def __imagenet_data_process_function(x, y):
+        with tf.name_scope("imagenet_data_aug") as scope:
+            #random scale
+            #apparently, this works better than what we have:
+            #https://github.com/facebook/fb.resnet.torch
+            #but let's use the 'original' formulation for now
+            #randomly sample a size in specified range
+            random_size = tf.random_uniform((0), [256, 480], dtype=tf.int32, name="random_scale_size")
+            #rescale smaller size with this factor
+            tf.cond(tf.greater(tf.shape(c)[0], tf.shape(c)[1]), 
+                tf.image.resize_images(x, [tf.shape(c)[0], random_size, tf.shape(c)[2]]),
+                tf.image/resize_images(x, [random_size, tf.shape(c)[1], tf.shape(c)[2]]),
+
+            #random flip
+            x = tf.image.flip_left_right(x)
+            
+            #random crop
+            x = tf.random_crop(x, [224, 224, 3])
+
+            #colour augmentation
+            #this is a little more involved that I first thought
+            #lets pick the inception colour distortion
+            #https://github.com/tensorflow/models/blob/master/inception/inception/image_processing.py
+            x = tf.image.random_brightness(x, max_delta=32. / 255.)
+            x = tf.image.random_saturation(x, lower=0.5, upper=1.5)
+            x = tf.image.random_hue(x, max_delta=0.2)
+            x = tf.image.random_contrast(x, lower=0.5, upper=1.5)
+            x = tf.clip_by_value(image, 0.0, 1.0)
+            #normalisation
+            x = tf.image.per_image_standardization(x)
+        return [x, y]
+
+    def __create_options_imagenet_baseline(self):
+        #setup data feeding
+        mnist_dir = self.__get('data_dir') + '/imagenet'
+        #data feeding choice
+        self.__set('use_io_queues', True)
+        if self.__get('use_io_queues'):
+            #we can use this convenience function to get all the data
+            data = discover_and_setup_tfrecords(mnist_dir, 
+                self.data, use_train_fraction = self.__get('train_data_fraction'))
+            #define the types stored in the .tfrecords files
+            self.__data_set('x_type', tf.uint8)
+            self.__data_set('y_type', tf.int64)
+            #let's define some functions to reshape data
+            #note: [] means nothing will happen
+            self.__data_set('x_target_shape', [32, 32, 3, 1, 1])
+            self.__data_set('y_target_shape', [1]) #a 'squeeze' is automatically applied here
+            #set the data decoding function
+            self.__data_set('data_decode_function', \
+                (lambda features : [tf.image.decode_jpeg(features['x_raw']), \
+                    tf.decode_raw(features['y_raw'], data['y_type'], name="decodeY")]))
+            #set the data processing function
+            self.__data_set('data_process_function', \
+                __imagenet_data_process_function)
+        self.__maybe_create('is_classification', True)
+        self.__maybe_create('dim', 32)
+        self.__maybe_create('crop_shape', 0)
+        self.__maybe_create('aug_crop', 3)
+        self.__maybe_create('n_channels', 3)
+        self.__maybe_create('n_classes', 10)
+        self.__maybe_create('n_epochs', 250)
+        self.__maybe_create('batch_size', 32)
+        self.__maybe_create('lr', 0.01)
+        self.__maybe_create('optimizer', tf.train.AdamOptimizer)
+        self.__maybe_create('std_mult', 0.4)
+        self.__maybe_create('delay', 8)
+        self.__maybe_create('psi_preconditioner', 7.8)
+        self.__maybe_create('filter_gain', 2)
+        self.__maybe_create('filter_size', 3)
+        self.__maybe_create('n_filters', 4*10)	# Wide ResNet
+        self.__maybe_create('resnet_block_multiplicity', 3)
+        self.__maybe_create('augment', True)
+        self.__maybe_create('momentum', 0.93)
+        self.__maybe_create('display_step', 25)
+        self.__maybe_create('is_classification', True)
+        self.__maybe_create('n_channels', 3)
+        self.__maybe_create('n_classes', 10)
+        self.__maybe_create('log_path', './logs/deep_cifar')
+        self.__maybe_create('checkpoint_path', './checkpoints/deep_cifar')
