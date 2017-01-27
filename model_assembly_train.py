@@ -414,7 +414,6 @@ def loop_queue_run(opt, data, tf_nodes, sess, mode, step):
 	cost_total = 0.
 	acc_total = 0.
 	if mode == 'train':
-		print('TRAIN')
 		is_training = True
 		is_testing = False
 		num_its = data['train_items']
@@ -428,10 +427,8 @@ def loop_queue_run(opt, data, tf_nodes, sess, mode, step):
 		num_its = data['test_items']
 	#this rounding here is potentially problematic
 	for i in xrange(int(num_its / opt['batch_size']) - 1):
-		print('ITERATION: ' + str(i))
 		fd = {tf_nodes['learning_rate'] : opt['lr'], tf_nodes['train_phase'] : is_training,
 		tf_nodes['test_phase'] : is_testing}
-		print('Running session...')
 		if mode == 'train':
 			__, cost_, acc_ = sess.run([tf_nodes['train_op'], tf_nodes['loss'], tf_nodes['accuracy']], feed_dict=fd)
 		else:
@@ -455,14 +452,10 @@ def loop_queue_feeding(opt, data, tf_nodes, sess, saver, summary):
 	step = 0.
 	counter = 0
 	best = 0.
-	print('Starting training loop...')
 	while epoch < opt['n_epochs']:
 		# Need batch_size*n_GPUs amount of data
-		print('Run training')
 		cost_total, acc_total, step = loop_queue_run(opt, data, tf_nodes, sess, 'train', step)
-		print('Epoch done')
 		if not opt['combine_train_val']:
-			print('Not combine trian valid')
 			vloss_total, vacc_total, __ = loop_queue_run(opt, data, tf_nodes, sess, 'valid', step)
 
 			#build the feed-dict

@@ -36,26 +36,29 @@ def load_dict(file):
     with open(file, 'rb') as f:
         return pickle.load(f)
 
-def get_num_items_in_tfrecords_list(files):
+def get_num_items_in_tfrecords_list(files, verbose=True):
 	#guard against empty lists
 	if len(files) == 0:
 		return 0
 	i = 0
 	overwrite_meta = False
 	meta_name = os.path.dirname(files[0]) + '/meta.plk'
-	print('Looking for meta-file ' + meta_name)
+	if verbose:
+		print('Looking for meta-file ' + meta_name)
 	#if the meta-file exists we use its information
 	#we also potentially amend it for missing entries
 	if os.path.isfile(meta_name):
-		print('Meta information found for dataset.')
+		if verbose:
+			print('Meta information found for dataset.')
 		dataset_records = load_dict(meta_name)
 		for record_file in files:
 			if ntpath.basename(record_file) in dataset_records:
 				i += dataset_records[ntpath.basename(record_file)]
 			else: #count manually if this has not been cached
 				overwrite_meta = True
-				print('WARNING: meta-file [' + meta_name \
-					+ "] does not contain a record for [ " + record_file + " ], creating...")
+				if verbose:
+					print('WARNING: meta-file [' + meta_name \
+						+ "] does not contain a record for [ " + record_file + " ], creating...")
 				local_num_records = 0
 				for record in tf.python_io.tf_record_iterator(record_file):
 					local_num_records += 1
@@ -66,11 +69,13 @@ def get_num_items_in_tfrecords_list(files):
 		return i
 	#otherwise, we can need to create it
 	else:
-		print('No meta information for dataset found, caching for future use.')
+		if verbose:
+			print('No meta information for dataset found, caching for future use.')
 		dataset_records = {}
 		for record_file in files:
 			local_num_records = 0
-			print("Processing [ " + record_file + " ]")
+			if verbose:
+				print("Processing [ " + record_file + " ]")
 			for record in tf.python_io.tf_record_iterator(record_file):
 				local_num_records += 1
 			dataset_records[ntpath.basename(record_file)] = local_num_records
@@ -96,14 +101,16 @@ def get_all_tfrecords(directory):
 	test_files.sort()
 	return train_files, valid_files, test_files
 
-def discover_and_setup_tfrecords(directory, data, use_train_fraction=1.0):
+def discover_and_setup_tfrecords(directory, data, use_train_fraction=1.0, use_random_subset=False):
 	train_files, valid_files, test_files = get_all_tfrecords(directory)
 	if len(test_files) == 0:
 		test_files = copy.deepcopy(valid_files)
 
+	num_all_train_files = get_num_items_in_tfrecords_list(train_files)
+
 	if use_train_fraction < 1.0:
-		num_examples = get_num_items_in_tfrecords_list(train_files)
-		single_file = get_num_items_in_tfrecords_list([train_files[0]])
+		num_examples = get_num_items_in_tfrecords_list(train_files, verbose=False)
+		single_file = get_num_items_in_tfrecords_list([train_files[0]], verbose=False)
 		num_examples_target = num_examples * use_train_fraction
 		low = int(num_examples_target / single_file)
 		high = low + 1
@@ -111,24 +118,31 @@ def discover_and_setup_tfrecords(directory, data, use_train_fraction=1.0):
 			num_files = low
 		else:
 			num_files = high
+		
 		perm = np.random.permutation(len(train_files))
 		new_train_files = []
 		for i in xrange(num_files):
-			new_train_files.append(train_files[perm[i]])
+			if use_random_subset: #take a random subset of files if specified
+				new_train_files.append(train_files[perm[i]])
+			else:
+				new_train_files.append(train_files[i])
 		#overwrite original array
 		train_files = new_train_files
 		print('Given a fraction of ' + str(use_train_fraction) + \
 			', we use ' + str(num_files) + \
-			' number of files with ' + str(get_num_items_in_tfrecords_list(train_files)) + \
+			' files with ' + str(get_num_items_in_tfrecords_list(train_files, verbose=False)) + \
 			' number of training examples out of ' + str(num_examples))
+		print('\tGiven fraction: ' + str(use_train_fraction))
+		print('\tUsed fraction: ' + str(get_num_items_in_tfrecords_list(train_files, verbose=False) / num_all_train_files))
+		print('\tIf this is unsatisfactory, make your tfrecords files more fine-grained.')
 
 	data['train_files'] = train_files
 	data['valid_files'] = valid_files
 	data['test_files'] = test_files
 	#get the number of items of each set
-	data['train_items'] = get_num_items_in_tfrecords_list(data['train_files'])
-	data['valid_items'] = get_num_items_in_tfrecords_list(data['valid_files'])
-	data['test_items'] = get_num_items_in_tfrecords_list(data['test_files'])
+	data['train_items'] = get_num_items_in_tfrecords_list(data['train_files'], verbose=False)
+	data['valid_items'] = get_num_items_in_tfrecords_list(data['valid_files'], verbose=False)
+	data['test_items'] = get_num_items_in_tfrecords_list(data['test_files'], verbose=False)
 	print('Num train examples: ', data['train_items'])
 	print('Num validation examples: ', data['valid_items'])
 	print('Num test examples: ', data['test_items'])

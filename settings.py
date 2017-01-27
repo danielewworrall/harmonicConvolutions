@@ -180,18 +180,18 @@ class settings():
             #https://github.com/facebook/fb.resnet.torch
             #but let's use the 'original' formulation for now
             #randomly sample a size in specified range
-            #random_size = tf.squeeze(tf.random_uniform((1, 1), 256, 480, dtype=tf.int32, name="random_scale_size"))
+            random_size = tf.squeeze(tf.random_uniform((1, 1), 256, 480, dtype=tf.int32, name="random_scale_size"))
             #rescale smaller size with this factor
-            #tf.cond(tf.greater(tf.shape(x)[0], tf.shape(x)[1]), 
-            #    lambda: tf.image.resize_images(x, [tf.shape(x)[0], random_size]),
-            #    lambda: tf.image.resize_images(x, [random_size, tf.shape(x)[1]]))
+            tf.cond(tf.greater(tf.shape(x)[0], tf.shape(x)[1]), 
+                lambda: tf.image.resize_images(x, [tf.shape(x)[0] * (tf.shape(x)[1] / random_size), random_size]),
+                lambda: tf.image.resize_images(x, [random_size, tf.shape(x)[1] * (tf.shape(x)[0] / random_size)]))
             x = tf.image.resize_images(x, [224, 224])
             #random flip
             x = tf.image.flip_left_right(x)
             #random crop
             x = tf.random_crop(x, [224, 224, 3])
             #colour augmentation
-            #this is a little more involved that I first thought
+            #this is a little more involved than I first thought
             #lets pick the inception colour distortion
             #https://github.com/tensorflow/models/blob/master/inception/inception/image_processing.py
             x = tf.image.random_brightness(x, max_delta=32. / 255.)
@@ -226,7 +226,6 @@ class settings():
             #set the data processing function
             self.__data_set('data_process_function', \
                 self.__imagenet_data_process_function)
-                #(lambda x, y : [tf.image.per_image_standardization(tf.image.resize_images(x, [224, 224])), y]))
         self.__maybe_create('is_classification', True)
         self.__maybe_create('dim', 224)
         self.__maybe_create('crop_shape', 0)
@@ -244,10 +243,8 @@ class settings():
         self.__maybe_create('filter_size', 3)
         self.__maybe_create('n_filters', 4*10)	# Wide ResNet
         self.__maybe_create('resnet_block_multiplicity', 3)
-        self.__maybe_create('augment', True)
         self.__maybe_create('momentum', 0.93)
         self.__maybe_create('display_step', 25)
-        self.__maybe_create('is_classification', True)
         self.__maybe_create('log_path', './logs/imagenet')
         self.__maybe_create('checkpoint_path', './checkpoints/imagenet')
         self.__maybe_create('combine_train_val', False)

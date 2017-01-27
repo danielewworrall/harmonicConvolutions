@@ -20,7 +20,7 @@ if __name__ == '__main__':
 	opt['dataset'] = sys.argv[2]
 	opt['model'] = sys.argv[3]
 	opt['data_dir'] = sys.argv[4]
-	opt['train_data_fraction'] = 0.1
+	opt['train_data_fraction'] = 0.01
 
 	#create configuration for different tests
 	options = settings(opt)
