@@ -10,10 +10,6 @@ import copy
 
 import numpy as np
 import scipy.ndimage.interpolation as sciint
-import skimage.color as skco
-import skimage.exposure as skiex
-import skimage.io as skio
-import skimage.transform as sktr
 
 import tensorflow as tf
 
