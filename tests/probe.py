@@ -6,6 +6,7 @@ import time
 sys.path.append('../')
 
 import numpy as np
+import scipy.linalg as scilin
 #import tensorflow as tf
 
 from matplotlib import pyplot as plt
@@ -33,6 +34,16 @@ def multiring(center, radii):
 		samples_smoothed = np.fft.ifft(samples_FFT)
 		plt.plot(np.absolute(samples_smoothed))
 	plt.show()
+
+
+def patch_main():
+	x = 400
+	y = 1400
+	radius = 100
+	
+	data = get_data()
+	patch = data[x:x+11, y:y+11]
+	patch_LPF = interpolate(patch, 5)
 	
 
 def main():
@@ -85,19 +96,101 @@ def interpolation(image, sample_points):
 	#return image[sample_points[:,0], sample_points[:,1]]
 
 
-def get_kernel(bandwidth, radius, center_offset):
-	"""Return the Gaussian kernel"""
-
-
 def xy2ij(sample_points, imsh):
 	J = sample_points[:,0]
 	I = imsh[0] - sample_points[:,1]
 	return np.vstack((I,J)).T
 
 
+def interpolate(patch, m):
+	"""Foveal semi-sampling on rings of length N"""
+	# The patch shape determines number of rings and sampling locations. We use a
+	# right-hand coordinate system with the first axis pointing down and the
+	# second axis going left to right, so (-y,x). We also recenter patches so
+	# that the center is (0,0)
+	psh = np.asarray(patch.shape)
+	min_side = np.minimum(psh[0], psh[1])
+	nrings = min_side/2
+	radii = np.arange(nrings)+0.5*(1+min_side%2)
+	if m == 0:
+		radii = np.hstack([0,radii])
+	# We define pixel centers to be at positions 0.5
+	foveal_center = psh/2.
+	# The angles to sample
+	N = np.ceil(np.pi*patch.shape[0])
+	lin = (2*np.pi*np.arange(N))/N
+	# Sample equi-angularly along each ring
+	ring_locations = np.vstack([-np.sin(lin), np.cos(lin)])
+	# Create interpolation coefficient coordinates
+	coords = L2_grid(foveal_center, psh)
+	#for r in radii:
+	# Sample positions wrt patch center IJ-coords
+	radii = radii[:,np.newaxis,np.newaxis,np.newaxis]
+	ring_locations = ring_locations[np.newaxis,:,:,np.newaxis]
+	diff = radii*ring_locations - coords[np.newaxis,:,np.newaxis,:]
+	dist2 = np.sum(diff**2, axis=1)
+	# Convert distances to weightings
+	bandwidth = 1.
+	weights = np.exp(-0.5*dist2/(bandwidth**2))
+	# Normalize
+	weights = weights/np.sum(weights**2, axis=2)[:,:,np.newaxis]
+	samples = np.dot(weights, np.reshape(patch, -1))
+	
+	# Convolve with single frequency
+	#dk = dirichlet_kernel(N, 4)
+	DFT = scilin.dft(N)[m,:]
+	LPF = np.dot(DFT, weights)
+	LPF_samples = np.dot(LPF, np.reshape(patch, -1))
+	LPF_real = np.reshape(np.real(LPF), np.hstack((-1,psh)))
+	for i in xrange(LPF_real.shape[0]):
+		plt.figure(i)
+		plt.imshow(LPF_real[i,...], cmap='gray', interpolation='nearest')
+	plt.show()
+	
+	'''
+	plt.figure(1)
+	plt.plot(samples)
+	plt.figure(2)
+	plt.imshow(patch, interpolation='nearest', cmap='gray', origin='upper')
+	for r in np.squeeze(radii):
+		x, y = to_image_coords(r*np.squeeze(ring_locations), foveal_center)
+		plt.plot(x,y,'ro')
+	x, y = to_image_coords(coords, foveal_center)
+	#plt.plot(x,y,'bo')
+	plt.figure(3)
+	for i in xrange(np.squeeze(radii).shape[0]):
+		plt.plot(np.real(LPF_samples), 'b')
+		plt.plot(np.imag(LPF_samples), 'r')
+	plt.show()
+	'''
+
+
+def dirichlet_kernel(N, max_freq):
+	"""Return the length-N Dirichlet kernel to lowpass filter on the circle. We
+	can easily construct it as an outer product of the bandlimited DFT matrix and
+	it's conjugate transpose."""
+	DFT = scilin.dft(N)[:max_freq,:]
+	return np.dot(DFT.conj().T, DFT)/N
+	
+		
+def to_image_coords(coords, foveal_center):
+	x = coords[1,:]+foveal_center[1]-0.5
+	y = coords[0,:]+foveal_center[0]-0.5
+	return x, y
+
+
+def L2_grid(center, shape):
+	# Get neighbourhoods
+	lini = np.arange(shape[0])+0.5
+	linj = np.arange(shape[1])+0.5
+	J, I = np.meshgrid(lini, linj)
+	I = I - center[1]
+	J = J - center[0]
+	return np.vstack((np.reshape(I, -1), np.reshape(J, -1)))
+
 
 if __name__ == '__main__':
-	multiring((1200,750), np.arange(50)+1)
+	patch_main()
 
 
 
