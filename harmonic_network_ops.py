@@ -233,7 +233,77 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:
 
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####
+def get_interpolation_weights(filter_size, m):
+	"""Resample the patches on rings using Gaussian interpolation"""
+	nrings = filter_size/2
+	radii = np.arange(nrings)+0.5*(1+filter_size%2)
+	if m == 0:
+		radii = np.hstack([0,radii])
+	# We define pixel centers to be at positions 0.5
+	foveal_center = np.asarray([filter_size, filter_size])/2.
+	# The angles to sample
+	N = n_samples(filter_size)
+	lin = (2*np.pi*np.arange(N))/N
+	# Sample equi-angularly along each ring
+	ring_locations = np.vstack([-np.sin(lin), np.cos(lin)])
+	# Create interpolation coefficient coordinates
+	coords = L2_grid(foveal_center, filter_size)
+	# Sample positions wrt patch center IJ-coords
+	radii = radii[:,np.newaxis,np.newaxis,np.newaxis]
+	ring_locations = ring_locations[np.newaxis,:,:,np.newaxis]
+	diff = radii*ring_locations - coords[np.newaxis,:,np.newaxis,:]
+	dist2 = np.sum(diff**2, axis=1)
+	# Convert distances to weightings
+	bandwidth = 0.8
+	weights = np.exp(-0.5*dist2/(bandwidth**2))
+	# Normalize
+	return weights/np.sum(weights**2, axis=2)[:,:,np.newaxis]
+
+
 def get_filters(R, filter_size, P=None):
+	"""Perform single-frequency DFT on each ring of a polar-resampled patch"""
+	k = filter_size		
+	filters = {}
+	N = n_samples(k)
+	from scipy.linalg import dft
+	for m, r in R.iteritems():
+		rsh = r.get_shape().as_list()
+		# Get the basis matrices
+		weights = get_interpolation_weights(k, m)
+		DFT = dft(N)[m,:]
+		LPF = np.dot(DFT, weights).T
+		cosine = np.real(LPF).astype(np.float32)
+		sine = np.imag(LPF).astype(np.float32)
+		# Reshape for multiplication with radial profile
+		cosine = tf.reshape(cosine, tf.pack([k*k, rsh[0]]))
+		sine = tf.reshape(sine, tf.pack([k*k, rsh[0]]))
+		# Project taps on to rotational basis
+		r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
+		ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
+		usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
+		
+		if P is not None:
+			# Rotate basis matrices
+			ucos = tf.cos(P[m])*ucos + tf.sin(P[m])*usin
+			usin = -tf.sin(P[m])*ucos + tf.cos(P[m])*usin
+		filters[m] = (ucos, usin)
+	return filters
+
+
+def n_samples(filter_size):
+	return np.ceil(np.pi*filter_size)
+
+
+def L2_grid(center, shape):
+	# Get neighbourhoods
+	lin = np.arange(shape)+0.5
+	J, I = np.meshgrid(lin, lin)
+	I = I - center[1]
+	J = J - center[0]
+	return np.vstack((np.reshape(I, -1), np.reshape(J, -1)))
+
+
+def get_filters_(R, filter_size, P=None):
 	"""Return a complex filter of the form $u(r,t,psi) = R(r)e^{im(t-psi)}"""
 	filters = {}
 	k = filter_size
