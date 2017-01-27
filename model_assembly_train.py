@@ -136,11 +136,11 @@ def get_io_placeholders(opt):
 def build_io_queues(opt, data, mode):
 	"""Build pipelines so we can take advantage of tensorflow's queues"""
 	if mode == 'train':
-		io_x, io_y = pipeline(data['train_files'], opt, data, shuffle=True)
+		io_x, io_y = pipeline(data['train_files'], opt, data, shuffle=True, namescope='train_IO')
 	elif mode == 'valid':
-		io_x, io_y = pipeline(data['valid_files'], opt, data, shuffle=False)
+		io_x, io_y = pipeline(data['valid_files'], opt, data, shuffle=False, namescope='valid_IO')
 	elif mode == 'test':
-		io_x, io_y = pipeline(data['test_files'], opt, data, shuffle=False)
+		io_x, io_y = pipeline(data['test_files'], opt, data, shuffle=False, namescope='test_IO')
 	else:
 		print('ERROR: build_io_queues() expect as mode one of: {train, valid, test}')
 		sys.exit(1)
@@ -431,6 +431,7 @@ def loop_queue_run(opt, data, tf_nodes, sess, mode, step):
 		print('ITERATION: ' + str(i))
 		fd = {tf_nodes['learning_rate'] : opt['lr'], tf_nodes['train_phase'] : is_training,
 		tf_nodes['test_phase'] : is_testing}
+		print('Running session...')
 		if mode == 'train':
 			__, cost_, acc_ = sess.run([tf_nodes['train_op'], tf_nodes['loss'], tf_nodes['accuracy']], feed_dict=fd)
 		else:
@@ -457,8 +458,11 @@ def loop_queue_feeding(opt, data, tf_nodes, sess, saver, summary):
 	print('Starting training loop...')
 	while epoch < opt['n_epochs']:
 		# Need batch_size*n_GPUs amount of data
+		print('Run training')
 		cost_total, acc_total, step = loop_queue_run(opt, data, tf_nodes, sess, 'train', step)
+		print('Epoch done')
 		if not opt['combine_train_val']:
+			print('Not combine trian valid')
 			vloss_total, vacc_total, __ = loop_queue_run(opt, data, tf_nodes, sess, 'valid', step)
 
 			#build the feed-dict
@@ -476,6 +480,7 @@ def loop_queue_feeding(opt, data, tf_nodes, sess, saver, summary):
 			print_train_validation(opt['trial_num'], counter, epoch, time.time()-start,
 				cost_total, vloss_total, acc_total, vacc_total)
 		else:
+			print('EROOR: COMBINED TRAIN + VALID!')
 			best, counter, opt['lr'] = get_learning_rate(opt, acc_total, best, counter, opt['lr'])
 			print_validation(opt['trial_num'], counter, epoch, time.time()-start, cost_total, acc_total)
 		epoch += 1
@@ -491,6 +496,7 @@ def loop_queue_feeding(opt, data, tf_nodes, sess, saver, summary):
 		__, tacc_total, __ = loop_queue_run(opt, data, tf_nodes, sess, 'test', step)
 		print('Test accuracy: %f' % (tacc_total,))
 
+	print('Requesting Stop and Joining Frames...')
 	# When done, ask the threads to stop.
 	coord.request_stop()
 	# And wait for them to actually do it.
@@ -509,6 +515,7 @@ def train_model(opt, data, tf_nodes):
 
 	# Initializing the variables
 	init = tf.global_variables_initializer()
+	init_local = tf.local_variables_initializer()
 	if opt['combine_train_val']:
 		data['train_x'] = np.vstack([data['train_x'], data['valid_x']])
 		data['train_y'] = np.hstack([data['train_y'], data['valid_y']])
@@ -519,7 +526,7 @@ def train_model(opt, data, tf_nodes):
 	summary = tf.summary.FileWriter(opt['log_path'], sess.graph)
 	print('Summaries constructed...')
 	
-	sess.run(init, feed_dict={
+	sess.run([init, init_local], feed_dict={
 		tf_nodes['train_phase'] : True,
 		tf_nodes['test_phase'] : False
 	})

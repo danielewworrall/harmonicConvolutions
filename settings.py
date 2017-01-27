@@ -180,12 +180,12 @@ class settings():
             #https://github.com/facebook/fb.resnet.torch
             #but let's use the 'original' formulation for now
             #randomly sample a size in specified range
-            random_size = tf.squeeze(tf.random_uniform((1, 1), 256, 480, dtype=tf.int32, name="random_scale_size"))
+            #random_size = tf.squeeze(tf.random_uniform((1, 1), 256, 480, dtype=tf.int32, name="random_scale_size"))
             #rescale smaller size with this factor
-            tf.cond(tf.greater(tf.shape(x)[0], tf.shape(x)[1]), 
-                lambda: tf.image.resize_images(x, [tf.shape(x)[0], random_size]),
-                lambda: tf.image.resize_images(x, [random_size, tf.shape(x)[1]]))
-
+            #tf.cond(tf.greater(tf.shape(x)[0], tf.shape(x)[1]), 
+            #    lambda: tf.image.resize_images(x, [tf.shape(x)[0], random_size]),
+            #    lambda: tf.image.resize_images(x, [random_size, tf.shape(x)[1]]))
+            x = tf.image.resize_images(x, [224, 224])
             #random flip
             x = tf.image.flip_left_right(x)
             #random crop
@@ -217,7 +217,7 @@ class settings():
             self.__data_set('y_type', tf.int64)
             #let's define some functions to reshape data
             #note: [] means nothing will happen
-            self.__data_set('x_target_shape', [224, 224, 3])
+            self.__data_set('x_target_shape', [224, 224, 3, 1, 1])
             self.__data_set('y_target_shape', [1]) #a 'squeeze' is automatically applied here
             #set the data decoding function
             self.__data_set('data_decode_function', \
@@ -226,14 +226,15 @@ class settings():
             #set the data processing function
             self.__data_set('data_process_function', \
                 self.__imagenet_data_process_function)
+                #(lambda x, y : [tf.image.per_image_standardization(tf.image.resize_images(x, [224, 224])), y]))
         self.__maybe_create('is_classification', True)
-        self.__maybe_create('dim', 32)
+        self.__maybe_create('dim', 224)
         self.__maybe_create('crop_shape', 0)
         self.__maybe_create('aug_crop', 3)
         self.__maybe_create('n_channels', 3)
-        self.__maybe_create('n_classes', 10)
+        self.__maybe_create('n_classes', 1000)
         self.__maybe_create('n_epochs', 250)
-        self.__maybe_create('batch_size', 32)
+        self.__maybe_create('batch_size', 2)
         self.__maybe_create('lr', 0.01)
         self.__maybe_create('optimizer', tf.train.AdamOptimizer)
         self.__maybe_create('std_mult', 0.4)
@@ -247,8 +248,6 @@ class settings():
         self.__maybe_create('momentum', 0.93)
         self.__maybe_create('display_step', 25)
         self.__maybe_create('is_classification', True)
-        self.__maybe_create('n_channels', 3)
-        self.__maybe_create('n_classes', 1000)
         self.__maybe_create('log_path', './logs/imagenet')
-        self.__maybe_create('checkpoint_path', './checkpoints/deep_cifar')
+        self.__maybe_create('checkpoint_path', './checkpoints/imagenet')
         self.__maybe_create('combine_train_val', False)

@@ -26,8 +26,8 @@ def read_decode(opt, data, filename_string_queue):
 		x, y = data['data_decode_function'](features)
 		return x, y
 
-def pipeline(fileNames, opt, data, shuffle=True):
-	with tf.name_scope('IO') as scope:
+def pipeline(fileNames, opt, data, shuffle=True, namescope='IO'):
+	with tf.name_scope(namescope) as scope:
 		#create a string queue in case the dataset is split or we are combining
 		filename_string_queue = tf.train.string_input_producer(fileNames)
 
