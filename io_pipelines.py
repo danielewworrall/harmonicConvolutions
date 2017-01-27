@@ -47,16 +47,14 @@ def pipeline(fileNames, opt, data, shuffle=True, namescope='IO'):
 			label = tf.reshape(label, data['y_target_shape'])
 			label = tf.squeeze(label) #remove singleton dimensions
 
-		min_after_capacity = 10000
-		capacity = min_after_capacity * opt['batch_size'] * 4
 		if shuffle:
 			image_batch, label_batch = tf.train.shuffle_batch(
 				[image, label], batch_size=opt['batch_size'],
-				capacity=capacity, min_after_dequeue=min_after_capacity,
+				capacity=data['capacity'], min_after_dequeue=data['min_after_dequeue'],
 				num_threads=opt['num_threads_per_queue'])
 		else:
 			image_batch, label_batch = tf.train.batch([image,
-				label], batch_size=opt['batch_size'], capacity=capacity,
+				label], batch_size=opt['batch_size'], capacity=data['capacity'],
 				num_threads=opt['num_threads_per_queue'])
 
 	return image_batch, label_batch

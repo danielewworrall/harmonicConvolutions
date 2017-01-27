@@ -88,6 +88,8 @@ class settings():
             data = discover_and_setup_tfrecords(mnist_dir, 
                 self.data, use_train_fraction = self.__get('train_data_fraction'))
             #define the types stored in the .tfrecords files
+            self.__data_set('min_after_dequeue', 5000)
+            self.__data_set('capacity', 8000)
             self.__data_set('x_type', tf.uint8)
             self.__data_set('y_type', tf.int64)
             #let's define some functions to reshape data
@@ -133,6 +135,8 @@ class settings():
             data = discover_and_setup_tfrecords(mnist_dir, 
                 self.data, use_train_fraction = self.__get('train_data_fraction'))
             #define the types stored in the .tfrecords files
+            self.__data_set('min_after_dequeue', 5000)
+            self.__data_set('capacity', 8000)
             self.__data_set('x_type', tf.uint8)
             self.__data_set('y_type', tf.int64)
             #let's define some functions to reshape data
@@ -213,6 +217,8 @@ class settings():
             data = discover_and_setup_tfrecords(mnist_dir, 
                 self.data, use_train_fraction = self.__get('train_data_fraction'))
             #define the types stored in the .tfrecords files
+            self.__data_set('min_after_dequeue', 3000)
+            self.__data_set('capacity', 5000)
             self.__data_set('x_type', tf.uint8)
             self.__data_set('y_type', tf.int64)
             #let's define some functions to reshape data
