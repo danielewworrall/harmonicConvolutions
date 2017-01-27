@@ -277,9 +277,9 @@ def construct_model_and_optimizer(opt, tf_nodes):
 	else:
 		# Multi_GPU Optimizer
 		if opt['optimizer'] == tf.train.MomentumOptimizer:
-			optim = opt['optimizer'](lr, opt['momentum'], use_nesterov=True)
+			optim = opt['optimizer'](tf_nodes['learning_rate'], opt['momentum'], use_nesterov=True)
 		else:
-			optim = opt['optimizer'](lr)
+			optim = opt['optimizer'](tf_nodes['learning_rate'])
 		#setup model for each GPU
 		linearGPUIdx = 0
 		gradientsPerGPU = []
