@@ -79,11 +79,11 @@ def get_weights_dict(shape, max_order, std_mult=0.4, name='W', device='/cpu:0'):
 	dev: (default /cpu:0)
 	"""
 	weights_dict = {}
-	#radius = (shape[0]+1)/2
-	#n_rings = (radius*(radius+1))/2
+	#radius = (shape[0]+1)/2 
+	#n_rings = (radius*(radius+1))/2 
 	for i in xrange(max_order+1):
 		#sh = [n_rings-(i>0)] + shape[2:]
-		n_rings = (i==0) + shape[0]/2
+		n_rings = shape[0]/2
 		sh = [n_rings,] + shape[2:]
 		nm = name + '_' + str(i)
 		weights_dict[i] = get_weights(sh, std_mult=std_mult, name=nm, device=device)

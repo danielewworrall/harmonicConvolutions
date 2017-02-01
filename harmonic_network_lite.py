@@ -42,7 +42,7 @@ def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 	return R
 
 
-def batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-4, name='hbn',
+def batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-12, name='hbn',
 		 device='/cpu:0'):
 	"""Batch normalization for the magnitudes of X
 	
@@ -61,7 +61,7 @@ def batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-4, name='hbn',
 							  device=device)
 
 
-def nonlinearity(x, fnc=tf.nn.relu, eps=1e-4, name='nl', device='/cpu:0'):
+def nonlinearity(x, fnc=tf.nn.relu, eps=1e-12, name='nl', device='/cpu:0'):
 	"""Alter nonlinearity for the complex domain
 	
 	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
@@ -121,7 +121,7 @@ def mean_max_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mxp'):
 		return mean_max_pooling(x, ksize=ksize, strides=strides)
 
 
-def sum_magnitudes(x, eps=1e-4, keep_dims=True):
+def sum_magnitudes(x, eps=1e-12, keep_dims=True):
 	"""Sum the magnitudes of each of the complex feature maps in X.
 	
 	Output U = sum_i |x_i|

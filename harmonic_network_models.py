@@ -14,8 +14,8 @@ from harmonic_network_helpers import *
 
 def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
-	# Sure layers weight & bias
-	order = 1
+	# Max order
+	mo = 1
 	# Number of Filters
 	nf = opt['n_filters']
 	nf2 = int(nf*opt['filter_gain'])
@@ -35,33 +35,31 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 	
 	# Convolutional Layers with pooling
 	with tf.name_scope('block1') as scope:
-		cv1 = hn_lite.conv2d(x, nf, fs, padding='SAME', name='1', device=d)
+		cv1 = hn_lite.conv2d(x, nf, fs, max_order=mo, padding='SAME', name='1', device=d)
 		cv1 = hn_lite.nonlinearity(cv1, tf.nn.relu, name='1', device=d)
 		
-		cv2 = hn_lite.conv2d(cv1, nf, fs, padding='SAME', name='2', device=d)
+		cv2 = hn_lite.conv2d(cv1, nf, fs, max_order=mo, padding='SAME', name='2', device=d)
 		cv2 = hn_lite.batch_norm(cv2, train_phase, name='bn1', device=d)
 
 	with tf.name_scope('block2') as scope:
 		cv2 = hn_lite.mean_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		#cv2 = hn_lite.max_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv3 = hn_lite.conv2d(cv2, nf2, fs, padding='SAME', name='3', device=d)
+		cv3 = hn_lite.conv2d(cv2, nf2, fs, max_order=mo, padding='SAME', name='3', device=d)
 		cv3 = hn_lite.nonlinearity(cv3, tf.nn.relu, name='3', device=d)
 
-		cv4 = hn_lite.conv2d(cv3, nf2, fs, padding='SAME', name='4', device=d)
+		cv4 = hn_lite.conv2d(cv3, nf2, fs, max_order=mo, padding='SAME', name='4', device=d)
 		cv4 = hn_lite.batch_norm(cv4, train_phase, name='bn2', device=d)
 
 	with tf.name_scope('block3') as scope:
 		cv4 = hn_lite.mean_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
-		#cv4 = hn_lite.max_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
-		cv5 = hn_lite.conv2d(cv4, nf3, fs, padding='SAME', name='5', device=d)
+		cv5 = hn_lite.conv2d(cv4, nf3, fs, max_order=mo, padding='SAME', name='5', device=d)
 		cv5 = hn_lite.nonlinearity(cv5, tf.nn.relu, name='5', device=d)
 
-		cv6 = hn_lite.conv2d(cv5, nf3, fs, padding='SAME', name='6', device=d)
+		cv6 = hn_lite.conv2d(cv5, nf3, fs, max_order=mo, padding='SAME', name='6', device=d)
 		cv6 = hn_lite.batch_norm(cv6, train_phase, name='bn3', device=d)
 
 	# Final Layer
 	with tf.name_scope('block4') as scope:
-		cv7 = hn_lite.conv2d(cv6, ncl, fs, padding='SAME', phase=False,
+		cv7 = hn_lite.conv2d(cv6, ncl, fs, max_order=mo, padding='SAME', phase=False,
 					 name='7', device=d)
 		real = hn_lite.sum_magnitudes(cv7)
 		cv7 = tf.reduce_mean(real, reduction_indices=[1,2,3,4])
@@ -156,6 +154,7 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	fs = opt['filter_size']
 	N = opt['resnet_block_multiplicity']
 	sm = opt['std_mult']
+	mo = opt['max_order']
 	
 	with tf.device(device):
 		initializer = tf.contrib.layers.variance_scaling_initializer()
@@ -169,22 +168,22 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	activations = []
 	
 	# Convolutional Layers
-	res1 = hn_lite.conv2d(x, nf, fs, padding='SAME', name='in', device=device)
+	res1 = hn_lite.conv2d(x, nf, fs, max_order=mo, padding='SAME', name='in', device=device)
 	for i in xrange(N):
 		name = 'r1_'+str(i)
-		res1 = hn_lite.residual_block(res1, nf, fs, 2, train_phase, stddev=sm, name=name, device=device)
+		res1 = hn_lite.residual_block(res1, nf, fs, 2, train_phase, max_order=mo, stddev=sm, name=name, device=device)
 	res2 = hn_lite.mean_pool(res1, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp1')
 	activations.append(res2)
 	
 	for i in xrange(N):
 		name = 'r2_'+str(i)
-		res2 = hn_lite.residual_block(res2, fg*nf, fs, 2, train_phase, stddev=sm, name=name, device=device)
+		res2 = hn_lite.residual_block(res2, fg*nf, fs, 2, train_phase, max_order=mo, stddev=sm, name=name, device=device)
 	res3 = hn_lite.mean_pool(res2, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp2')
 	activations.append(res3)
 	
 	for i in xrange(N):
 		name = 'r3_'+str(i)
-		res3 = hn_lite.residual_block(res3, fg*fg*nf, fs, 2, train_phase, stddev=sm, name=name, device=device)
+		res3 = hn_lite.residual_block(res3, fg*fg*nf, fs, 2, train_phase, max_order=mo, stddev=sm, name=name, device=device)
 	res4 = hn_lite.mean_pool(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
 	activations.append(res4)
 
