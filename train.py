@@ -107,16 +107,13 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['delay'] = 8
 		opt['psi_preconditioner'] = 7.8
 		opt['filter_gain'] = 2
-		opt['filter_size'] = 5
-		opt['n_filters'] = 4*4	# Wide ResNet
+		opt['filter_size'] = 3
+		opt['n_filters'] = 16
 		opt['resnet_block_multiplicity'] = 3
 		opt['max_order'] = 1
 		opt['augment'] = True
 		opt['momentum'] = 0.93
 		opt['display_step'] = 25
-		opt['is_classification'] = True
-		opt['n_channels'] = 3
-		opt['n_classes'] = 10
 		opt['log_path'] = './logs/deep_cifar'
 		opt['checkpoint_path'] = './checkpoints/deep_cifar'
 	elif opt['datasetIdx'] == 'plankton': 
