@@ -110,7 +110,7 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['filter_size'] = 5
 		opt['n_filters'] = 4*4	# Wide ResNet
 		opt['resnet_block_multiplicity'] = 3
-		opt['max_order'] = 2
+		opt['max_order'] = 1
 		opt['augment'] = True
 		opt['momentum'] = 0.93
 		opt['display_step'] = 25
