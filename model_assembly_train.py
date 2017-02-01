@@ -281,6 +281,7 @@ def construct_model_and_optimizer(opt, tf_nodes):
 		train_op = build_optimizer(loss, tf_nodes['learning_rate'], opt)
 	else:
 		# Multi_GPU Optimizer
+		lr = tf_nodes['learning_rate']
 		if opt['optimizer'] == tf.train.MomentumOptimizer:
 			optim = opt['optimizer'](lr, opt['momentum'], use_nesterov=True)
 		else:
