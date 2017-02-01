@@ -223,7 +223,7 @@ def get_interpolation_weights(filter_size, m):
 	diff = radii*ring_locations - coords[np.newaxis,:,np.newaxis,:]
 	dist2 = np.sum(diff**2, axis=1)
 	# Convert distances to weightings
-	bandwidth = 0.4
+	bandwidth = 0.5
 	weights = np.exp(-0.5*dist2/(bandwidth**2))
 	# Normalize
 	return weights/np.sum(weights, axis=2, keepdims=True)

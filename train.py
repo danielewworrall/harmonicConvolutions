@@ -102,7 +102,7 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['n_epochs'] = 250
 		opt['batch_size'] = 32
 		opt['lr']  = 0.01
-		opt['optimizer'] = tf.train.MomentumOptimizer #tf.train.AdamOptimizer
+		opt['optimizer'] = tf.train.AdamOptimizer
 		opt['std_mult'] = 0.4
 		opt['delay'] = 8
 		opt['psi_preconditioner'] = 7.8
