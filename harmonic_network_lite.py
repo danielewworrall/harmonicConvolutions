@@ -10,7 +10,7 @@ import tensorflow as tf
 from harmonic_network_ops import *
 
 def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
-			 max_order=1, stddev=0.4, name='lconv', device='/cpu:0'):
+			 max_order=1, stddev=0.4, n_rings=None, name='lconv', device='/cpu:0'):
 	"""Harmonic Convolution lite
 	
 	x: input tf tensor, shape [batchsize,height,width,order,complex,channels],
@@ -30,13 +30,12 @@ def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 	xsh = x.get_shape().as_list()
 	shape = [ksize, ksize, xsh[5], n_channels]
 	from harmonic_network_helpers import get_weights_dict, get_phase_dict
-	Q = get_weights_dict(shape, max_order, std_mult=stddev, name='W'+name,
-								device=device)
-	P = None
+	Q = get_weights_dict(shape, max_order, std_mult=stddev, n_rings=n_rings,
+								name='W'+name, device=device)
 	if phase == True:
 		P = get_phase_dict(xsh[5], n_channels, max_order, name='P'+name,
 								 device=device)
-	W = get_filters(Q, filter_size=ksize, P=P)
+	W = get_filters(Q, filter_size=ksize, P=P, n_rings=n_rings)
 	R = h_conv(x, W, strides=strides, padding=padding, max_order=max_order,
 				  name=name)
 	return R

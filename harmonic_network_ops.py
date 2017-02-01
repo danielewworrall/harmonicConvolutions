@@ -204,10 +204,11 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:
 
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####
-def get_interpolation_weights(filter_size, m):
+def get_interpolation_weights(filter_size, m, n_rings=None):
 	"""Resample the patches on rings using Gaussian interpolation"""
-	nrings = filter_size/2
-	radii = np.linspace(m!=0, nrings-0.5, nrings)
+	if n_rings is None:
+		n_rings = filter_size/2
+	radii = np.linspace(m!=0, n_rings-0.5, n_rings)
 	# We define pixel centers to be at positions 0.5
 	foveal_center = np.asarray([filter_size, filter_size])/2.
 	# The angles to sample
@@ -229,7 +230,7 @@ def get_interpolation_weights(filter_size, m):
 	return weights/np.sum(weights, axis=2, keepdims=True)
 
 
-def get_filters(R, filter_size, P=None):
+def get_filters(R, filter_size, P=None, n_rings=None):
 	"""Perform single-frequency DFT on each ring of a polar-resampled patch"""
 	k = filter_size		
 	filters = {}
@@ -238,7 +239,7 @@ def get_filters(R, filter_size, P=None):
 	for m, r in R.iteritems():
 		rsh = r.get_shape().as_list()
 		# Get the basis matrices
-		weights = get_interpolation_weights(k, m)
+		weights = get_interpolation_weights(k, m, n_rings=n_rings)
 		DFT = dft(N)[m,:] 
 		LPF = np.dot(DFT, weights).T 
 
@@ -272,6 +273,52 @@ def L2_grid(center, shape):
 	I = I - center[1]
 	J = J - center[0]
 	return np.vstack((np.reshape(I, -1), np.reshape(J, -1)))
+
+
+def get_weights_dict(shape, max_order, std_mult=0.4, n_rings=None, name='W',
+							device='/cpu:0'):
+	"""Return a dict of weights.
+	
+	shape: list of filter shape [h,w,i,o] --- note we use h=w
+	max_order: returns weights for m=0,1,...,max_order
+	std_mult: He init scaled by std_mult (default 0.4)
+	name: (default 'W')
+	dev: (default /cpu:0)
+	"""
+	weights_dict = {}
+	for i in xrange(max_order+1):
+		if n_rings is None:
+			n_rings = shape[0]/2
+		sh = [n_rings,] + shape[2:]
+		nm = name + '_' + str(i)
+		weights_dict[i] = get_weights(sh, std_mult=std_mult, name=nm, device=device)
+	return weights_dict
+	
+
+def get_bias_dict(n_filters, order, name='b', device='/cpu:0'):
+	"""Return a dict of biases"""
+	with tf.device(device):
+		bias_dict = {}
+		for i in xrange(order+1):
+			bias = tf.get_variable(name+'_'+str(i), dtype=tf.float32,
+								   shape=[n_filters],
+				initializer=tf.constant_initializer(1e-2))
+			bias_dict[i] = bias
+	return bias_dict
+
+
+def get_phase_dict(n_in, n_out, order, name='b',device='/cpu:0'):
+	"""Return a dict of phase offsets"""
+	with tf.device(device):
+		phase_dict = {}
+		for i in xrange(order+1):
+			init = np.random.rand(1,1,n_in,n_out) * 2. *np.pi
+			init = np.float32(init)
+			phase = tf.get_variable(name+'_'+str(i), dtype=tf.float32,
+									shape=[1,1,n_in,n_out],
+				initializer=tf.constant_initializer(init))
+			phase_dict[i] = phase
+	return phase_dict
 
 
 ##### SPECIAL FUNCTIONS #####
