@@ -276,7 +276,7 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 
 	with tf.name_scope('gap') as scope:
 		#gap = tf.reduce_mean(hn_lite.sum_magnitudes(res4), reduction_indices=[1,2,3,4])
-		mags = hn_lite.stack_magnitudes(res5_3, keep_dims=False)
+		mags = hn_lite.stack_magnitudes(res4, keep_dims=False)
 		gap = tf.reduce_mean(mags, reduction_indices=[1,2])
 		gapsh = gap.get_shape().as_list()
 		gap = tf.reshape(gap, tf.pack([gapsh[0],-1]))
