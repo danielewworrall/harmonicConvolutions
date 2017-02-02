@@ -187,19 +187,19 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	res2_1 = hn_lite.batch_norm(res2_1, tp, tf.nn.relu, name='n2_1', device=d)
 	res2_2 = hn_lite.conv2d(res2_1, nf2, fs, max_order=mo, n_rings=nr, padding='SAME', name='2_2', device=d)
 	res2_2 = hn_lite.batch_norm(res2_2, tp, tf.nn.relu, name='n2_2', device=d)
-	#res2_mp = hn_lite.mean_pool(res2_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='2_mp')
+	res2_mp = hn_lite.mean_pool(res2_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='2_mp')
 	
 	# Block 3
-	res3_1 = hn_lite.conv2d(res2_2, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_1', device=d)
+	res3_1 = hn_lite.conv2d(res2_mp, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_1', device=d)
 	res3_1 = hn_lite.batch_norm(res3_1, tp, tf.nn.relu, name='n3_1', device=d)
 	res3_2 = hn_lite.conv2d(res3_1, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_2', device=d)
 	res3_2 = hn_lite.batch_norm(res3_2, tp, tf.nn.relu, name='n3_2', device=d)
 	res3_3 = hn_lite.conv2d(res3_2, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_3', device=d)
 	res3_3 = hn_lite.batch_norm(res3_3, tp, tf.nn.relu, name='n3_3', device=d)
-	res3_mp = hn_lite.mean_pool(res3_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='3_mp')
+	#res3_mp = hn_lite.mean_pool(res3_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='3_mp')
 	
 	# Block 4
-	res4_1 = hn_lite.conv2d(res3_mp, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_1', device=d)
+	res4_1 = hn_lite.conv2d(res3_3, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_1', device=d)
 	res4_1 = hn_lite.batch_norm(res4_1, tp, tf.nn.relu, name='n4_1', device=d)
 	res4_2 = hn_lite.conv2d(res4_1, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_2', device=d)
 	res4_2 = hn_lite.batch_norm(res4_2, tp, tf.nn.relu, name='n4_2', device=d)
@@ -238,9 +238,13 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	sm = opt['std_mult']
 	mo = opt['max_order']
 	
+	nf1 = nf
+	nf2 = nf*fg
+	nf3 = nf*(fg**2)
+	
 	with tf.device(device):
 		initializer = tf.contrib.layers.variance_scaling_initializer()
-		Wgap = tf.get_variable('Wfc', shape=[fg*fg*nf,opt['n_classes']],
+		Wgap = tf.get_variable('Wfc', shape=[nf3*(mo+1),opt['n_classes']],
 									  initializer=initializer)
 		bgap = tf.get_variable('bfc', shape=[opt['n_classes']],
 									  initializer=tf.constant_initializer(1e-2))
@@ -253,24 +257,29 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 	res1 = hn_lite.conv2d(x, nf, fs, max_order=mo, padding='SAME', name='in', device=device)
 	for i in xrange(N):
 		name = 'r1_'+str(i)
-		res1 = hn_lite.residual_block(res1, nf, fs, 2, train_phase, max_order=mo, stddev=sm, name=name, device=device)
+		res1 = hn_lite.residual_block(res1, nf1, fs, 2, train_phase, max_order=mo, stddev=sm, name=name, device=device)
 	res2 = hn_lite.mean_pool(res1, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp1')
 	activations.append(res2)
 	
 	for i in xrange(N):
 		name = 'r2_'+str(i)
-		res2 = hn_lite.residual_block(res2, fg*nf, fs, 2, train_phase, max_order=mo, stddev=sm, name=name, device=device)
+		res2 = hn_lite.residual_block(res2, nf2, fs, 2, train_phase, max_order=mo, stddev=sm, name=name, device=device)
 	res3 = hn_lite.mean_pool(res2, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp2')
 	activations.append(res3)
 	
 	for i in xrange(N):
 		name = 'r3_'+str(i)
-		res3 = hn_lite.residual_block(res3, fg*fg*nf, fs, 2, train_phase, max_order=mo, stddev=sm, name=name, device=device)
-	res4 = hn_lite.mean_pool(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
+		res3 = hn_lite.residual_block(res3, nf3, fs, 2, train_phase, max_order=mo, stddev=sm, name=name, device=device)
+	#res4 = hn_lite.mean_pool(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
+	res4 = res3
 	activations.append(res4)
 
 	with tf.name_scope('gap') as scope:
-		gap = tf.reduce_mean(hn_lite.sum_magnitudes(res4), reduction_indices=[1,2,3,4])
+		#gap = tf.reduce_mean(hn_lite.sum_magnitudes(res4), reduction_indices=[1,2,3,4])
+		mags = hn_lite.stack_magnitudes(res5_3, keep_dims=False)
+		gap = tf.reduce_mean(mags, reduction_indices=[1,2])
+		gapsh = gap.get_shape().as_list()
+		gap = tf.reshape(gap, tf.pack([gapsh[0],-1]))
 		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap) #, activations
 
 
