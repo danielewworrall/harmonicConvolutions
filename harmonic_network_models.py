@@ -187,7 +187,7 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	res2_1 = hn_lite.batch_norm(res2_1, tp, tf.nn.relu, name='n2_1', device=d)
 	res2_2 = hn_lite.conv2d(res2_1, nf2, fs, max_order=mo, n_rings=nr, padding='SAME', name='2_2', device=d)
 	res2_2 = hn_lite.batch_norm(res2_2, tp, tf.nn.relu, name='n2_2', device=d)
-	res2_mp = hn_lite.mean_pool(res2_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='2_mp')
+	#res2_mp = hn_lite.mean_pool(res2_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='2_mp')
 	
 	# Block 3
 	res3_1 = hn_lite.conv2d(res2_mp, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_1', device=d)
@@ -196,10 +196,10 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	res3_2 = hn_lite.batch_norm(res3_2, tp, tf.nn.relu, name='n3_2', device=d)
 	res3_3 = hn_lite.conv2d(res3_2, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_3', device=d)
 	res3_3 = hn_lite.batch_norm(res3_3, tp, tf.nn.relu, name='n3_3', device=d)
-	#res3_mp = hn_lite.mean_pool(res3_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='3_mp')
+	res3_mp = hn_lite.mean_pool(res3_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='3_mp')
 	
 	# Block 4
-	res4_1 = hn_lite.conv2d(res3_3, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_1', device=d)
+	res4_1 = hn_lite.conv2d(res3_mp, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_1', device=d)
 	res4_1 = hn_lite.batch_norm(res4_1, tp, tf.nn.relu, name='n4_1', device=d)
 	res4_2 = hn_lite.conv2d(res4_1, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_2', device=d)
 	res4_2 = hn_lite.batch_norm(res4_2, tp, tf.nn.relu, name='n4_2', device=d)
