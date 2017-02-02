@@ -218,7 +218,7 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	
 
 	with tf.name_scope('gap') as scope:
-		mags = hn_lite.stack_magnitudes(res5_mp, keepdims=False)
+		mags = hn_lite.stack_magnitudes(res5_mp, keep_dims=False)
 		gap = tf.reduce_mean(mag, reduction_indices=[1,2])
 		gapsh = gap.get_shape().as_list()
 		gap = tf.reshape(gap, tf.pack([gapsh[0],-1]))
