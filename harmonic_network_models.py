@@ -196,29 +196,34 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	res3_2 = hn_lite.batch_norm(res3_2, tp, tf.nn.relu, name='n3_2', device=d)
 	res3_3 = hn_lite.conv2d(res3_2, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_3', device=d)
 	res3_3 = hn_lite.batch_norm(res3_3, tp, tf.nn.relu, name='n3_3', device=d)
-	res3_mp = hn_lite.mean_pool(res3_3, ksize=(1,3,3,1), strides=(1,2,2,1), name='3_mp')
+	#res3_mp = hn_lite.mean_pool(res3_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='3_mp')
 	
 	# Block 4
-	res4_1 = hn_lite.conv2d(res3_mp, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_1', device=d)
+	res4_1 = hn_lite.conv2d(res3_3, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_1', device=d)
 	res4_1 = hn_lite.batch_norm(res4_1, tp, tf.nn.relu, name='n4_1', device=d)
 	res4_2 = hn_lite.conv2d(res4_1, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_2', device=d)
 	res4_2 = hn_lite.batch_norm(res4_2, tp, tf.nn.relu, name='n4_2', device=d)
 	res4_3 = hn_lite.conv2d(res4_2, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_3', device=d)
 	res4_3 = hn_lite.batch_norm(res4_3, tp, tf.nn.relu, name='n4_3', device=d)
-	res4_mp = hn_lite.mean_pool(res4_3, ksize=(1,3,3,1), strides=(1,2,2,1), name='4_mp')
+	#res4_mp = hn_lite.mean_pool(res4_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='4_mp')
 	
 	# Block 5
-	res5_1 = hn_lite.conv2d(res4_mp, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_1', device=d)
+	res5_1 = hn_lite.conv2d(res4_3, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_1', device=d)
 	res5_1 = hn_lite.batch_norm(res5_1, tp, tf.nn.relu, name='n5_1', device=d)
 	res5_2 = hn_lite.conv2d(res5_1, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_2', device=d)
 	res5_2 = hn_lite.batch_norm(res5_2, tp, tf.nn.relu, name='n5_2', device=d)
 	res5_3 = hn_lite.conv2d(res5_2, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_3', device=d)
 	res5_3 = hn_lite.batch_norm(res5_3, tp, tf.nn.relu, name='n5_3', device=d)
-	res5_mp = hn_lite.mean_pool(res5_3, ksize=(1,3,3,1), strides=(1,2,2,1), name='5_mp')
+	#res5_mp = hn_lite.mean_pool(res5_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='5_mp')
+	print res1_mp
+	print res2_mp
+	print res3_mp
+	print res4_mp
+	print res5_mp
 	
 
 	with tf.name_scope('gap') as scope:
-		mags = hn_lite.stack_magnitudes(res5_mp, keep_dims=False)
+		mags = hn_lite.stack_magnitudes(res5_3, keep_dims=False)
 		gap = tf.reduce_mean(mags, reduction_indices=[1,2])
 		gapsh = gap.get_shape().as_list()
 		gap = tf.reshape(gap, tf.pack([gapsh[0],-1]))
