@@ -29,7 +29,6 @@ def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 	"""
 	xsh = x.get_shape().as_list()
 	shape = [ksize, ksize, xsh[5], n_channels]
-	#from harmonic_network_helpers import get_weights_dict, get_phase_dict
 	Q = get_weights_dict(shape, max_order, std_mult=stddev, n_rings=n_rings,
 								name='W'+name, device=device)
 	if phase == True:
@@ -58,6 +57,14 @@ def batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-12, name='hbn'
 	"""
 	return h_batch_norm(x, fnc, is_training, decay=decay, eps=eps, name=name,
 							  device=device)
+
+
+def log_batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-12, name='hbn',
+		 device='/cpu:0'):
+	"""Batch normalization on the logarithm of the activations"""
+	y = h_batch_norm(tf.log(x), fnc, is_training, decay=decay, eps=eps,
+						  name=name, device=device)
+	return tf.exp(y)
 
 
 def nonlinearity(x, fnc=tf.nn.relu, eps=1e-12, name='nl', device='/cpu:0'):

@@ -107,8 +107,8 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['delay'] = 8
 		opt['psi_preconditioner'] = 7.8
 		opt['filter_gain'] = 2
-		opt['filter_size'] = 5
-		opt['n_rings'] = 5
+		opt['filter_size'] = 3
+		opt['n_rings'] = 3
 		opt['n_filters'] = 16
 		opt['resnet_block_multiplicity'] = 3
 		opt['max_order'] = 1
