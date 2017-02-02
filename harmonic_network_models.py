@@ -166,9 +166,9 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	
 	with tf.device(device):
 		initializer = tf.contrib.layers.variance_scaling_initializer()
-		W1 = tf.get_variable('W1', shape=[nf5,nf5], initializer=initializer)
-		b1 = tf.get_variable('b1', shape=[nf5], initializer=tf.constant_initializer(1e-2))
-		W2 = tf.get_variable('W2', shape=[nf5,opt['n_classes']], initializer=initializer)
+		#W1 = tf.get_variable('W1', shape=[nf5,nf5], initializer=initializer)
+		#b1 = tf.get_variable('b1', shape=[nf5], initializer=tf.constant_initializer(1e-2))
+		W2 = tf.get_variable('W2', shape=[nf5*(mo+1),opt['n_classes']], initializer=initializer)
 		b2 = tf.get_variable('b2', shape=[opt['n_classes']], initializer=tf.constant_initializer(1e-2))
 
 		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
@@ -218,9 +218,13 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	
 
 	with tf.name_scope('gap') as scope:
-		gap = tf.reduce_mean(hn_lite.sum_magnitudes(res5_mp), reduction_indices=[1,2,3,4])
-		fc1 = tf.nn.bias_add(tf.matmul(gap, W1), b1)
-		return tf.nn.bias_add(tf.matmul(fc1, W2), b2)
+		mags = hn_lite.stack_magnitudes(res5_mp, keepdims=False)
+		gap = tf.reduce_mean(mag, reduction_indices=[1,2])
+		gapsh = gap.get_shape().as_list()
+		gap = tf.reshape(gap, tf.pack([gapsh[0],-1]))
+		
+		#fc1 = tf.nn.bias_add(tf.matmul(gap, W1), b1)
+		return tf.nn.bias_add(tf.matmul(gap, W2), b2)
 
 
 def deep_cifar(opt, x, train_phase, device='/cpu:0'):

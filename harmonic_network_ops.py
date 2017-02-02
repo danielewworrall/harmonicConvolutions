@@ -78,7 +78,7 @@ def h_nonlin(X, fnc, eps=1e-12, name='b', device='/cpu:0'):
 	fnc: function handle for a nonlinearity. MUST map to non-negative reals R+
 	eps: regularization since grad |Z| is infinite at zero (default 1e-8)
 	"""
-	magnitude = sum_magnitudes(X, eps)
+	magnitude = stack_magnitudes(X, eps)
 	msh = magnitude.get_shape()
 	with tf.device(device):
 		b = tf.get_variable('b'+name, shape=[1,1,1,msh[3],1,msh[5]])
@@ -100,7 +100,7 @@ def h_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-12, name='hbn',
 	name: (default complexBatchNorm)
 	"""
 	with tf.name_scope(name) as scope:
-		magnitude = sum_magnitudes(X, eps)
+		magnitude = stack_magnitudes(X, eps)
 		Rb = bn(magnitude, train_phase, decay=decay, name=name, device=device)
 		c = tf.div(fnc(Rb), magnitude)
 		return c*X
@@ -164,13 +164,13 @@ def mean_pooling(x, ksize=(1,1,1,1), strides=(1,1,1,1)):
 	return tf.reshape(Y, new_shape)
 
 
-def sum_magnitudes(X, eps=1e-12, keep_dims=True):
-	"""Sum the magnitudes of each of the complex feature maps in X.
+def stack_magnitudes(X, eps=1e-12, keep_dims=True):
+	"""Stack the magnitudes of each of the complex feature maps in X.
 	
-	Output U = sum_i |X_i|
+	Output U = concat(|X_i|)
 	
 	X: dict of channels {rotation order: (real, imaginary)}
-	eps: regularization since grad |Z| is infinite at zero (default 1e-8)
+	eps: regularization since grad |Z| is infinite at zero (default 1e-12)
 	"""
 	R = tf.reduce_sum(tf.square(X), reduction_indices=[4], keep_dims=keep_dims)
 	return tf.sqrt(tf.maximum(R,eps))
