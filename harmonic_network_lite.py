@@ -29,7 +29,7 @@ def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 	"""
 	xsh = x.get_shape().as_list()
 	shape = [ksize, ksize, xsh[5], n_channels]
-	from harmonic_network_helpers import get_weights_dict, get_phase_dict
+	#from harmonic_network_helpers import get_weights_dict, get_phase_dict
 	Q = get_weights_dict(shape, max_order, std_mult=stddev, n_rings=n_rings,
 								name='W'+name, device=device)
 	if phase == True:

@@ -166,10 +166,10 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	
 	with tf.device(device):
 		initializer = tf.contrib.layers.variance_scaling_initializer()
-		Wgap = tf.get_variable('Wfc', shape=[nf5,opt['n_classes']],
-									  initializer=initializer)
-		bgap = tf.get_variable('bfc', shape=[opt['n_classes']],
-									  initializer=tf.constant_initializer(1e-2))
+		W1 = tf.get_variable('W1', shape=[nf5,nf5], initializer=initializer)
+		b1 = tf.get_variable('b1', shape=[nf5], initializer=tf.constant_initializer(1e-2))
+		W2 = tf.get_variable('W2', shape=[nf5,opt['n_classes']], initializer=initializer)
+		b2 = tf.get_variable('b2', shape=[opt['n_classes']], initializer=tf.constant_initializer(1e-2))
 
 		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
 	
@@ -177,43 +177,50 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	
 	# Block 1
 	res1_1 = hn_lite.conv2d(x, nf1, fs, max_order=mo, n_rings=nr, padding='SAME', name='1_1', device=d)
-	res1_1 = hn_lite.nonlinearity(res1_1, tf.nn.relu, name='n1_1', device=d)
-	res1_2 = hn_lite.conv2d(res1_1, nf1, fs, max_order=mo, nrings=nr, padding='SAME', name='1_2', device=d)
+	res1_1 = hn_lite.batch_norm(res1_1, tf.nn.relu, name='n1_1', device=d)
+	res1_2 = hn_lite.conv2d(res1_1, nf1, fs, max_order=mo, n_rings=nr, padding='SAME', name='1_2', device=d)
 	res1_2 = hn_lite.batch_norm(res1_2, tp, fnc=tf.nn.relu, name='n1_2', device=d)
 	res1_mp = hn_lite.mean_pool(res1_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='1_mp')
 	
 	# Block 2
-	res2_1 = hn_lite.conv2d(res1_mp, nf2, fs, max_order=mo, nrings=nr, padding='SAME', name='2_1', device=d)
-	res2_1 = hn_lite.nonlinearity(res2_1, tf.nn.relu, name='n2_1', device=d)
-	res2_2 = hn_lite.conv2d(res2_1, nf2, fs, max_order=mo, nrings=nr, padding='SAME', name='2_2', device=d)
+	res2_1 = hn_lite.conv2d(res1_mp, nf2, fs, max_order=mo, n_rings=nr, padding='SAME', name='2_1', device=d)
+	res2_1 = hn_lite.batch_norm(res2_1, tf.nn.relu, name='n2_1', device=d)
+	res2_2 = hn_lite.conv2d(res2_1, nf2, fs, max_order=mo, n_rings=nr, padding='SAME', name='2_2', device=d)
 	res2_2 = hn_lite.batch_norm(res2_2, tp, tf.nn.relu, name='n2_2', device=d)
 	res2_mp = hn_lite.mean_pool(res2_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='2_mp')
 	
 	# Block 3
-	res3_1 = hn_lite.conv2d(res2_mp, nf3, fs, max_order=mo, nrings=nr, padding='SAME', name='3_1', device=d)
-	res3_1 = hn_lite.nonlinearity(res3_1, tf.nn.relu, name='n3_1', device=d)
-	res3_2 = hn_lite.conv2d(res3_1, nf3, fs, max_order=mo, nrings=nr, padding='SAME', name='3_2', device=d)
-	res3_2 = hn_lite.batch_norm(res3_2, tp, tf.nn.relu, name='n3_2', device=d)
-	res3_mp = hn_lite.mean_pool(res3_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='3_mp')
+	res3_1 = hn_lite.conv2d(res2_mp, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_1', device=d)
+	res3_1 = hn_lite.batch_norm(res3_1, tf.nn.relu, name='n3_1', device=d)
+	res3_2 = hn_lite.conv2d(res3_1, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_2', device=d)
+	res3_2 = hn_lite.batch_norm(res3_2, tf.nn.relu, name='n3_2', device=d)
+	res3_3 = hn_lite.conv2d(res3_2, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_3', device=d)
+	res3_3 = hn_lite.batch_norm(res3_3, tp, tf.nn.relu, name='n3_3', device=d)
+	res3_mp = hn_lite.mean_pool(res3_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='3_mp')
 	
 	# Block 4
-	res4_1 = hn_lite.conv2d(res3_mp, nf4, fs, max_order=mo, nrings=nr, padding='SAME', name='4_1', device=d)
-	res4_1 = hn_lite.nonlinearity(res4_1, tf.nn.relu, name='n4_1', device=d)
-	res4_2 = hn_lite.conv2d(res4_1, nf4, fs, max_order=mo, nrings=nr, padding='SAME', name='4_2', device=d)
+	res4_1 = hn_lite.conv2d(res3_mp, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_1', device=d)
+	res4_1 = hn_lite.batch_norm(res4_1, tf.nn.relu, name='n4_1', device=d)
+	res4_2 = hn_lite.conv2d(res4_1, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_2', device=d)
 	res4_2 = hn_lite.batch_norm(res4_2, tp, tf.nn.relu, name='n4_2', device=d)
-	res4_mp = hn_lite.mean_pool(res4_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='4_mp')
+	res4_3 = hn_lite.conv2d(res4_2, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_3', device=d)
+	res4_3 = hn_lite.batch_norm(res4_3, tp, tf.nn.relu, name='n4_3', device=d)
+	res4_mp = hn_lite.mean_pool(res4_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='4_mp')
 	
 	# Block 5
-	res5_1 = hn_lite.conv2d(res4_mp, nf5, fs, max_order=mo, nrings=nr, padding='SAME', name='5_1', device=d)
-	res5_1 = hn_lite.nonlinearity(res5_1, tf.nn.relu, name='n5_1', device=d)
-	res5_2 = hn_lite.conv2d(res5_1, nf5, fs, max_order=mo, nrings=nr, padding='SAME', name='5_2', device=d)
+	res5_1 = hn_lite.conv2d(res4_mp, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_1', device=d)
+	res5_1 = hn_lite.batch_norm(res5_1, tf.nn.relu, name='n5_1', device=d)
+	res5_2 = hn_lite.conv2d(res5_1, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_2', device=d)
 	res5_2 = hn_lite.batch_norm(res5_2, tp, tf.nn.relu, name='n5_2', device=d)
-	res5_mp = hn_lite.mean_pool(res5_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='5_mp')
+	res5_3 = hn_lite.conv2d(res5_2, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_3', device=d)
+	res5_3 = hn_lite.batch_norm(res5_3, tp, tf.nn.relu, name='n5_3', device=d)
+	res5_mp = hn_lite.mean_pool(res5_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='5_mp')
 	
 
 	with tf.name_scope('gap') as scope:
 		gap = tf.reduce_mean(hn_lite.sum_magnitudes(res5_mp), reduction_indices=[1,2,3,4])
-		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap)
+		fc1 = tf.nn.bias_add(tf.matmul(gap, W1), b1)
+		return tf.nn.bias_add(tf.matmul(fc1, W2), b2)
 
 
 def deep_cifar(opt, x, train_phase, device='/cpu:0'):
