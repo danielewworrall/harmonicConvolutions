@@ -59,12 +59,11 @@ def batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-12, name='hbn'
 							  device=device)
 
 
-def log_batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-12, name='hbn',
-		 device='/cpu:0'):
+def log_batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-12,
+						 name='hlbn', device='/cpu:0'):
 	"""Batch normalization on the logarithm of the activations"""
-	y = h_batch_norm(tf.log(x), fnc, is_training, decay=decay, eps=eps,
-						  name=name, device=device)
-	return tf.exp(y)
+	return h_log_batch_norm(x, fnc, is_training, decay=decay, eps=eps,
+									name=name, device=device)
 
 
 def nonlinearity(x, fnc=tf.nn.relu, eps=1e-12, name='nl', device='/cpu:0'):
