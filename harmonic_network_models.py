@@ -203,7 +203,7 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	res4_1 = hn_lite.batch_norm(res4_1, tp, tf.nn.relu, name='n4_1', device=d)
 	res4_2 = hn_lite.conv2d(res4_1, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_2', device=d)
 	res4_2 = hn_lite.batch_norm(res4_2, tp, tf.nn.relu, name='n4_2', device=d)
-	res4_3 = hn_lite.conv2d(res4_2, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_3', device=d)
+	res4_3 = hn_lite.conv2d(res4_2, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_3', device=d)
 	res4_3 = hn_lite.batch_norm(res4_3, tp, tf.nn.relu, name='n4_3', device=d)
 	res4_mp = hn_lite.mean_pool(res4_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='4_mp')
 	
@@ -212,7 +212,7 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	res5_1 = hn_lite.batch_norm(res5_1, tp, tf.nn.relu, name='n5_1', device=d)
 	res5_2 = hn_lite.conv2d(res5_1, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_2', device=d)
 	res5_2 = hn_lite.batch_norm(res5_2, tp, tf.nn.relu, name='n5_2', device=d)
-	res5_3 = hn_lite.conv2d(res5_2, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_3', device=d)
+	res5_3 = hn_lite.conv2d(res5_2, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_3', device=d)
 	res5_3 = hn_lite.batch_norm(res5_3, tp, tf.nn.relu, name='n5_3', device=d)
 	res5_mp = hn_lite.mean_pool(res5_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='5_mp')
 	
