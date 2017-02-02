@@ -104,27 +104,6 @@ def h_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-12, name='hbn',
 		Rb = bn(magnitude, train_phase, decay=decay, name=name, device=device)
 		c = tf.div(fnc(Rb), magnitude)
 		return c*X
-	
-
-def h_log_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-12, name='hlbn',
-				 device='/cpu:0'):
-	"""Batch normalization for the magnitudes of X
-	
-	X: dict of channels {rotation order: (real, imaginary)}
-	fnc: function handle for a nonlinearity. MUST map to non-negative reals R+
-	train_phase: boolean flag True: training mode, False: test mode
-	decay: decay rate: 0 is memory-less, 1 no updates (default 0.99)
-	eps: regularization since grad |Z| is infinite at zero (default 1e-8)
-	name: (default complexBatchNorm)
-	"""
-	def softminus(z):
-		return tf.log(tf.exp(z) - 1.)
-	
-	with tf.name_scope(name) as scope:
-		magnitude = sum_magnitudes(X, eps)
-		Rb = bn(softminus(magnitude), train_phase, decay=decay, name=name, device=device)
-		c = tf.div(fnc(Rb), tf.nn.softplus(magnitude))
-		return c*X
 
 
 def bn(X, train_phase, decay=0.99, name='batchNorm', device='/cpu:0'):
