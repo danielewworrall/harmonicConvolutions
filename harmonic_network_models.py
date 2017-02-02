@@ -146,6 +146,16 @@ def wide_resnet(opt, x, train_phase, device='/cpu:0'):
 
 
 def h_VGG(opt, x, train_phase, device='/cpu:0'):
+	bn = hn_lite.batch_norm
+	return VGG(opt, x, train_phase, bn, device=device)
+
+
+def h_logVGG(opt, x, train_phase, device='/cpu:0'):
+	bn = hn_lite.log_batch_norm
+	return VGG(opt, x, train_phase, bn, device=device)
+
+
+def VGG(opt, x, train_phase, bn, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Abbreviations
 	nf = opt['n_filters']
@@ -174,7 +184,6 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
 	
 	activations = []
-	bn = hn_lite.log_batch_norm
 	
 	# Block 1
 	res1_1 = hn_lite.conv2d(x, nf1, fs, max_order=mo, n_rings=nr, padding='SAME', name='1_1', device=d)
