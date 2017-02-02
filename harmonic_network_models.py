@@ -215,11 +215,6 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	res5_3 = hn_lite.conv2d(res5_2, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_3', device=d)
 	res5_3 = hn_lite.batch_norm(res5_3, tp, tf.nn.relu, name='n5_3', device=d)
 	#res5_mp = hn_lite.mean_pool(res5_3, ksize=(1,2,2,1), strides=(1,2,2,1), name='5_mp')
-	print res1_mp
-	print res2_mp
-	print res3_mp
-	print res4_mp
-	print res5_mp
 	
 
 	with tf.name_scope('gap') as scope:
