@@ -176,6 +176,45 @@ def Z_batch_norm(X, is_training, decay=0.99, name='Zbn', device='/cpu:0'):
 	return bn(X, is_training, decay=decay, name=name, device=device)
 
 
+def Z_conv(X, n_channels, ksize, strides=(1,1,1,1), padding='VALID',
+			  name='name', device='/cpu:0'):
+	Xsh = X.get_shape().as_list()
+	W = get_weights([ksize,ksize,Xsh[3],n_channels], std_mult=1.,
+						name='W_c'+name, device=device)
+	b = tf.get_variable('b_c'+name, shape=[n_channels],
+							  initializer=tf.constant_initializer(1e-2))
+	y = tf.nn.conv2d(X, W, strides=strides, padding=padding, name=name+'Zconv')
+	return tf.nn.bias_add(y, b)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

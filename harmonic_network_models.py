@@ -227,7 +227,154 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 		return tf.nn.bias_add(tf.matmul(gap, W2), b2)
 
 
-def deep_cifar(opt, x, train_phase, device='/cpu:0'):
+def mixed_VGG(opt, x, train_phase, device='/cpu:0'):
+	"""High frequency convolutions are unstable, so get rid of them"""
+	# Abbreviations
+	nf = opt['n_filters']
+	fg = opt['filter_gain']
+	bs = opt['batch_size']
+	fs = opt['filter_size']
+	sm = opt['std_mult']
+	mo = opt['max_order']
+	nr = opt['n_rings']
+	d = device
+	tp = train_phase
+	
+	nf1 = nf
+	nf2 = nf*fg
+	nf3 = nf*(fg**2)
+	nf4 = nf*(fg**3)
+	nf5 = nf*(fg**3)
+	
+	with tf.device(device):
+		initializer = tf.contrib.layers.variance_scaling_initializer()
+		W = tf.get_variable('W', shape=[nf5,opt['n_classes']], initializer=initializer)
+		b = tf.get_variable('b', shape=[opt['n_classes']], initializer=tf.constant_initializer(1e-2))
+
+		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
+	
+	activations = []
+	
+	# Block 1
+	res1_1 = hn_lite.conv2d(x, nf1, fs, max_order=mo, n_rings=nr, padding='SAME', name='1_1', device=d)
+	res1_1 = hn_lite.batch_norm(res1_1, tp, tf.nn.relu, name='n1_1', device=d)
+	res1_2 = hn_lite.conv2d(res1_1, nf1, fs, max_order=mo, n_rings=nr, padding='SAME', name='1_2', device=d)
+	res1_2 = hn_lite.batch_norm(res1_2, tp, fnc=tf.nn.relu, name='n1_2', device=d)
+	res1_mp = hn_lite.mean_pool(res1_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='1_mp')
+	res1_mag = hn_lite.stack_magnitudes(res1_mp, keep_dims=False)
+	rsh = res1_mag.get_shape().as_list()
+	res1_mag = tf.reshape(res1_mag, tf.pack([rsh[0],rsh[1],rsh[2],-1]))
+	
+	# Block 2
+	res2_1 = hn_lite.Z_conv(res1_mag, nf2, fs, padding='SAME', name='2_1', device=d)
+	res2_1 = hn_lite.Z_batch_norm(res2_1, tp, name='n2_1', device=d)
+	res2_2 = hn_lite.Z_conv(tf.nn.relu(res2_1), nf2, fs, padding='SAME', name='2_2', device=d)
+	res2_2 = hn_lite.Z_batch_norm(res2_2, tp, name='n2_2', device=d)
+	res2_mp = tf.nn.max_pool(res2_2, ksize=(1,2,2,1), strides=(1,2,2,1), padding='VALID', name='2_mp')
+	
+	# Block 3
+	res3_1 = hn_lite.Z_conv(tf.nn.relu(res2_mp), nf3, fs, padding='SAME', name='3_1',)
+	res3_1 = hn_lite.Z_batch_norm(res3_1, tp, name='n3_1', device=d)
+	res3_2 = hn_lite.Z_conv(tf.nn.relu(res3_1), nf3, fs, padding='SAME', name='3_2', device=d)
+	res3_2 = hn_lite.Z_batch_norm(res3_2, tp, name='n3_2', device=d)
+	res3_3 = hn_lite.Z_conv(tf.nn.relu(res3_2), nf3, fs, padding='SAME', name='3_3', device=d)
+	res3_3 = hn_lite.Z_batch_norm(res3_3, tp, name='n3_3', device=d)
+	
+	# Block 4
+	res4_1 = hn_lite.Z_conv(tf.nn.relu(res3_3), nf4, fs, padding='SAME', name='4_1', device=d)
+	res4_1 = hn_lite.Z_batch_norm(res4_1, tp, name='n4_1', device=d)
+	res4_2 = hn_lite.Z_conv(tf.nn.relu(res4_1), nf4, fs, padding='SAME', name='4_2', device=d)
+	res4_2 = hn_lite.Z_batch_norm(res4_2, tp, name='n4_2', device=d)
+	res4_3 = hn_lite.Z_conv(tf.nn.relu(res4_2), nf4, fs, padding='SAME', name='4_3', device=d)
+	res4_3 = hn_lite.Z_batch_norm(res4_3, tp, name='n4_3', device=d)
+	
+	# Block 5
+	res5_1 = hn_lite.Z_conv(tf.nn.relu(res4_3), nf5, fs, padding='SAME', name='5_1', device=d)
+	res5_1 = hn_lite.Z_batch_norm(res5_1, tp, name='n5_1', device=d)
+	res5_2 = hn_lite.Z_conv(tf.nn.relu(res5_1), nf5, fs, padding='SAME', name='5_2', device=d)
+	res5_2 = hn_lite.Z_batch_norm(res5_2, tp, name='n5_2', device=d)
+	res5_3 = hn_lite.Z_conv(tf.nn.relu(res5_2), nf5, fs, padding='SAME', name='5_3', device=d)
+	res5_3 = hn_lite.Z_batch_norm(res5_3, tp, name='n5_3', device=d)
+	
+
+	with tf.name_scope('gap') as scope:
+		gap = tf.nn.relu(tf.reduce_mean(res5_3, reduction_indices=[1,2]))
+		return tf.nn.bias_add(tf.matmul(gap, W), b)
+
+
+def Z_VGG(opt, x, train_phase, device='/cpu:0'):
+	"""High frequency convolutions are unstable, so get rid of them"""
+	# Abbreviations
+	nf = opt['n_filters']
+	fg = opt['filter_gain']
+	bs = opt['batch_size']
+	fs = opt['filter_size']
+	sm = opt['std_mult']
+	mo = opt['max_order']
+	nr = opt['n_rings']
+	d = device
+	tp = train_phase
+	
+	nf1 = nf
+	nf2 = nf*fg
+	nf3 = nf*(fg**2)
+	nf4 = nf*(fg**3)
+	nf5 = nf*(fg**3)
+	
+	with tf.device(device):
+		initializer = tf.contrib.layers.variance_scaling_initializer()
+		W = tf.get_variable('W', shape=[nf5,opt['n_classes']], initializer=initializer)
+		b = tf.get_variable('b', shape=[opt['n_classes']], initializer=tf.constant_initializer(1e-2))
+
+		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],opt['n_channels']])
+	
+	activations = []
+	
+	# Block 1
+	res1_1 = hn_lite.Z_conv(x, nf1, fs, padding='SAME', name='1_1', device=d)
+	res1_1 = hn_lite.Z_batch_norm(res1_1, tp, name='n1_1', device=d)
+	res1_2 = hn_lite.Z_conv(tf.nn.relu(res1_1), nf1, fs, padding='SAME', name='1_2', device=d)
+	res1_2 = hn_lite.Z_batch_norm(res1_2, tp, name='n1_2', device=d)
+	res1_mp = tf.nn.max_pool(res1_2, ksize=(1,2,2,1), strides=(1,2,2,1), padding='VALID', name='1_mp')
+	
+	# Block 2
+	res2_1 = hn_lite.Z_conv(res1_mp, nf2, fs, padding='SAME', name='2_1', device=d)
+	res2_1 = hn_lite.Z_batch_norm(res2_1, tp, name='n2_1', device=d)
+	res2_2 = hn_lite.Z_conv(tf.nn.relu(res2_1), nf2, fs, padding='SAME', name='2_2', device=d)
+	res2_2 = hn_lite.Z_batch_norm(res2_2, tp, name='n2_2', device=d)
+	res2_mp = tf.nn.max_pool(res2_2, ksize=(1,2,2,1), strides=(1,2,2,1), padding='VALID', name='2_mp')
+	
+	# Block 3
+	res3_1 = hn_lite.Z_conv(tf.nn.relu(res2_mp), nf3, fs, padding='SAME', name='3_1',)
+	res3_1 = hn_lite.Z_batch_norm(res3_1, tp, name='n3_1', device=d)
+	res3_2 = hn_lite.Z_conv(tf.nn.relu(res3_1), nf3, fs, padding='SAME', name='3_2', device=d)
+	res3_2 = hn_lite.Z_batch_norm(res3_2, tp, name='n3_2', device=d)
+	res3_3 = hn_lite.Z_conv(tf.nn.relu(res3_2), nf3, fs, padding='SAME', name='3_3', device=d)
+	res3_3 = hn_lite.Z_batch_norm(res3_3, tp, name='n3_3', device=d)
+	
+	# Block 4
+	res4_1 = hn_lite.Z_conv(tf.nn.relu(res3_3), nf4, fs, padding='SAME', name='4_1', device=d)
+	res4_1 = hn_lite.Z_batch_norm(res4_1, tp, name='n4_1', device=d)
+	res4_2 = hn_lite.Z_conv(tf.nn.relu(res4_1), nf4, fs, padding='SAME', name='4_2', device=d)
+	res4_2 = hn_lite.Z_batch_norm(res4_2, tp, name='n4_2', device=d)
+	res4_3 = hn_lite.Z_conv(tf.nn.relu(res4_2), nf4, fs, padding='SAME', name='4_3', device=d)
+	res4_3 = hn_lite.Z_batch_norm(res4_3, tp, name='n4_3', device=d)
+	
+	# Block 5
+	res5_1 = hn_lite.Z_conv(tf.nn.relu(res4_3), nf5, fs, padding='SAME', name='5_1', device=d)
+	res5_1 = hn_lite.Z_batch_norm(res5_1, tp, name='n5_1', device=d)
+	res5_2 = hn_lite.Z_conv(tf.nn.relu(res5_1), nf5, fs, padding='SAME', name='5_2', device=d)
+	res5_2 = hn_lite.Z_batch_norm(res5_2, tp, name='n5_2', device=d)
+	res5_3 = hn_lite.Z_conv(tf.nn.relu(res5_2), nf5, fs, padding='SAME', name='5_3', device=d)
+	res5_3 = hn_lite.Z_batch_norm(res5_3, tp, name='n5_3', device=d)
+	
+
+	with tf.name_scope('gap') as scope:
+		gap = tf.nn.relu(tf.reduce_mean(res5_3, reduction_indices=[1,2]))
+		return tf.nn.bias_add(tf.matmul(gap, W), b)
+
+
+def h_resnet(opt, x, train_phase, device='/cpu:0'):
 	"""High frequency convolutions are unstable, so get rid of them"""
 	# Abbreviations
 	nf = opt['n_filters']
@@ -280,7 +427,7 @@ def deep_cifar(opt, x, train_phase, device='/cpu:0'):
 		gap = tf.reduce_mean(mags, reduction_indices=[1,2])
 		gapsh = gap.get_shape().as_list()
 		gap = tf.reshape(gap, tf.pack([gapsh[0],-1]))
-		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap) #, activations
+		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap)
 
 
 def deep_bsd(opt, x, train_phase, device='/cpu:0'):
