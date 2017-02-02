@@ -122,8 +122,8 @@ def h_log_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-12, name='hlbn',
 	
 	with tf.name_scope(name) as scope:
 		magnitude = sum_magnitudes(X, eps)
-		Rb = bn(tf.nn.softplus(magnitude), train_phase, decay=decay, name=name, device=device)
-		c = tf.div(fnc(Rb), softminus(magnitude))
+		Rb = bn(softminus(magnitude), train_phase, decay=decay, name=name, device=device)
+		c = tf.div(fnc(Rb), tf.nn.softplus(magnitude))
 		return c*X
 
 
