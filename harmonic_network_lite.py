@@ -59,11 +59,6 @@ def batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-12, name='hbn'
 							  device=device)
 
 
-def Z_batch_norm(X, is_training, decay=0.99, name='Zbn', device='/cpu:0'):
-	"""Regular batch normalization in cartesian coordinates"""
-	return bn(X, is_training, decay=decay, name=name, device=device)
-
-
 def nonlinearity(x, fnc=tf.nn.relu, eps=1e-12, name='nl', device='/cpu:0'):
 	"""Alter nonlinearity for the complex domain
 	
@@ -175,7 +170,10 @@ def residual_block(x, n_channels, ksize, depth, is_training, fnc=tf.nn.relu,
 		return y + x
 
 
-
+# Methods for the integer plane
+def Z_batch_norm(X, is_training, decay=0.99, name='Zbn', device='/cpu:0'):
+	"""Regular batch normalization in cartesian coordinates"""
+	return bn(X, is_training, decay=decay, name=name, device=device)
 
 
 

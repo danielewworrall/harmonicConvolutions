@@ -110,7 +110,7 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['filter_size'] = 3
 		opt['n_rings'] = 3
 		opt['n_filters'] = 16
-		opt['resnet_block_multiplicity'] = 3
+		opt['resnet_block_multiplicity'] = 2
 		opt['max_order'] = 1
 		opt['augment'] = True
 		opt['momentum'] = 0.9
