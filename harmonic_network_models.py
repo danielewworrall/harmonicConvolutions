@@ -190,7 +190,7 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	#res2_mp = hn_lite.mean_pool(res2_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='2_mp')
 	
 	# Block 3
-	res3_1 = hn_lite.conv2d(res2_mp, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_1', device=d)
+	res3_1 = hn_lite.conv2d(res2_2, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_1', device=d)
 	res3_1 = hn_lite.batch_norm(res3_1, tp, tf.nn.relu, name='n3_1', device=d)
 	res3_2 = hn_lite.conv2d(res3_1, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_2', device=d)
 	res3_2 = hn_lite.batch_norm(res3_2, tp, tf.nn.relu, name='n3_2', device=d)
