@@ -224,8 +224,8 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 		return tf.nn.bias_add(tf.matmul(gap, Wg), bg)
 
 
-def h_block(opt, x, n_channels, n_layers, is_training, fnc=tf.nn.relu,
-				name='name', mean_pool=True, device='/cpu:0'):
+def h_block(opt, x, n_channels, n_layers, is_training, fnc, name='name',
+				mean_pool=True, device='/cpu:0'):
 	"""A single block of h-convolutions"""
 	fs = opt['filter_size']
 	mo = opt['max_order']
@@ -243,7 +243,7 @@ def h_block(opt, x, n_channels, n_layers, is_training, fnc=tf.nn.relu,
 
 
 def Z_block(opt, x, n_channels, n_layers, is_training, fnc, name='name',
-				device='/cpu:0'):
+				max_pool=True, device='/cpu:0'):
 	"""A single block of h-convolutions"""
 	fs = opt['filter_size']
 	mo = opt['max_order']
@@ -254,6 +254,9 @@ def Z_block(opt, x, n_channels, n_layers, is_training, fnc, name='name',
 								 padding='SAME', name='Zc'+name+'_'+str(i), device=d)
 		x = hn_lite.Z_batch_norm(x, is_training, fnc, name='Zbn'+name+'_'+str(i),
 										 device=d)
+	
+	if max_pool:
+		x = tf.nn.max_pool(x, (1,2,2,1), (1,2,2,1), 'VALID', name='mp_'+name)
 	return x
 
 
