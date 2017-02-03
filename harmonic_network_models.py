@@ -246,14 +246,13 @@ def Z_block(opt, x, n_channels, n_layers, is_training, fnc, name='name',
 				max_pool=True, device='/cpu:0'):
 	"""A single block of h-convolutions"""
 	fs = opt['filter_size']
-	mo = opt['max_order']
-	nr = opt['n_rings']
 	d = device
 	for i in xrange(n_layers):
-		x = hn_lite.Z_conv(x, n_channels, fs, max_order=mo, n_rings=nr,
-								 padding='SAME', name='Zc'+name+'_'+str(i), device=d)
-		x = hn_lite.Z_batch_norm(x, is_training, fnc, name='Zbn'+name+'_'+str(i),
+		x = hn_lite.Z_conv(x, n_channels, fs, padding='SAME',
+								 name='Zc'+name+'_'+str(i), device=d)
+		x = hn_lite.Z_batch_norm(x, is_training, name='Zbn'+name+'_'+str(i),
 										 device=d)
+		x = tf.nn.relu(x)
 	
 	if max_pool:
 		x = tf.nn.max_pool(x, (1,2,2,1), (1,2,2,1), 'VALID', name='mp_'+name)
@@ -281,16 +280,8 @@ def mixed_VGG(opt, x, train_phase, device='/cpu:0'):
 	nf4 = nf*(fg**3)
 	nf5 = nf*(fg**3)
 	
-	# Variables for the dense layer at the end
-	with tf.device(device):
-		initializer = tf.contrib.layers.variance_scaling_initializer()
-		Wg = tf.get_variable('Wg', shape=[nf5,opt['n_classes']],
-									initializer=initializer)
-		bg = tf.get_variable('bg', shape=[opt['n_classes']],
-									initializer=tf.constant_initializer(1e-2))
-		
-		# Reshape for H-Net input
-		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
+	# Reshape for H-Net input
+	x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
 	
 	# H-Net Blocks
 	mp = True
@@ -311,16 +302,24 @@ def mixed_VGG(opt, x, train_phase, device='/cpu:0'):
 		else:
 			x = Z_block(opt, x, nc, 2, tp, tf.nn.relu, max_pool=mp, name=str(i))
 	
-	# If the network end in h_convs reshape
+	# GAP on output. If the output is in h-form, need to stack magnitudes
 	if opt['block_multiplicity'] == 5:
-			x = hn_lite.stack_magnitudes(x, keep_dims=False)
-			x = tf.reduce_mean(x, reduction_indices=[1,2])
-			xsh = x.get_shape().as_list()
-			x = tf.reshape(x, tf.pack([xsh[0],-1]))
+		x = hn_lite.stack_magnitudes(x, keep_dims=False)
+	x = tf.reduce_mean(x, reduction_indices=[1,2])
+	xsh = x.get_shape().as_list()
+	x = tf.reshape(x, tf.pack([xsh[0],-1]))
+			
+	# Variables for the dense layer at the end
+	with tf.device(device):
+		initializer = tf.contrib.layers.variance_scaling_initializer()
+		Wg = tf.get_variable('Wg', shape=[x.get_shape()[1],opt['n_classes']],
+									initializer=initializer)
+		bg = tf.get_variable('bg', shape=[opt['n_classes']],
+									initializer=tf.constant_initializer(1e-2))
 			
 	# Dense layers at end of network
 	with tf.name_scope('gap') as scope:
-		gap = tf.nn.relu(tf.reduce_mean(x, reduction_indices=[1,2]))
+		gap = tf.nn.relu(x)
 		return tf.nn.bias_add(tf.matmul(gap, Wg), bg)
 
 
