@@ -109,7 +109,7 @@ def wide_resnet(opt, x, train_phase, device='/cpu:0'):
 	fg = opt['filter_gain']
 	bs = opt['batch_size']
 	fs = opt['filter_size']
-	N = opt['resnet_block_multiplicity']
+	N = opt['block_multiplicity']
 	d = device
 	
 	with tf.device(device):
@@ -166,10 +166,8 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 	
 	with tf.device(device):
 		initializer = tf.contrib.layers.variance_scaling_initializer()
-		#W1 = tf.get_variable('W1', shape=[nf5,nf5], initializer=initializer)
-		#b1 = tf.get_variable('b1', shape=[nf5], initializer=tf.constant_initializer(1e-2))
-		W2 = tf.get_variable('W2', shape=[nf5*(mo+1),opt['n_classes']], initializer=initializer)
-		b2 = tf.get_variable('b2', shape=[opt['n_classes']], initializer=tf.constant_initializer(1e-2))
+		Wg = tf.get_variable('Wg', shape=[nf5*(mo+1),opt['n_classes']], initializer=initializer)
+		bg = tf.get_variable('bg', shape=[opt['n_classes']], initializer=tf.constant_initializer(1e-2))
 
 		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
 	
@@ -223,12 +221,108 @@ def h_VGG(opt, x, train_phase, device='/cpu:0'):
 		gapsh = gap.get_shape().as_list()
 		gap = tf.reshape(gap, tf.pack([gapsh[0],-1]))
 		
-		#fc1 = tf.nn.bias_add(tf.matmul(gap, W1), b1)
-		return tf.nn.bias_add(tf.matmul(gap, W2), b2)
+		return tf.nn.bias_add(tf.matmul(gap, Wg), bg)
+
+
+def h_block(opt, x, n_channels, n_layers, is_training, fnc=tf.nn.relu,
+				name='name', mean_pool=True, device='/cpu:0'):
+	"""A single block of h-convolutions"""
+	fs = opt['filter_size']
+	mo = opt['max_order']
+	nr = opt['n_rings']
+	d = device
+	for i in xrange(n_layers):
+		x = hn_lite.conv2d(x, n_channels, fs, max_order=mo, n_rings=nr,
+								 padding='SAME', name='hc'+name+'_'+str(i), device=d)
+		x = hn_lite.batch_norm(x, is_training, tf.nn.relu,
+									  name='hbn'+name+'_'+str(i), device=d)
+	if mean_pool:
+		x = hn_lite.mean_pool(x, ksize=(1,2,2,1), strides=(1,2,2,1),
+									 name='mp_'+name)
+	return x
+
+
+def Z_block(opt, x, n_channels, n_layers, is_training, fnc, name='name',
+				device='/cpu:0'):
+	"""A single block of h-convolutions"""
+	fs = opt['filter_size']
+	mo = opt['max_order']
+	nr = opt['n_rings']
+	d = device
+	for i in xrange(n_layers):
+		x = hn_lite.Z_conv(x, n_channels, fs, max_order=mo, n_rings=nr,
+								 padding='SAME', name='Zc'+name+'_'+str(i), device=d)
+		x = hn_lite.Z_batch_norm(x, is_training, fnc, name='Zbn'+name+'_'+str(i),
+										 device=d)
+	return x
 
 
 def mixed_VGG(opt, x, train_phase, device='/cpu:0'):
-	"""High frequency convolutions are unstable, so get rid of them"""
+	"""H-Net layers followed by regular convolutions"""
+	# Defines
+	nf = opt['n_filters']
+	fg = opt['filter_gain']
+	bs = opt['batch_size']
+	fs = opt['filter_size']
+	sm = opt['std_mult']
+	mo = opt['max_order']
+	nr = opt['n_rings']
+	d = device
+	tp = train_phase
+	
+	assert opt['block_multiplicity'] <= 5
+	
+	nf1 = nf
+	nf2 = nf*fg
+	nf3 = nf*(fg**2)
+	nf4 = nf*(fg**3)
+	nf5 = nf*(fg**3)
+	
+	# Variables for the dense layer at the end
+	with tf.device(device):
+		initializer = tf.contrib.layers.variance_scaling_initializer()
+		Wg = tf.get_variable('Wg', shape=[nf5,opt['n_classes']],
+									initializer=initializer)
+		bg = tf.get_variable('bg', shape=[opt['n_classes']],
+									initializer=tf.constant_initializer(1e-2))
+		
+		# Reshape for H-Net input
+		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
+	
+	# H-Net Blocks
+	mp = True
+	for i in xrange(5):
+		# Choose whether to mean-pool
+		if i >= 2:
+			mp = False
+		# Num channels
+		nc = nf*(fg**i)
+		# Reshape from h-form to Z-form
+		if i == opt['block_multiplicity']:
+			x = hn_lite.stack_magnitudes(x, keep_dims=False)
+			xsh = x.get_shape().as_list()
+			x = tf.reshape(x, tf.pack([xsh[0],xsh[1],xsh[2],-1]))
+		# Apply an h/Z=block
+		if i < opt['block_multiplicity']:
+			x = h_block(opt, x, nc, 2, tp, tf.nn.relu, mean_pool=mp, name=str(i))
+		else:
+			x = Z_block(opt, x, nc, 2, tp, tf.nn.relu, max_pool=mp, name=str(i))
+	
+	# If the network end in h_convs reshape
+	if opt['block_multiplicity'] == 5:
+			x = hn_lite.stack_magnitudes(x, keep_dims=False)
+			x = tf.reduce_mean(x, reduction_indices=[1,2])
+			xsh = x.get_shape().as_list()
+			x = tf.reshape(x, tf.pack([xsh[0],-1]))
+			
+	# Dense layers at end of network
+	with tf.name_scope('gap') as scope:
+		gap = tf.nn.relu(tf.reduce_mean(x, reduction_indices=[1,2]))
+		return tf.nn.bias_add(tf.matmul(gap, Wg), bg)
+
+
+def mixed_VGG_(opt, x, train_phase, device='/cpu:0'):
+	"""H-Net layers followed by regular convolutions"""
 	# Abbreviations
 	nf = opt['n_filters']
 	fg = opt['filter_gain']
@@ -248,8 +342,8 @@ def mixed_VGG(opt, x, train_phase, device='/cpu:0'):
 	
 	with tf.device(device):
 		initializer = tf.contrib.layers.variance_scaling_initializer()
-		W = tf.get_variable('W', shape=[nf5,opt['n_classes']], initializer=initializer)
-		b = tf.get_variable('b', shape=[opt['n_classes']], initializer=tf.constant_initializer(1e-2))
+		Wg = tf.get_variable('Wg', shape=[nf5,opt['n_classes']], initializer=initializer)
+		bg = tf.get_variable('bg', shape=[opt['n_classes']], initializer=tf.constant_initializer(1e-2))
 
 		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
 	
@@ -299,7 +393,7 @@ def mixed_VGG(opt, x, train_phase, device='/cpu:0'):
 
 	with tf.name_scope('gap') as scope:
 		gap = tf.nn.relu(tf.reduce_mean(res5_3, reduction_indices=[1,2]))
-		return tf.nn.bias_add(tf.matmul(gap, W), b)
+		return tf.nn.bias_add(tf.matmul(gap, Wg), bg)
 
 
 def Z_VGG(opt, x, train_phase, device='/cpu:0'):
@@ -381,7 +475,7 @@ def h_resnet(opt, x, train_phase, device='/cpu:0'):
 	fg = opt['filter_gain']
 	bs = opt['batch_size']
 	fs = opt['filter_size']
-	N = opt['resnet_block_multiplicity']
+	N = opt['block_multiplicity']
 	sm = opt['std_mult']
 	mo = opt['max_order']
 	

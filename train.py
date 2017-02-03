@@ -96,13 +96,13 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['use_io_queues'] = False
 		opt['dim'] = 32
 		opt['crop_shape'] = 0
-		opt['aug_crop'] = 3
+		opt['aug_crop'] = 2
 		opt['n_channels'] = 3
 		opt['n_classes'] = 10 
 		opt['n_epochs'] = 250
-		opt['batch_size'] = 32
-		opt['lr']  = 0.01
-		opt['optimizer'] = tf.train.AdamOptimizer
+		opt['batch_size'] = 128
+		opt['lr']  = 0.1
+		opt['optimizer'] = tf.train.MomentumOptimizer #tf.train.AdamOptimizer
 		opt['std_mult'] = 0.4
 		opt['delay'] = 8
 		opt['psi_preconditioner'] = 1.
@@ -110,7 +110,7 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['filter_size'] = 3
 		opt['n_rings'] = 3
 		opt['n_filters'] = 16
-		opt['resnet_block_multiplicity'] = 2
+		opt['block_multiplicity'] = 2
 		opt['max_order'] = 1
 		opt['augment'] = True
 		opt['momentum'] = 0.9

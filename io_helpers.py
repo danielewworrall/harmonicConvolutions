@@ -214,10 +214,6 @@ def preprocess(im, im_shape, cm):
 	b = np.random.randint(2*cm)
 	im = im[a:a+im_shape[0],b:b+im_shape[1]]
 	return np.reshape(im, [np.prod(im_shape),])
-	#new_angle = uniform_rand(-np.pi, np.pi)
-	#im = sktr.rotate(im, new_angle)
-	#new_shape = np.asarray(im_shape) - 2.*np.asarray((crop_margin,)*2)
-	#return np.reshape(im, [np.prod(new_shape),])
 
 def imagenet_global_preprocess(im):
 	# Resize
