@@ -81,8 +81,8 @@ def create_opt_data(opt):
 		opt['crop_shape'] = 0
 		opt['n_channels'] = 1
 		opt['n_classes'] = 10
-		opt['log_path'] = './logs/deep_mnist/trialA'
-		opt['checkpoint_path'] = './checkpoints/deep_mnist/trialA'
+		opt['log_path'] = './logs/deep_mnist'
+		opt['checkpoint_path'] = './checkpoints/deep_mnist'
 	elif opt['datasetIdx'] == 'cifar10':
 		print("""WARNING: Our Deep CIFAR Model is new an experimental,
 so the current version will be unstable unless otherwise noted!""") 

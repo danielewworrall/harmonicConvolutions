@@ -293,7 +293,8 @@ def mixed_VGG(opt, x, train_phase, device='/cpu:0'):
 		nc = nf*(fg**i)
 		# Reshape from h-form to Z-form
 		if i == opt['block_multiplicity']:
-			x = hn_lite.stack_magnitudes(x, keep_dims=False)
+			if i > 0:
+				x = hn_lite.stack_magnitudes(x, keep_dims=False)
 			xsh = x.get_shape().as_list()
 			x = tf.reshape(x, tf.pack([xsh[0],xsh[1],xsh[2],-1]))
 		# Apply an h/Z=block
