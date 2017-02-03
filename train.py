@@ -104,7 +104,7 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['lr']  = 0.1
 		opt['optimizer'] = tf.train.MomentumOptimizer #tf.train.AdamOptimizer
 		opt['std_mult'] = 0.4
-		opt['delay'] = 8
+		opt['delay'] = 12
 		opt['psi_preconditioner'] = 1.
 		opt['filter_gain'] = 2
 		opt['filter_size'] = 3
