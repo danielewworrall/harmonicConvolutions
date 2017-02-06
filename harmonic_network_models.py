@@ -326,7 +326,7 @@ def mixed_VGG(opt, x, train_phase, device='/cpu:0'):
 		return tf.nn.bias_add(tf.matmul(gap, Wg), bg)
 
 
-def phaseless_VGG(opt, x, train_phase, device='/cpu:0'):
+def range_VGG(opt, x, train_phase, device='/cpu:0'):
 	"""H-Net layers followed by regular convolutions"""
 	# Abbreviations
 	nf = opt['n_filters']
@@ -355,44 +355,45 @@ def phaseless_VGG(opt, x, train_phase, device='/cpu:0'):
 	activations = []
 	
 	# Block 1
-	res1_1 = hn_lite.conv2d(x, nf1, fs, max_order=mo, n_rings=nr, padding='SAME', name='1_1', device=d)
+	res1_1 = hn_lite.range_conv2d(x, nf1, fs, in_range=(0,0), out_range=(-1,1),
+											n_rings=nr, padding='SAME', name='1_1', device=d)
 	res1_1 = hn_lite.batch_norm(res1_1, tp, tf.nn.relu, name='n1_1', device=d)
-	res1_1 = hn_lite.sum_magnitudes(res1_1)
-	res1_2 = hn_lite.conv2d(res1_1, nf1, fs, max_order=mo, n_rings=nr, padding='SAME', name='1_2', device=d)
+	res1_2 = hn_lite.range_conv2d(res1_1, nf1, fs, in_range=(-1,1), out_range=(-1,1),
+											n_rings=nr, padding='SAME', name='1_2', device=d)
 	res1_2 = hn_lite.batch_norm(res1_2, tp, fnc=tf.nn.relu, name='n1_2', device=d)
-	res1_2 = hn_lite.sum_magnitudes(res1_2)
 	res1_mp = hn_lite.mean_pool(res1_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='1_mp')
 	
 	# Block 2
-	res2_1 = hn_lite.conv2d(res1_mp, nf2, fs, max_order=mo, n_rings=nr, padding='SAME', name='2_1', device=d)
+	res2_1 = hn_lite.range_conv2d(res1_mp, nf2, fs, in_range=(-1,1), out_range=(-1,1),
+											n_rings=nr, padding='SAME', name='2_1', device=d)
 	res2_1 = hn_lite.batch_norm(res2_1, tp, tf.nn.relu, name='n2_1', device=d)
-	res2_1 = hn_lite.sum_magnitudes(res2_1)
-	res2_2 = hn_lite.conv2d(res2_1, nf2, fs, max_order=mo, n_rings=nr, padding='SAME', name='2_2', device=d)
+	res2_2 = hn_lite.range_conv2d(res2_1, nf2, fs, in_range=(-1,1), out_range=(-1,1),
+											n_rings=nr, padding='SAME', name='2_2', device=d)
 	res2_2 = hn_lite.batch_norm(res2_2, tp, fnc=tf.nn.relu, name='n2_2', device=d)
-	res2_2 = hn_lite.sum_magnitudes(res2_2)
 	res2_mp = hn_lite.mean_pool(res1_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='2_mp')
 	
 	# Block 3
-	res3_1 = hn_lite.conv2d(res2_mp, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_1', device=d)
+	res3_1 = hn_lite.range_conv2d(res2_mp, nf3, fs, in_range=(-1,1), out_range=(-1,1),
+											n_rings=nr, padding='SAME', name='3_1', device=d)
 	res3_1 = hn_lite.batch_norm(res3_1, tp, tf.nn.relu, name='n3_1', device=d)
-	res3_1 = hn_lite.sum_magnitudes(res3_1)
-	res3_2 = hn_lite.conv2d(res3_1, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_2', device=d)
+	res3_2 = hn_lite.range_conv2d(res3_1, nf3, fs, in_range=(-1,1), out_range=(-1,1),
+											n_rings=nr, padding='SAME', name='3_2', device=d)
 	res3_2 = hn_lite.batch_norm(res3_2, tp, fnc=tf.nn.relu, name='n3_2', device=d)
-	res3_2 = hn_lite.sum_magnitudes(res3_2)	
 	
 	# Block 4
-	res4_1 = hn_lite.conv2d(res3_2, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_1', device=d)
+	res4_1 = hn_lite.range_conv2d(res3_2, nf4, fs, in_range=(-1,1), out_range=(-1,1),
+											n_rings=nr, padding='SAME', name='4_1', device=d)
 	res4_1 = hn_lite.batch_norm(res4_1, tp, tf.nn.relu, name='n4_1', device=d)
-	res4_1 = hn_lite.sum_magnitudes(res4_1)
-	res4_2 = hn_lite.conv2d(res4_1, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_2', device=d)
+	res4_2 = hn_lite.range_conv2d(res4_1, nf4, fs, in_range=(-1,1), out_range=(-1,1),
+											n_rings=nr, padding='SAME', name='4_2', device=d)
 	res4_2 = hn_lite.batch_norm(res4_2, tp, fnc=tf.nn.relu, name='n4_2', device=d)
-	res4_2 = hn_lite.sum_magnitudes(res4_2)
 	
 	# Block 5
-	res5_1 = hn_lite.conv2d(res4_2, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_1', device=d)
+	res5_1 = hn_lite.range_conv2d(res4_2, nf5, fs, in_range=(-1,1), out_range=(-1,1),
+											n_rings=nr, padding='SAME', name='5_1', device=d)
 	res5_1 = hn_lite.batch_norm(res5_1, tp, tf.nn.relu, name='n5_1', device=d)
-	res5_1 = hn_lite.sum_magnitudes(res5_1)
-	res5_2 = hn_lite.conv2d(res5_1, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_2', device=d)
+	res5_2 = hn_lite.range_conv2d(res5_1, nf5, fs, in_range=(-1,1), out_range=(-1,1),
+											n_rings=nr, padding='SAME', name='5_2', device=d)
 	res5_2 = hn_lite.batch_norm(res5_2, tp, fnc=tf.nn.relu, name='n5_2', device=d)
 	
 	res_mag = hn_lite.sum_magnitudes(res5_2, keep_dims=False)

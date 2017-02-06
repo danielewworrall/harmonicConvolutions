@@ -40,6 +40,39 @@ def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 	return R
 
 
+def range_conv2d(x, n_channels, ksize, in_range=(0,1), out_range=(0,1),
+					  strides=(1,1,1,1), padding='VALID', phase=True, stddev=0.4,
+					  n_rings=None, name='lconv', device='/cpu:0'):
+	"""Harmonic Convolution lite
+	
+	x: input tf tensor, shape [batchsize,height,width,order,complex,channels],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	n_channels: number of output channels (int)
+	ksize: size of square filter (int)
+	in_range: input order range (default (0,1))
+	out_range: output order range (default (0,1))
+	strides: stride size (4-tuple: default (1,1,1,1))
+	padding: SAME or VALID (defult VALID)
+	phase: use a per-channel phase offset (default True)
+	stddev: scale of filter initialization wrt He initialization
+	name: (default 'lconv')
+	device: (default '/cpu:0')
+	"""
+	xsh = x.get_shape().as_list()
+	shape = [ksize, ksize, xsh[5], n_channels]
+	Q = get_weights_dict(shape, out_range, std_mult=stddev, n_rings=n_rings,
+								name='W'+name, device=device)
+	if phase == True:
+		P = get_phase_dict(xsh[5], n_channels, out_range, name='P'+name,
+								 device=device)
+	W = get_filters(Q, filter_size=ksize, P=P, n_rings=n_rings)
+	R = h_range_conv(x, W, strides=strides, padding=padding, in_range=in_range,
+						  out_range=out_range, name=name)
+	return R
+
+
 def batch_norm(x, is_training, fnc=tf.nn.relu, decay=0.99, eps=1e-12, name='hbn',
 		 device='/cpu:0'):
 	"""Batch normalization for the magnitudes of X

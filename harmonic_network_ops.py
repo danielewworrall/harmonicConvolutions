@@ -65,6 +65,60 @@ def h_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 		return tf.reshape(Y, ns)
 
 
+def h_range_conv(X, W, strides=(1,1,1,1), padding='VALID', in_range=(0,1),
+					  out_range=(0,1), name='N'):
+	"""Inter-order (cross-stream) convolutions can be implemented as single
+	convolution. For this we store data as 6D tensors and filters as 8D
+	tensors, at convolution, we reshape down to 4D tensors and expand again.
+	
+	X: tensor shape [mbatch,h,w,order,complex,channels]
+	Q: tensor dict---reshaped to [h,w,in,in.comp,in.ord,out,out.comp,out.ord]
+	P: tensor dict---phases
+	strides: as per tf convention (default (1,1,1,1))
+	padding: as per tf convention (default VALID)
+	filter_size: (default 3)
+	in_range: (default (0,1))
+	out_range: (default (0,1))
+	name: (default N)
+	"""
+	with tf.name_scope('hconv'+str(name)) as scope:
+		# Build data tensor: reshape it as [mbatch,h,w,order*complex*channels]
+		Xsh = X.get_shape().as_list()
+		X_ = tf.reshape(X, tf.concat(0,[Xsh[:3],[-1]]))
+		
+		# The script below constructs the stream-convolutions as one big filter
+		# W_. For each output order, run through each input order and copy-paste
+		# the filter for that convolution.
+		W_ = []
+		for output_order in xrange(out_range[0], out_range[1]+1):
+			# For each output order build input
+			Wr = []
+			Wi = []
+			for input_order in xrange(in_range[0], in_range[1]+1):
+				# Difference in orders is the convolution order
+				weight_order = output_order - input_order
+				weights = W[weight_order]
+				# Choose a different filter depending on whether input is real. We
+				# have the arbitrary convention that negative orders use the
+				# conjugate weights.
+				if Xsh[4] == 2:
+					Wr += [weights[0],-weights[1]]
+					Wi += [weights[1], weights[0]]
+				else:
+					Wr += [weights[0]]
+					Wi += [weights[1]]
+			W_ += [tf.concat(2, Wr), tf.concat(2, Wi)]
+		W_ = tf.concat(3, W_)
+		
+		# Convolve
+		Y = tf.nn.conv2d(X_, W_, strides=strides, padding=padding, name=name+'cconv')
+		# Reshape result into appropriate format
+		Ysh = Y.get_shape().as_list()
+		diff = out_range[1] - out_range[0] + 1
+		ns = tf.concat(0, [Ysh[:3],[diff,2],[Ysh[3]/(2*diff)]])
+		return tf.reshape(Y, ns)
+
+
 ##### NONLINEARITIES #####
 def h_nonlin(X, fnc, eps=1e-12, name='b', device='/cpu:0'):
 	"""Apply the nonlinearity described by the function handle fnc: R -> R+ to
@@ -279,13 +333,19 @@ def get_weights_dict(shape, max_order, std_mult=0.4, n_rings=None, name='W',
 	"""Return a dict of weights.
 	
 	shape: list of filter shape [h,w,i,o] --- note we use h=w
-	max_order: returns weights for m=0,1,...,max_order
+	max_order: returns weights for m=0,1,...,max_order, or if max_order is a
+	tuple, then it returns orders in the range.
 	std_mult: He init scaled by std_mult (default 0.4)
 	name: (default 'W')
 	dev: (default /cpu:0)
 	"""
+	if isinstance(max_order, int):
+		orders = xrange(-max_order, max_order+1)
+	else:
+		diff = max_order[1]-max_order[0]
+		orders = xrange(-diff, diff+1)
 	weights_dict = {}
-	for i in xrange(max_order+1):
+	for i in orders:
 		if n_rings is None:
 			n_rings = shape[0]/2
 		sh = [n_rings,] + shape[2:]
@@ -294,11 +354,15 @@ def get_weights_dict(shape, max_order, std_mult=0.4, n_rings=None, name='W',
 	return weights_dict
 	
 
-def get_bias_dict(n_filters, order, name='b', device='/cpu:0'):
+def get_bias_dict(n_filters, max_order, name='b', device='/cpu:0'):
 	"""Return a dict of biases"""
+	if isinstance(max_order, int):
+		orders = xrange(max_order)
+	else:
+		orders = xrange(max_order[0], max_order[1]+1)
 	with tf.device(device):
 		bias_dict = {}
-		for i in xrange(order+1):
+		for i in orders:
 			bias = tf.get_variable(name+'_'+str(i), dtype=tf.float32,
 								   shape=[n_filters],
 				initializer=tf.constant_initializer(1e-2))
@@ -306,11 +370,16 @@ def get_bias_dict(n_filters, order, name='b', device='/cpu:0'):
 	return bias_dict
 
 
-def get_phase_dict(n_in, n_out, order, name='b',device='/cpu:0'):
+def get_phase_dict(n_in, n_out, max_order, name='b',device='/cpu:0'):
 	"""Return a dict of phase offsets"""
+	if isinstance(max_order, int):
+		orders = xrange(-max_order, max_order+1)
+	else:
+		diff = max_order[1]-max_order[0]
+		orders = xrange(-diff, diff+1)
 	with tf.device(device):
 		phase_dict = {}
-		for i in xrange(order+1):
+		for i in orders:
 			init = np.random.rand(1,1,n_in,n_out) * 2. *np.pi
 			init = np.float32(init)
 			phase = tf.get_variable(name+'_'+str(i), dtype=tf.float32,
