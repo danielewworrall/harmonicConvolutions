@@ -370,7 +370,7 @@ def phaseless_VGG(opt, x, train_phase, device='/cpu:0'):
 	res2_2 = hn_lite.conv2d(res2_1, nf2, fs, max_order=mo, n_rings=nr, padding='SAME', name='2_2', device=d)
 	res2_2 = hn_lite.batch_norm(res2_2, tp, fnc=tf.nn.relu, name='n2_2', device=d)
 	res2_2 = hn_lite.sum_magnitudes(res2_2)
-	res2_mp = hn_lite.mean_pool(res122, ksize=(1,2,2,1), strides=(1,2,2,1), name='2_mp')
+	res2_mp = hn_lite.mean_pool(res1_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='2_mp')
 	
 	# Block 3
 	res3_1 = hn_lite.conv2d(res2_mp, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_1', device=d)
@@ -394,14 +394,11 @@ def phaseless_VGG(opt, x, train_phase, device='/cpu:0'):
 	res5_1 = hn_lite.sum_magnitudes(res5_1)
 	res5_2 = hn_lite.conv2d(res5_1, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_2', device=d)
 	res5_2 = hn_lite.batch_norm(res5_2, tp, fnc=tf.nn.relu, name='n5_2', device=d)
-	res5_2 = hn_lite.sum_magnitudes(res5_2)
 	
-	res_mag = hn_lite.stack_magnitudes(res5_2, keep_dims=False)
+	res_mag = hn_lite.sum_magnitudes(res5_2, keep_dims=False)
 	rsh = res_mag.get_shape().as_list()
 	res_mag = tf.reshape(res_mag, tf.pack([rsh[0],rsh[1],rsh[2],-1]))
 	
-	
-
 	with tf.name_scope('gap') as scope:
 		gap = tf.nn.relu(tf.reduce_mean(res_mag, reduction_indices=[1,2]))
 		return tf.nn.bias_add(tf.matmul(gap, Wg), bg)

@@ -132,7 +132,7 @@ def sum_magnitudes(x, eps=1e-12, keep_dims=True):
 	keep_dims: whether to collapse summed dimensions (default True)
 	"""
 	R = tf.reduce_sum(tf.square(x), reduction_indices=[4], keep_dims=keep_dims)
-	return tf.sqrt(R + eps)
+	return tf.reduce_sum(tf.sqrt(tf.maximum(R,eps)), reduction_indices=[3], keep_dims=keep_dims)
 
 
 def residual_block(x, n_channels, ksize, depth, is_training, fnc=tf.nn.relu,
