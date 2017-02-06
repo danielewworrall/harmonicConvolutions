@@ -252,7 +252,6 @@ def get_filters(R, filter_size, P=None, n_rings=None):
 		r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
 		ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
 		usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
-		
 		if P is not None:
 			# Rotate basis matrices
 			ucos_ = tf.cos(P[m])*ucos + tf.sin(P[m])*usin

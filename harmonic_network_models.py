@@ -301,6 +301,8 @@ def mixed_VGG(opt, x, train_phase, device='/cpu:0'):
 		if i < opt['block_multiplicity']:
 			x = h_block(opt, x, nc, 2, tp, tf.nn.relu, mean_pool=mp, name=str(i))
 		else:
+			# For the Z-layers use small filters
+			opt['filter_size'] = 3
 			x = Z_block(opt, x, nc, 2, tp, tf.nn.relu, max_pool=mp, name=str(i))
 	
 	# GAP on output. If the output is in h-form, need to stack magnitudes
@@ -321,6 +323,87 @@ def mixed_VGG(opt, x, train_phase, device='/cpu:0'):
 	# Dense layers at end of network
 	with tf.name_scope('gap') as scope:
 		gap = tf.nn.relu(x)
+		return tf.nn.bias_add(tf.matmul(gap, Wg), bg)
+
+
+def phaseless_VGG(opt, x, train_phase, device='/cpu:0'):
+	"""H-Net layers followed by regular convolutions"""
+	# Abbreviations
+	nf = opt['n_filters']
+	fg = opt['filter_gain']
+	bs = opt['batch_size']
+	fs = opt['filter_size']
+	sm = opt['std_mult']
+	mo = opt['max_order']
+	nr = opt['n_rings']
+	d = device
+	tp = train_phase
+	
+	nf1 = nf
+	nf2 = nf*fg
+	nf3 = nf*(fg**2)
+	nf4 = nf*(fg**3)
+	nf5 = nf*(fg**3)
+	
+	with tf.device(device):
+		initializer = tf.contrib.layers.variance_scaling_initializer()
+		Wg = tf.get_variable('Wg', shape=[nf5,opt['n_classes']], initializer=initializer)
+		bg = tf.get_variable('bg', shape=[opt['n_classes']], initializer=tf.constant_initializer(1e-2))
+
+		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
+	
+	activations = []
+	
+	# Block 1
+	res1_1 = hn_lite.conv2d(x, nf1, fs, max_order=mo, n_rings=nr, padding='SAME', name='1_1', device=d)
+	res1_1 = hn_lite.batch_norm(res1_1, tp, tf.nn.relu, name='n1_1', device=d)
+	res1_1 = hn_lite.sum_magnitudes(res1_1)
+	res1_2 = hn_lite.conv2d(res1_1, nf1, fs, max_order=mo, n_rings=nr, padding='SAME', name='1_2', device=d)
+	res1_2 = hn_lite.batch_norm(res1_2, tp, fnc=tf.nn.relu, name='n1_2', device=d)
+	res1_2 = hn_lite.sum_magnitudes(res1_2)
+	res1_mp = hn_lite.mean_pool(res1_2, ksize=(1,2,2,1), strides=(1,2,2,1), name='1_mp')
+	
+	# Block 2
+	res2_1 = hn_lite.conv2d(res1_mp, nf2, fs, max_order=mo, n_rings=nr, padding='SAME', name='2_1', device=d)
+	res2_1 = hn_lite.batch_norm(res2_1, tp, tf.nn.relu, name='n2_1', device=d)
+	res2_1 = hn_lite.sum_magnitudes(res2_1)
+	res2_2 = hn_lite.conv2d(res2_1, nf2, fs, max_order=mo, n_rings=nr, padding='SAME', name='2_2', device=d)
+	res2_2 = hn_lite.batch_norm(res2_2, tp, fnc=tf.nn.relu, name='n2_2', device=d)
+	res2_2 = hn_lite.sum_magnitudes(res2_2)
+	res2_mp = hn_lite.mean_pool(res122, ksize=(1,2,2,1), strides=(1,2,2,1), name='2_mp')
+	
+	# Block 3
+	res3_1 = hn_lite.conv2d(res2_mp, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_1', device=d)
+	res3_1 = hn_lite.batch_norm(res3_1, tp, tf.nn.relu, name='n3_1', device=d)
+	res3_1 = hn_lite.sum_magnitudes(res3_1)
+	res3_2 = hn_lite.conv2d(res3_1, nf3, fs, max_order=mo, n_rings=nr, padding='SAME', name='3_2', device=d)
+	res3_2 = hn_lite.batch_norm(res3_2, tp, fnc=tf.nn.relu, name='n3_2', device=d)
+	res3_2 = hn_lite.sum_magnitudes(res3_2)	
+	
+	# Block 4
+	res4_1 = hn_lite.conv2d(res3_2, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_1', device=d)
+	res4_1 = hn_lite.batch_norm(res4_1, tp, tf.nn.relu, name='n4_1', device=d)
+	res4_1 = hn_lite.sum_magnitudes(res4_1)
+	res4_2 = hn_lite.conv2d(res4_1, nf4, fs, max_order=mo, n_rings=nr, padding='SAME', name='4_2', device=d)
+	res4_2 = hn_lite.batch_norm(res4_2, tp, fnc=tf.nn.relu, name='n4_2', device=d)
+	res4_2 = hn_lite.sum_magnitudes(res4_2)
+	
+	# Block 5
+	res5_1 = hn_lite.conv2d(res4_2, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_1', device=d)
+	res5_1 = hn_lite.batch_norm(res5_1, tp, tf.nn.relu, name='n5_1', device=d)
+	res5_1 = hn_lite.sum_magnitudes(res5_1)
+	res5_2 = hn_lite.conv2d(res5_1, nf5, fs, max_order=mo, n_rings=nr, padding='SAME', name='5_2', device=d)
+	res5_2 = hn_lite.batch_norm(res5_2, tp, fnc=tf.nn.relu, name='n5_2', device=d)
+	res5_2 = hn_lite.sum_magnitudes(res5_2)
+	
+	res_mag = hn_lite.stack_magnitudes(res5_2, keep_dims=False)
+	rsh = res_mag.get_shape().as_list()
+	res_mag = tf.reshape(res_mag, tf.pack([rsh[0],rsh[1],rsh[2],-1]))
+	
+	
+
+	with tf.name_scope('gap') as scope:
+		gap = tf.nn.relu(tf.reduce_mean(res_mag, reduction_indices=[1,2]))
 		return tf.nn.bias_add(tf.matmul(gap, Wg), bg)
 
 

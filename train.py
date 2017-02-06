@@ -107,10 +107,10 @@ so the current version will be unstable unless otherwise noted!""")
 		opt['delay'] = 12
 		opt['psi_preconditioner'] = 1.
 		opt['filter_gain'] = 2
-		opt['filter_size'] = 3
-		opt['n_rings'] = 3
+		opt['filter_size'] = 5
+		opt['n_rings'] = 4
 		opt['n_filters'] = 16
-		opt['block_multiplicity'] = 2
+		opt['block_multiplicity'] = 1
 		opt['max_order'] = 1
 		opt['augment'] = True
 		opt['momentum'] = 0.9
