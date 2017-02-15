@@ -119,6 +119,7 @@ def h_range_conv(X, W, strides=(1,1,1,1), padding='VALID', in_range=(0,1),
 		return tf.reshape(Y, ns)
 
 
+
 ##### NONLINEARITIES #####
 def h_nonlin(X, fnc, eps=1e-12, name='b', device='/cpu:0'):
 	"""Apply the nonlinearity described by the function handle fnc: R -> R+ to
@@ -128,7 +129,6 @@ def h_nonlin(X, fnc, eps=1e-12, name='b', device='/cpu:0'):
 	where  A + iB = Z/|Z|
 	
 	X: dict of channels {rotation order: (real, imaginary)}
-	b: dict of biases {rotation order: real-valued bias}
 	fnc: function handle for a nonlinearity. MUST map to non-negative reals R+
 	eps: regularization since grad |Z| is infinite at zero (default 1e-8)
 	"""
@@ -315,6 +315,71 @@ def get_filters(R, filter_size, P=None, n_rings=None):
 	return filters
 
 
+def get_scale_interpolation_weights(filter_size):
+	c0 = 1.
+	alpha = 1.1
+	sigma = 1.
+	bw = 0.5
+	# Number of samples on the radial directions
+	n_samples = np.floor((np.log(filter_size/2) - np.log(c0)) / np.log(alpha))
+	radii = c0*np.power(alpha, np.arange(n_samples))
+	n_orientations = np.ceil(np.pi*radii[-1])
+	
+	# Sample orientations linearly on the circle
+	orientations = np.linspace(0, 2.*np.pi, num=n_orientations, endpoint=False)
+	orientations = np.vstack([-np.sin(orientations), np.cos(orientations)])
+	# Need to correct of center of patch
+	foveal_center = np.asarray([filter_size, filter_size])/2.
+	# Get the coordinates of the samples
+	coords = radii[:,np.newaxis,np.newaxis]*orientations[np.newaxis,:,:]
+	# Correct for the center of the patch
+	# Distance to each pixel. 1) Create a meshgrid 2) Compute squared distances
+	mesh = L2_grid(foveal_center, filter_size)[np.newaxis,:,np.newaxis,:]
+	dist = coords[:,:,:,np.newaxis] - mesh
+	dist2 = np.sum(dist**2, axis=1) 
+	bandwidth = bw*radii[:,np.newaxis,np.newaxis]
+	window = np.exp(-np.sum(mesh**2, axis=(1,2)) / ((filter_size/1.)**2) )
+	window = window / np.sum(window)
+	weight = np.exp(-dist2/(bandwidth**2)) / (2*np.pi*(bandwidth**2))
+	return weight*window
+
+
+def get_scale_filters(R, filter_size, P=None):
+	c0 = 1.
+	alpha = 1.1
+	k = filter_size
+	n_samples = np.floor((np.log(k/2) - np.log(c0)) / np.log(alpha))
+	
+	filters = {}
+	for m, r in R.iteritems():
+		rsh = r.get_shape().as_list()
+		# Get the basis matrices
+		weights = get_scale_interpolation_weights(k)
+		# The log-radial sinusoids
+		lin = np.arange(n_samples)/4.
+		sin = np.sin(m*lin)
+		cos = np.cos(m*lin)
+		LPF_real = np.sum(cos[:,np.newaxis,np.newaxis]*weights, axis=0).T
+		LPF_imag = np.sum(sin[:,np.newaxis,np.newaxis]*weights, axis=0).T
+		LPF_real = LPF_real.astype(np.float32)
+		LPF_imag = LPF_imag.astype(np.float32)
+
+		# Reshape for multiplication with radial profile
+		LPF_real = tf.constant(LPF_real)
+		LPF_imag = tf.constant(LPF_imag)
+		# Project taps on to log_polar basis
+		r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
+		ucos = tf.reshape(tf.matmul(LPF_real, r), tf.pack([k, k, rsh[1], rsh[2]]))
+		usin = tf.reshape(tf.matmul(LPF_imag, r), tf.pack([k, k, rsh[1], rsh[2]]))
+		if P is not None:
+			# Rotate basis matrices
+			ucos_ = tf.cos(P[m])*ucos + tf.sin(P[m])*usin
+			usin = -tf.sin(P[m])*ucos + tf.cos(P[m])*usin
+			ucos = ucos_		
+		filters[m] = (ucos, usin)
+	return filters
+
+
 def n_samples(filter_size):
 	return np.ceil(np.pi*filter_size)
 
@@ -352,7 +417,30 @@ def get_weights_dict(shape, max_order, std_mult=0.4, n_rings=None, name='W',
 		nm = name + '_' + str(i)
 		weights_dict[i] = get_weights(sh, std_mult=std_mult, name=nm, device=device)
 	return weights_dict
+
+
+def get_scale_weights_dict(shape, max_order, std_mult, n_orientations, name='S',
+									device='/cpu:0'):
+	"""Return a dict of weights.
 	
+	shape: list of filter shape [h,w,i,o] --- note we use h=w
+	max_order: returns weights for m=0,1,...,max_order, or if max_order is a
+	tuple, then it returns orders in the range.
+	std_mult: He init scaled by std_mult (default 0.4)
+	name: (default 'W')
+	"""
+	if isinstance(max_order, int):
+		orders = xrange(-max_order, max_order+1)
+	else:
+		diff = max_order[1]-max_order[0]
+		orders = xrange(-diff, diff+1)
+	scale_dict = {}
+	for i in orders:
+		sh = [n_orientations,] + shape[2:]
+		nm = name + '_' + str(i)
+		scale_dict[i] = get_weights(sh, std_mult=std_mult, name=nm, device=device)
+	return scale_dict
+
 
 def get_bias_dict(n_filters, max_order, name='b', device='/cpu:0'):
 	"""Return a dict of biases"""
