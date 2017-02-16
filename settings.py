@@ -241,7 +241,7 @@ class settings():
         self.__maybe_create('n_epochs', 250)
         self.__maybe_create('batch_size', 2)
         self.__maybe_create('lr', 0.01)
-        self.__maybe_create('optimizer', tf.train.AdamOptimizer)
+        self.__maybe_create('optimizer', tf.train.MomentumOptimizer)
         self.__maybe_create('std_mult', 0.4)
         self.__maybe_create('delay', 8)
         self.__maybe_create('psi_preconditioner', 7.8)

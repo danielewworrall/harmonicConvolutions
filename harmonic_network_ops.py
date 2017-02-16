@@ -193,26 +193,33 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W', device='/cpu:
 
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####
-def get_filters(R, filter_size, P=None):
-	"""Return a complex filter of the form $u(r,t,psi) = R(r)e^{im(t-psi)}"""
+def get_filters(R, filter_size, P=None, n_rings=None):
+	"""Perform single-frequency DFT on each ring of a polar-resampled patch"""
+	k = filter_size		
 	filters = {}
-	k = filter_size
+	N = n_samples(k)
+	from scipy.linalg import dft
 	for m, r in R.iteritems():
 		rsh = r.get_shape().as_list()
 		# Get the basis matrices
-		cosine, sine = get_complex_basis_matrices(k, order=m)
-		cosine = tf.reshape(cosine, tf.pack([k*k, rsh[0]]))
-		sine = tf.reshape(sine, tf.pack([k*k, rsh[0]]))
-		
+		weights = get_interpolation_weights(k, m, n_rings=n_rings)
+		DFT = dft(N)[m,:] 
+		LPF = np.dot(DFT, weights).T 
+
+		cosine = np.real(LPF).astype(np.float32)
+		sine = np.imag(LPF).astype(np.float32)
+		# Reshape for multiplication with radial profile
+		cosine = tf.constant(cosine)
+		sine = tf.constant(sine)
 		# Project taps on to rotational basis
 		r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
 		ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
 		usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
-		
 		if P is not None:
 			# Rotate basis matrices
-			ucos = tf.cos(P[m])*ucos + tf.sin(P[m])*usin
+			ucos_ = tf.cos(P[m])*ucos + tf.sin(P[m])*usin
 			usin = -tf.sin(P[m])*ucos + tf.cos(P[m])*usin
+			ucos = ucos_
 		filters[m] = (ucos, usin)
 	return filters
 
