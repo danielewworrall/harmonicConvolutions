@@ -77,12 +77,11 @@ class settings():
             return False
         return True
 
-
     def __create_options_rotated_mnist(self):
         #setup data feeding
         mnist_dir = self.__get('data_dir') + '/mnist_rotation_new'
         #data feeding choice
-        self.__set('use_io_queues', True)
+        self.__set('use_io_queues', False)
         if self.__get('use_io_queues'):
             #we can use this convenience function to get all the data
             data = discover_and_setup_tfrecords(mnist_dir, 
@@ -103,6 +102,21 @@ class settings():
             #set the data processing function
             self.__data_set('data_process_function', \
                 (lambda x, y : [tf.image.per_image_standardization(tf.cast(x, tf.float32)), y]))
+        else:
+            # Download MNIST if it doesn't exist
+            if not os.path.exists(self.__get('data_dir') + '/mnist_rotation_new'):
+                download_dataset(self.get_options())
+            # Load dataset
+            mnist_dir = self.__get('data_dir') + '/mnist_rotation_new'
+            train = np.load(mnist_dir + '/rotated_train.npz')
+            valid = np.load(mnist_dir + '/rotated_valid.npz')
+            test = np.load(mnist_dir + '/rotated_test.npz')
+            self.__data_set('train_x', train['x'])
+            self.__data_set('train_y', train['y'])
+            self.__data_set('valid_x', valid['x'])
+            self.__data_set('valid_y', valid['y'])
+            self.__data_set('test_x', test['x'])
+            self.__data_set('test_y', test['y'])
         self.__maybe_create('aug_crop', 0) #'crop margin'
         self.__maybe_create('n_epochs', 200)
         self.__maybe_create('batch_size', 46)
@@ -122,14 +136,14 @@ class settings():
         self.__maybe_create('crop_shape', 0)
         self.__maybe_create('n_channels', 1)
         self.__maybe_create('n_classes', 10)
-        self.__maybe_create('log_path', './logs/deep_mnist/trialA')
-        self.__maybe_create('checkpoint_path', './checkpoints/deep_mnist/trialA')
+        self.__maybe_create('log_path', './logs/deep_mnist')
+        self.__maybe_create('checkpoint_path', './checkpoints/deep_mnist')
         
     def __create_options_cifar10(self):
         #setup data feeding
         mnist_dir = self.__get('data_dir') + '/cifar10'
         #data feeding choice
-        self.__set('use_io_queues', True)
+        self.__set('use_io_queues', False)
         if self.__get('use_io_queues'):
             #we can use this convenience function to get all the data
             data = discover_and_setup_tfrecords(mnist_dir, 
@@ -150,6 +164,13 @@ class settings():
             #set the data processing function
             self.__data_set('data_process_function', \
                 (lambda x, y : [tf.image.per_image_standardization(tf.cast(x, tf.float32)), y]))
+        else:
+            # Download CIFAR10 if it doesn't exist
+            if not os.path.exists(self.__get('data_dir') + '/cifar_numpy'):
+                download_dataset(self.get_options())
+            # Load dataset
+            self.data = load_dataset(self.__get('data_dir'), 'cifar_numpy')
+
         self.__maybe_create('is_classification', True)
         self.__maybe_create('dim', 32)
         self.__maybe_create('crop_shape', 0)

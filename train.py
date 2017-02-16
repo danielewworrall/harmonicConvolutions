@@ -13,7 +13,7 @@ if __name__ == '__main__':
 		print('     -dataset name (rotated_mnist / cifar10)')
 		print('     -model name (as defined in harmonic_network_models.py)')
 		print('     -parent data directory')
-		print('     -fraction of training data to use')
+		print('     -fraction of training data to use (will be ignored without using queues)')
 		sys.exit(1)
 	deviceIdxs = [int(x.strip()) for x in sys.argv[1].split(',')]
 	opt = {}

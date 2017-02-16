@@ -19,7 +19,7 @@ ____
 
 To run the MNIST example from the paper, navigate to the parent directory of this repo and type:
 ```python
-python train.py 0 mnist deep_mnist <yourDataDirectory>
+python train.py 0 rotated_mnist deep_mnist <yourDataDirectory>
 ```
 Here, `<yourDataDirectory>` is the folder into which the datasets will be downloaded, the `0` means we will be using GPU 0, `mnist` signifies the dataset to train on, and `deep_stable` the network mdoel as defined in `harmonic_network_models.py`.
 You can train on more than one GPU by making the first argument a comma-separated list. For example `0,1,2` would run the training code on the first three GPUs of a system.

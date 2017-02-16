@@ -10,19 +10,33 @@ import tensorflow as tf
 from harmonic_network_ops import *
 
 @tf.contrib.framework.add_arg_scope
-def conv2d(x, out_shape, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
-			 max_order=1, stddev=0.4, name='lconv', device='/cpu:0'):
-	"""Harmonic Convolution lite"""
+def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
+			 max_order=1, stddev=0.4, n_rings=None, name='lconv', device='/cpu:0'):
+	"""Harmonic Convolution lite
+	
+	x: input tf tensor, shape [batchsize,height,width,order,complex,channels],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	n_channels: number of output channels (int)
+	ksize: size of square filter (int)
+	strides: stride size (4-tuple: default (1,1,1,1))
+	padding: SAME or VALID (defult VALID)
+	phase: use a per-channel phase offset (default True)
+	max_order: maximum rotation order e.g. max_order=2 uses 0,1,2 (default 1)
+	stddev: scale of filter initialization wrt He initialization
+	name: (default 'lconv')
+	device: (default '/cpu:0')
+	"""
 	xsh = x.get_shape().as_list()
-	shape = [ksize, ksize, xsh[5], out_shape]
-	from harmonic_network_helpers import get_weights_dict, get_phase_dict
-	Q = get_weights_dict(shape, max_order, std_mult=stddev, name='W'+name,
-								device=device)
+	shape = [ksize, ksize, xsh[5], n_channels]
+	Q = get_weights_dict(shape, max_order, std_mult=stddev, n_rings=n_rings,
+								name='W'+name, device=device)
 	P = None
 	if phase == True:
-		P = get_phase_dict(xsh[5], out_shape, max_order, name='P'+name,
+		P = get_phase_dict(xsh[5], n_channels, max_order, name='P'+name,
 								 device=device)
-	W = get_filters(Q, filter_size=ksize, P=P)
+	W = get_filters(Q, filter_size=ksize, P=P, n_rings=n_rings)
 	R = h_conv(x, W, strides=strides, padding=padding, max_order=max_order,
 				  name=name)
 	return R
@@ -50,15 +64,20 @@ def mean_pool(x, ksize=(1,1,1,1), strides=(1,1,1,1), name='mp'):
 
 
 @tf.contrib.framework.add_arg_scope
-def sum_mags(X, eps=1e-4, keep_dims=True):
+def sum_magnitudes(x, eps=1e-12, keep_dims=True):
 	"""Sum the magnitudes of each of the complex feature maps in X.
 	
-	Output U = sum_i |X_i|
+	Output U = sum_i |x_i|
 	
-	X: dict of channels {rotation order: (real, imaginary)}
-	eps: regularization since grad |Z| is infinite at zero (default 1e-4)
+	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
+	e.g. a real input tensor of rotation order 0 could have shape
+	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
+	have shape [32,121,121,32,2,3]
+	eps: regularization since grad |x| is infinite at zero (default 1e-4)
+	keep_dims: whether to collapse summed dimensions (default True)
 	"""
-	return sum_magnitudes(X, eps, keep_dims=True)
+	R = tf.reduce_sum(tf.square(x), reduction_indices=[4], keep_dims=keep_dims)
+	return tf.reduce_sum(tf.sqrt(tf.maximum(R,eps)), reduction_indices=[3], keep_dims=keep_dims)
 
 
 @tf.contrib.framework.add_arg_scope
