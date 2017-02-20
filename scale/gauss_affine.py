@@ -49,6 +49,14 @@ def d1(N, cov, phi):
 	derivative = -np.dot(precision,Z.T).T
 	derivative = np.reshape(derivative, (N,N,2))
 	return derivative*get_filter(N, cov)[...,np.newaxis]
+
+
+def get_transformed_filter(N, phi, s1, s2):
+	direction = np.asarray([np.cos(phi), np.sin(phi)])
+	cov1 = get_cov(s1,s2,phi)
+	gauss = np.sum(d1(N, cov1, phi)*direction[np.newaxis,np.newaxis,:], axis=2)
+	return np.reshape(gauss, -1)
+
 	
 ### Find filter basis ###
 def get_LSQ_filters(N, n_rotations, n_scales, ):
@@ -56,17 +64,16 @@ def get_LSQ_filters(N, n_rotations, n_scales, ):
 	P = []
 	for i in xrange(n_rotations):
 		for j in xrange(n_scales):
-			# The transformation parameters
-			phi = (2.*np.pi*i)/n_rotations
-			s = np.power(1.05,j)
-			# The patch generator
-			direction = np.asarray([np.cos(phi), np.sin(phi)])
-			cov1 = get_cov(s,1.,phi)
-			gauss1 = np.sum(d1(N, cov1, phi)*direction[np.newaxis,np.newaxis,:], axis=2)
-			gauss1 = np.reshape(gauss1, -1)
-			# Append data
-			theta.append((phi, s))
-			P.append(gauss1)
+			for k in xrange(n_scales):
+				# The transformation parameters
+				phi = (2.*np.pi*i)/n_rotations
+				s1 = np.power(1.05,j)
+				s2 = np.power(1.05,k)
+				# The patch generator
+				patch = get_transformed_filter(N, phi, s1, s2)
+				# Append data
+				theta.append((phi, s1, s2))
+				P.append(patch)
 	theta = np.vstack(theta)
 	# Convert scalings to log
 	theta[:,1] = np.log(theta[:,1])
@@ -74,7 +81,12 @@ def get_LSQ_filters(N, n_rotations, n_scales, ):
 	theta[:,1] /= np.amax(theta[:,1])
 	theta[:,1] *= np.pi
 	
-	A = get_interpolation_function(theta[:,0], theta[:,1]).T
+	theta[:,2] = np.log(theta[:,2])
+	theta[:,2] -= np.amin(theta[:,2])
+	theta[:,2] /= np.amax(theta[:,2])
+	theta[:,2] *= np.pi
+	
+	A = get_interpolation_function(theta).T
 	P = np.vstack(P)
 	
 	Psi, residuals, rank, s = lstsq(A, P)
@@ -82,31 +94,39 @@ def get_LSQ_filters(N, n_rotations, n_scales, ):
 	return Psi, residuals, rank, s
 
 
-def get_interpolation_function(theta, scale):
+def get_interpolation_function(params):
 	N = 3
-	A = []
-	for i in xrange(N):
-		A.append(np.cos(i*theta))
-		A.append(np.sin(i*theta))
-	A = np.reshape(np.stack(A), (2*N,-1))[np.newaxis,:,:]
-	B = []
-	for i in xrange(N):
-		B.append(np.cos(i*scale))
-		B.append(np.sin(i*scale))
-	B = np.reshape(np.stack(B), (2*N,-1))[:,np.newaxis,:]
-	return np.reshape(A*B, (-1,A.shape[-1]))
+	M = []
+	# The interpolation coefficients are computed as a trigonmetric polynomial
+	# of degree N-1 in the transformation variables. If there are K
+	# transformation variables, then the product reads
+	#
+	# P({v}) = sum_{n_1}...sum_{n_K} prod_k [cos(n_k v_k) + sin(n_k v_k)].
+	
+	for i in xrange(params.shape[1]):
+		A = []
+		for m in xrange(N):
+			A.append(np.cos(m*params[:,i]))
+			A.append(np.sin(m*params[:,i]))
+		M.append(np.reshape(np.stack(A), (2*N,-1)))
+	W = M[0]
+	for i in xrange(1,params.shape[1]):
+		W = W[np.newaxis,:,:]*M[i][:,np.newaxis,:]
+		W = np.reshape(W, (-1,M[0].shape[-1]))
+	return W
 
 
 def steer_filter(theta, scale, Psi):
-	alpha = get_interpolation_function(theta, scale)
+	params = np.asarray([theta, scale, scale])[np.newaxis,:]
+	alpha = get_interpolation_function(params)
 	return np.sum(alpha[...,np.newaxis]*Psi, axis=0)
+
 
 ### Experiments ###
 def main():
 	N = 51
-	Psi, __, rank, s = get_LSQ_filters(N, 180, 50)
+	Psi, __, rank, s = get_LSQ_filters(N, 72, 16)
 	P = np.reshape(Psi, (-1,N*N))
-	print np.diag(np.dot(P, P.T))
 	
 	plt.ion()
 	plt.show()
@@ -129,21 +149,11 @@ def main():
 def response():
 	image = skio.imread('../images/balloons.jpg')[50:250,150:350]
 	image = skco.rgb2gray(image)
-	N = 15
-	Psi, residuals, rank, s = get_LSQ_filters(N, 180, 50)
+	N = 9
+	Psi, residuals, rank, s = get_LSQ_filters(N, 72, 16)
 	Theta = np.linspace(0, 2*np.pi, num=360, endpoint=False)
 	
-	#plt.ion()
-	#plt.show()
-	'''
-	for i in xrange(8):
-		print(np.sum(Psi[i,...]**2))
-		plt.imshow(Psi[i,...])
-		plt.draw()
-		raw_input(i)
-	'''
-	#plt.clf()
-	for j in xrange(Psi.shape[0]/2):
+	for j in xrange(20): #Psi.shape[0]/2):
 		Y = []
 		if np.sum(Psi[2*j,...]**2) > 1e-5:
 			for theta in Theta:
