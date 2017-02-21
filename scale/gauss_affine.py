@@ -60,45 +60,46 @@ def get_transformed_filter(N, phi, s1, s2, lim=4):
 	
 ### Find filter basis ###
 def get_LSQ_filters(N, n_rotations, n_scales, lim=4):
+	A, P = generate_patches(N, n_rotations, n_scales, lim=4)
+	
+	Psi, residuals, rank, s = lstsq(A, P)
+	Psi = np.reshape(Psi, (-1,N,N))
+	return Psi, residuals, rank, s
+
+
+def generate_patches(N, n_rotations, n_scales, lim=4):
+	"""Generate transformed patches"""
 	theta = []
 	P = []
 	#plt.ion()
 	#plt.show()
 	for i in xrange(n_rotations):
 		for j in xrange(n_scales):
-			#for k in xrange(n_scales):
-			# The transformation parameters
-			phi = (2.*np.pi*i)/n_rotations
-			s1 = np.power(1.05,j)
-			#s2 = np.power(1.05,k)
-			s2 = 1.
-			# The patch generator
-			patch = get_transformed_filter(N, phi, s1, s2, lim=lim)
-			# Append data
-			theta.append((phi, s1))
-			P.append(patch)
-			
-			#plt.imshow(np.reshape(patch, (N,N)))
-			#plt.draw()
-			#raw_input()
+			for k in xrange(n_scales):
+				# The transformation parameters
+				phi = (2.*np.pi*i)/n_rotations
+				s1 = np.power(1.05,j)
+				s2 = np.power(1.05,k)
+				# The patch generator
+				patch = get_transformed_filter(N, phi, s1, s2, lim=lim)
+				# Append data
+				theta.append((phi, s1, s2))
+				P.append(patch)
 	theta = np.vstack(theta)
 	# Convert scalings to log
 	theta[:,1] = np.log(theta[:,1])
 	theta[:,1] -= np.amin(theta[:,1])
 	theta[:,1] /= np.amax(theta[:,1])
 	theta[:,1] *= np.pi
-	'''
+	
 	theta[:,2] = np.log(theta[:,2])
 	theta[:,2] -= np.amin(theta[:,2])
 	theta[:,2] /= np.amax(theta[:,2])
 	theta[:,2] *= np.pi
-	'''
+	
 	A = get_interpolation_function(theta).T
 	P = np.vstack(P)
-	
-	Psi, residuals, rank, s = lstsq(A, P)
-	Psi = np.reshape(Psi, (-1,N,N))
-	return Psi, residuals, rank, s
+	return A, P
 
 
 def get_interpolation_function(params, N=2):
@@ -157,7 +158,6 @@ def main():
 
 def generate_filters():
 	"""Generate filters to be saved for later use"""
-
 	N = 15
 	Psi, residual, rank, s = get_LSQ_filters(N, 18, 16, lim=4)
 	Psi = Psi / np.sqrt(np.sum(Psi**2, axis=(1,2), keepdims=True))
@@ -167,7 +167,25 @@ def generate_filters():
 
 	#np.save('./filters/rs_'+str(N)+'.npy', Psi)
 
-			
+
+def svd_method():
+	"""Perona's SVD method"""
+	N = 51
+	n_orientations = 32
+	n_scales = 16
+	A, P = generate_patches(N, n_orientations, n_scales, lim=4)
+	U, s, V = np.linalg.svd(P)
+	
+	plt.ion()
+	plt.show()
+	plt.plot(np.cumsum(s[:50]**2) / np.sum(s**2))
+	raw_input()
+	plt.clf()
+	for i in xrange(36):
+		plt.imshow(np.reshape(V[i,:], (N,N)), interpolation='nearest')
+		plt.draw()
+		raw_input(i)
+	
 
 def response():
 	image = skio.imread('../images/balloons.jpg')[50:250,150:350]
@@ -211,8 +229,8 @@ def response():
 if __name__ == '__main__':
 	#main()
 	#response()
-	generate_filters()
-
+	#generate_filters()
+	svd_method()
 
 
 
