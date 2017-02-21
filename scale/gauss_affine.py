@@ -18,9 +18,9 @@ from scipy.signal import fftconvolve
 #sns.set_style('whitegrid')
 
 ### Generate Gaussian derivative filter ###
-def get_filter(N, cov):
+def get_filter(N, cov, lim=4):
 	precision = np.linalg.inv(cov)
-	Z = get_grid(N)
+	Z = get_grid(N, lim)
 	mahalonobis = np.dot(precision,Z.T)
 	mahalonobis = np.sum(mahalonobis*Z.T, axis=0)
 	unnormalized = np.exp(-0.5*mahalonobis)
@@ -34,58 +34,65 @@ def get_cov(l1,l2,beta):
 	return np.dot(rot,np.dot(scale, rot.T))
 
 
-def get_grid(N):
-	lin = np.linspace(-5,5,num=N)
+def get_grid(N, lim):
+	lin = np.linspace(-lim,lim,num=N)
 	X, Y = np.meshgrid(lin,lin)
 	Y = -Y
 	return np.reshape(np.dstack((X,Y)), (-1,2))
 
 
-def d1(N, cov, phi):
+def d1(N, cov, phi, lim=4):
 	"""First derivative of filter"""
 	precision = np.linalg.inv(cov)
-	Z = get_grid(N)
+	Z = get_grid(N, lim)
 
 	derivative = -np.dot(precision,Z.T).T
 	derivative = np.reshape(derivative, (N,N,2))
-	return derivative*get_filter(N, cov)[...,np.newaxis]
+	return derivative*get_filter(N, cov, lim)[...,np.newaxis]
 
 
-def get_transformed_filter(N, phi, s1, s2):
+def get_transformed_filter(N, phi, s1, s2, lim=4):
 	direction = np.asarray([np.cos(phi), np.sin(phi)])
 	cov1 = get_cov(s1,s2,phi)
-	gauss = np.sum(d1(N, cov1, phi)*direction[np.newaxis,np.newaxis,:], axis=2)
+	gauss = np.sum(d1(N, cov1, phi, lim)*direction[np.newaxis,np.newaxis,:], axis=2)
 	return np.reshape(gauss, -1)
 
 	
 ### Find filter basis ###
-def get_LSQ_filters(N, n_rotations, n_scales, ):
+def get_LSQ_filters(N, n_rotations, n_scales, lim=4):
 	theta = []
 	P = []
+	#plt.ion()
+	#plt.show()
 	for i in xrange(n_rotations):
 		for j in xrange(n_scales):
-			for k in xrange(n_scales):
-				# The transformation parameters
-				phi = (2.*np.pi*i)/n_rotations
-				s1 = np.power(1.05,j)
-				s2 = np.power(1.05,k)
-				# The patch generator
-				patch = get_transformed_filter(N, phi, s1, s2)
-				# Append data
-				theta.append((phi, s1, s2))
-				P.append(patch)
+			#for k in xrange(n_scales):
+			# The transformation parameters
+			phi = (2.*np.pi*i)/n_rotations
+			s1 = np.power(1.05,j)
+			#s2 = np.power(1.05,k)
+			s2 = 1.
+			# The patch generator
+			patch = get_transformed_filter(N, phi, s1, s2, lim=lim)
+			# Append data
+			theta.append((phi, s1))
+			P.append(patch)
+			
+			#plt.imshow(np.reshape(patch, (N,N)))
+			#plt.draw()
+			#raw_input()
 	theta = np.vstack(theta)
 	# Convert scalings to log
 	theta[:,1] = np.log(theta[:,1])
 	theta[:,1] -= np.amin(theta[:,1])
 	theta[:,1] /= np.amax(theta[:,1])
 	theta[:,1] *= np.pi
-	
+	'''
 	theta[:,2] = np.log(theta[:,2])
 	theta[:,2] -= np.amin(theta[:,2])
 	theta[:,2] /= np.amax(theta[:,2])
 	theta[:,2] *= np.pi
-	
+	'''
 	A = get_interpolation_function(theta).T
 	P = np.vstack(P)
 	
@@ -94,8 +101,7 @@ def get_LSQ_filters(N, n_rotations, n_scales, ):
 	return Psi, residuals, rank, s
 
 
-def get_interpolation_function(params):
-	N = 3
+def get_interpolation_function(params, N=2):
 	M = []
 	# The interpolation coefficients are computed as a trigonmetric polynomial
 	# of degree N-1 in the transformation variables. If there are K
@@ -106,8 +112,8 @@ def get_interpolation_function(params):
 	for i in xrange(params.shape[1]):
 		A = []
 		for m in xrange(N):
-			A.append(np.cos(m*params[:,i]))
-			A.append(np.sin(m*params[:,i]))
+			A.append(np.cos((2*m+1)*params[:,i]))
+			A.append(np.sin((2*m+1)*params[:,i]))
 		M.append(np.reshape(np.stack(A), (2*N,-1)))
 	W = M[0]
 	for i in xrange(1,params.shape[1]):
@@ -117,7 +123,7 @@ def get_interpolation_function(params):
 
 
 def steer_filter(theta, scale, Psi):
-	params = np.asarray([theta, scale, scale])[np.newaxis,:]
+	params = np.asarray([theta, scale])[np.newaxis,:]
 	alpha = get_interpolation_function(params)
 	return np.sum(alpha[...,np.newaxis]*Psi, axis=0)
 
@@ -125,14 +131,17 @@ def steer_filter(theta, scale, Psi):
 ### Experiments ###
 def main():
 	N = 51
-	Psi, __, rank, s = get_LSQ_filters(N, 72, 16)
-	P = np.reshape(Psi, (-1,N*N))
+	Psi, residual, rank, s = get_LSQ_filters(N, 18, 16, lim=4)
+	
+	print residual.shape, Psi.shape
+	plt.plot(residual)
+	plt.show()
 	
 	plt.ion()
 	plt.show()
-	for i in xrange(16):
+	for i in xrange(Psi.shape[0]):
 		print np.sum(Psi[i,...]**2)
-		plt.imshow(Psi[i,...], interpolation='nearest')
+		plt.imshow(Psi[i,...], interpolation='nearest', cmap='jet')
 		plt.draw()
 		raw_input()
 		
@@ -140,54 +149,69 @@ def main():
 	plt.show()
 	plt.cla()
 	for rot in np.linspace(0., 2*np.pi, num=36, endpoint=False):
-		filter_ = steer_filter(1., rot/2., Psi)
-		plt.imshow(filter_, interpolation='nearest')
+		filter_ = steer_filter(rot/2., 1., Psi)
+		plt.imshow(filter_, interpolation='nearest', cmap='jet')
 		plt.draw()
 		raw_input(rot)
 
 
+def generate_filters():
+	"""Generate filters to be saved for later use"""
+
+	N = 15
+	Psi, residual, rank, s = get_LSQ_filters(N, 18, 16, lim=4)
+	Psi = Psi / np.sqrt(np.sum(Psi**2, axis=(1,2), keepdims=True))
+	Psi = np.reshape(Psi, (16,-1))
+	plt.imshow(np.dot(Psi, Psi.T), cmap='gray')
+	plt.show()
+
+	#np.save('./filters/rs_'+str(N)+'.npy', Psi)
+
+			
+
 def response():
 	image = skio.imread('../images/balloons.jpg')[50:250,150:350]
 	image = skco.rgb2gray(image)
-	N = 9
-	Psi, residuals, rank, s = get_LSQ_filters(N, 72, 16)
+	N = 15
+	Psi, residuals, rank, s = get_LSQ_filters(N, 18, 16)
 	Theta = np.linspace(0, 2*np.pi, num=360, endpoint=False)
 	
-	for j in xrange(20): #Psi.shape[0]/2):
+	#plt.ion()
+	#plt.show()
+	for j in xrange(8):
 		Y = []
-		if np.sum(Psi[2*j,...]**2) > 1e-5:
-			for theta in Theta:
-				M = cv2.getRotationMatrix2D((image.shape[0]/2,image.shape[1]/2),180.*theta/(np.pi),1)
-				image_ = cv2.warpAffine(image,M,image.shape,flags=cv2.INTER_CUBIC)
-				r1 = fftconvolve(image_, Psi[2*j,...], mode='same')
-				r2 = fftconvolve(image_, Psi[2*j+1,...], mode='same')
-				inv = r1**2 + r2**2
-				M = cv2.getRotationMatrix2D((image.shape[0]/2,image.shape[1]/2),-180.*theta/(np.pi),1)
-				inv = cv2.warpAffine(inv,M,image.shape,flags=cv2.INTER_CUBIC)
-				Y.append(inv)
-			
-			ref = Y[0][50:150,50:150]
-			errors = []
-			for y in Y:
-				crop = y[50:150,50:150]
-				error = np.mean((ref-crop)**2) / (np.sqrt(np.mean(ref**2))*np.sqrt(np.mean(crop**2)))
-				errors.append(error)
-				#plt.imshow(y[50:150,50:150])
-				#plt.draw()
-				#raw_input()
-			errors = np.asarray(errors)
-			plt.plot(errors)
-			plt.tick_params(axis='both', which='major', labelsize=16)
-			plt.xlabel('Rotation angle', fontsize=16)
-			plt.ylabel('Normalized MSE', fontsize=16)
-			#plt.tight_layout()
-			#plt.draw()
-			#raw_input()
+		for theta in Theta:
+			M = cv2.getRotationMatrix2D((image.shape[0]/2,image.shape[1]/2),180.*theta/(np.pi),1)
+			image_ = cv2.warpAffine(image,M,image.shape,flags=cv2.INTER_CUBIC)
+			r1 = fftconvolve(image_, Psi[2*j,...], mode='same')
+			r2 = fftconvolve(image_, Psi[2*j+1,...], mode='same')
+			inv = r1**2 + r2**2
+			M = cv2.getRotationMatrix2D((image.shape[0]/2,image.shape[1]/2),-180.*theta/(np.pi),1)
+			inv = cv2.warpAffine(inv,M,image.shape,flags=cv2.INTER_CUBIC)
+			Y.append(inv)
+		
+		ref = Y[0][50:150,50:150]
+		errors = []
+		for y in Y:
+			crop = y[50:150,50:150]
+			error = np.mean((ref-crop)**2) / (np.sqrt(np.mean(ref**2))*np.sqrt(np.mean(crop**2)))
+			errors.append(error)
+			'''
+			plt.imshow(y[50:150,50:150])
+			plt.draw()
+			raw_input()
+			'''
+		errors = np.asarray(errors)
+		plt.plot(errors)
+		plt.tick_params(axis='both', which='major', labelsize=16)
+		plt.xlabel('Rotation angle', fontsize=16)
+		plt.ylabel('Normalized MSE', fontsize=16)
 	plt.show()
 
 if __name__ == '__main__':
 	#main()
-	response()
+	#response()
+	generate_filters()
 
 
 
