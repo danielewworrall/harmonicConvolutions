@@ -59,15 +59,15 @@ def get_transformed_filter(N, phi, s1, s2, lim=4):
 
 	
 ### Find filter basis ###
-def get_LSQ_filters(N, n_rotations, n_scales, lim=4):
-	A, P = generate_patches(N, n_rotations, n_scales, lim=4)
+def get_LSQ_filters(N, n_rotations, n_scales, lim=4, freq=None):
+	A, P = generate_patches(N, n_rotations, n_scales, lim=4, freq=freq)
 	
 	Psi, residuals, rank, s = lstsq(A, P)
 	Psi = np.reshape(Psi, (-1,N,N))
 	return Psi, residuals, rank, s
 
 
-def generate_patches(N, n_rotations, n_scales, lim=4):
+def generate_patches(N, n_rotations, n_scales, lim=4, freq=None):
 	"""Generate transformed patches"""
 	theta = []
 	P = []
@@ -97,24 +97,27 @@ def generate_patches(N, n_rotations, n_scales, lim=4):
 	theta[:,2] /= np.amax(theta[:,2])
 	theta[:,2] *= np.pi
 	
-	A = get_interpolation_function(theta).T
+	A = get_interpolation_function(theta, freq=freq).T
 	P = np.vstack(P)
 	return A, P
 
 
-def get_interpolation_function(params, N=2):
+def get_interpolation_function(params, freq=None, N=2):
 	M = []
 	# The interpolation coefficients are computed as a trigonmetric polynomial
 	# of degree N-1 in the transformation variables. If there are K
 	# transformation variables, then the product reads
 	#
 	# P({v}) = sum_{n_1}...sum_{n_K} prod_k [cos(n_k v_k) + sin(n_k v_k)].
-	
+	if freq is None:
+		freq = []
+		for __ in xrange(params.shape[1]):
+			freq.append(2*np.arange(N)+1)
 	for i in xrange(params.shape[1]):
 		A = []
 		for m in xrange(N):
-			A.append(np.cos((2*m+1)*params[:,i]))
-			A.append(np.sin((2*m+1)*params[:,i]))
+			A.append(np.cos(freq[i][m]*params[:,i]))
+			A.append(np.sin(freq[i][m]*params[:,i]))
 		M.append(np.reshape(np.stack(A), (2*N,-1)))
 	W = M[0]
 	for i in xrange(1,params.shape[1]):
@@ -123,17 +126,17 @@ def get_interpolation_function(params, N=2):
 	return W
 
 
-def steer_filter(theta, scale, Psi):
-	params = np.asarray([theta, scale])[np.newaxis,:]
-	alpha = get_interpolation_function(params)
+def steer_filter(params, Psi, N=2, freq=None):
+	alpha = get_interpolation_function(params, N=N, freq=freq)
 	return np.sum(alpha[...,np.newaxis]*Psi, axis=0)
 
 
 ### Experiments ###
 def main():
 	N = 51
-	Psi, residual, rank, s = get_LSQ_filters(N, 18, 16, lim=4)
-	
+	freq = [[1.,3.],[0.5,1.],[0.5,1.]]
+	Psi, residual, rank, s = get_LSQ_filters(N, 18, 16, lim=4, freq=freq)
+	'''
 	print residual.shape, Psi.shape
 	plt.plot(residual)
 	plt.show()
@@ -145,12 +148,13 @@ def main():
 		plt.imshow(Psi[i,...], interpolation='nearest', cmap='jet')
 		plt.draw()
 		raw_input()
-		
+	'''
 	plt.ion()
 	plt.show()
 	plt.cla()
 	for rot in np.linspace(0., 2*np.pi, num=36, endpoint=False):
-		filter_ = steer_filter(rot/2., 1., Psi)
+		params = np.asarray([rot/2.,rot/2.,rot/2.])[np.newaxis,:]
+		filter_ = steer_filter(params, Psi, freq=freq)
 		plt.imshow(filter_, interpolation='nearest', cmap='jet')
 		plt.draw()
 		raw_input(rot)
@@ -158,33 +162,15 @@ def main():
 
 def generate_filters():
 	"""Generate filters to be saved for later use"""
-	N = 15
-	Psi, residual, rank, s = get_LSQ_filters(N, 18, 16, lim=4)
-	Psi = Psi / np.sqrt(np.sum(Psi**2, axis=(1,2), keepdims=True))
-	Psi = np.reshape(Psi, (16,-1))
-	plt.imshow(np.dot(Psi, Psi.T), cmap='gray')
-	plt.show()
+	for N in [3,5,7,9,11,13,15,17,19,21]:
+		freq = [[1.,3.],[0.5,1.],[0.5,1.]]
+		Psi, residual, rank, s = get_LSQ_filters(N, 18, 16, lim=4, freq=freq)
+		Psi = Psi / np.sqrt(np.sum(Psi**2, axis=(1,2), keepdims=True))
+		#Psi = np.reshape(Psi, (16,-1))
+		#plt.imshow(np.dot(Psi, Psi.T), cmap='gray')
+		#plt.show()
 
-	#np.save('./filters/rs_'+str(N)+'.npy', Psi)
-
-
-def svd_method():
-	"""Perona's SVD method"""
-	N = 51
-	n_orientations = 32
-	n_scales = 16
-	A, P = generate_patches(N, n_orientations, n_scales, lim=4)
-	U, s, V = np.linalg.svd(P)
-	
-	plt.ion()
-	plt.show()
-	plt.plot(np.cumsum(s[:50]**2) / np.sum(s**2))
-	raw_input()
-	plt.clf()
-	for i in xrange(36):
-		plt.imshow(np.reshape(V[i,:], (N,N)), interpolation='nearest')
-		plt.draw()
-		raw_input(i)
+		np.save('./filters/fractional_orders/rs_'+str(N)+'.npy', Psi)
 	
 
 def response():
@@ -229,8 +215,7 @@ def response():
 if __name__ == '__main__':
 	#main()
 	#response()
-	#generate_filters()
-	svd_method()
+	generate_filters()
 
 
 
