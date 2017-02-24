@@ -60,7 +60,7 @@ def get_transformed_filter(N, phi, s1, s2, lim=4):
 	
 ### Find filter basis ###
 def get_LSQ_filters(N, n_rotations, n_scales, lim=4, freq=None):
-	A, P = generate_patches(N, n_rotations, n_scales, lim=4, freq=freq)
+	A, P = generate_patches(N, n_rotations, n_scales, lim=lim, freq=freq)
 	
 	Psi, residuals, rank, s = lstsq(A, P)
 	Psi = np.reshape(Psi, (-1,N,N))
@@ -75,28 +75,29 @@ def generate_patches(N, n_rotations, n_scales, lim=4, freq=None):
 	#plt.show()
 	for i in xrange(n_rotations):
 		for j in xrange(n_scales):
-			for k in xrange(n_scales):
-				# The transformation parameters
-				phi = (2.*np.pi*i)/n_rotations
-				s1 = np.power(1.05,j)
-				s2 = np.power(1.05,k)
-				# The patch generator
-				patch = get_transformed_filter(N, phi, s1, s2, lim=lim)
-				# Append data
-				theta.append((phi, s1, s2))
-				P.append(patch)
+			#for k in xrange(n_scales):
+			# The transformation parameters
+			phi = (2.*np.pi*i)/n_rotations
+			s1 = np.power(0.95,j)
+			s2 = 1.
+			#s2 = np.power(1.05,k)
+			# The patch generator
+			patch = get_transformed_filter(N, phi, s1, s2, lim=lim)
+			# Append data
+			theta.append((phi, s1))
+			P.append(patch)
 	theta = np.vstack(theta)
 	# Convert scalings to log
 	theta[:,1] = np.log(theta[:,1])
 	theta[:,1] -= np.amin(theta[:,1])
 	theta[:,1] /= np.amax(theta[:,1])
 	theta[:,1] *= np.pi
-	
+	'''
 	theta[:,2] = np.log(theta[:,2])
 	theta[:,2] -= np.amin(theta[:,2])
 	theta[:,2] /= np.amax(theta[:,2])
 	theta[:,2] *= np.pi
-	
+	'''
 	A = get_interpolation_function(theta, freq=freq).T
 	P = np.vstack(P)
 	return A, P
@@ -125,6 +126,36 @@ def get_interpolation_function(params, freq=None, N=2):
 		W = np.reshape(W, (-1,M[0].shape[-1]))
 	return W
 
+'''
+def get_sphere_function(params, freq=None, N=2):
+	M = []
+	# The interpolation coefficients are computed as a trigonmetric polynomial
+	# of degree N-1 in the transformation variables. If there are K
+	# transformation variables, then the product reads as spherical coordinates.
+	if freq is None:
+		freq = []
+		for __ in xrange(params.shape[1]):
+			freq.append(2*np.arange(N)+1)
+	
+	for i in xrange(len(freqs)):
+		pass
+	M = single_freq_sphere(params, freqs)
+	
+
+
+def single_freq_sphere(params, freqs):
+	M = []
+	for i in xrange(params.shape[1]+1):
+		A = 1.
+		for j in xrange(i):
+			A *= np.sin(freqs[j]*params[:,j])
+		if i != params.shape[1]:
+			A *= np.cos(freqs[i]*params[:,i])
+		else:
+			A *= np.sin(freqs[i-1]*params[:,i-1])
+		M.append(A)
+	return np.vstack(M).T
+'''
 
 def steer_filter(params, Psi, N=2, freq=None):
 	alpha = get_interpolation_function(params, N=N, freq=freq)
@@ -134,27 +165,21 @@ def steer_filter(params, Psi, N=2, freq=None):
 ### Experiments ###
 def main():
 	N = 51
-	freq = [[1.,3.],[0.5,1.],[0.5,1.]]
-	Psi, residual, rank, s = get_LSQ_filters(N, 18, 16, lim=4, freq=freq)
-	'''
-	print residual.shape, Psi.shape
-	plt.plot(residual)
-	plt.show()
-	
-	plt.ion()
-	plt.show()
+	freq = [[1.,3.],[0.5,1.]]
+	Psi, residual, rank, s = get_LSQ_filters(N, 36, 36, lim=3, freq=freq)
 	for i in xrange(Psi.shape[0]):
 		print np.sum(Psi[i,...]**2)
+		plt.subplot(4,4,i+1)
 		plt.imshow(Psi[i,...], interpolation='nearest', cmap='jet')
 		plt.draw()
-		raw_input()
-	'''
+		
 	plt.ion()
 	plt.show()
 	plt.cla()
 	for rot in np.linspace(0., 2*np.pi, num=36, endpoint=False):
-		params = np.asarray([rot/2.,rot/2.,rot/2.])[np.newaxis,:]
+		params = np.asarray([1.,rot/2.])[np.newaxis,:]
 		filter_ = steer_filter(params, Psi, freq=freq)
+		#filter_ = np.reshape(get_transformed_filter(51, 0., np.power(0.7,rot), 1., lim=2), (51,51))
 		plt.imshow(filter_, interpolation='nearest', cmap='jet')
 		plt.draw()
 		raw_input(rot)
@@ -163,14 +188,17 @@ def main():
 def generate_filters():
 	"""Generate filters to be saved for later use"""
 	for N in [3,5,7,9,11,13,15,17,19,21]:
-		freq = [[1.,3.],[0.5,1.],[0.5,1.]]
-		Psi, residual, rank, s = get_LSQ_filters(N, 18, 16, lim=4, freq=freq)
+		freq = [[1.,3.],[0.5,1.]]
+		Psi, residual, rank, s = get_LSQ_filters(N, 36,36, lim=3, freq=freq)
 		Psi = Psi / np.sqrt(np.sum(Psi**2, axis=(1,2), keepdims=True))
-		#Psi = np.reshape(Psi, (16,-1))
-		#plt.imshow(np.dot(Psi, Psi.T), cmap='gray')
-		#plt.show()
-
-		np.save('./filters/fractional_orders/rs_'+str(N)+'.npy', Psi)
+		'''
+		print Psi.shape
+		for i in xrange(64):
+			plt.subplot(8,8,i+1)
+			plt.imshow(Psi[i,...], cmap='jet')
+		plt.show()
+		'''
+		np.save('./filters/aniso/rs_'+str(N)+'.npy', Psi)
 	
 
 def response():

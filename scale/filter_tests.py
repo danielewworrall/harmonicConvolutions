@@ -13,20 +13,20 @@ import skimage.io as skio
 from scipy.signal import fftconvolve
 from matplotlib import pyplot as plt
 
-#import seaborn as sns
-#colors = ["windows blue", "amber", "greyish", "faded green"]
-#colors = sns.xkcd_palette(colors)
+import seaborn as sns
+colors = ["windows blue", "amber", "greyish", "faded green"]
+colors = sns.xkcd_palette(colors)
 
 def view_filters():
-	N_range = 2*np.arange(7) + 15
+	N_range = 2*np.arange(7) + 3
 	plt.ion()
 	plt.show()
 	for N in N_range:
 		print N
-		Psi = np.load('./filters/rs_'+str(N)+'.npy')
+		Psi = np.load('./filters/aniso/rs_'+str(N)+'.npy')
 		for theta in np.linspace(0, 2.*np.pi, num=36):
 			Psi_ = steer_filter(1., theta, Psi)
-			plt.imshow(Psi_, cmap='jet')
+			plt.imshow(Psi_, interpolation='nearest', cmap='jet')
 			plt.draw()
 			raw_input()
 
@@ -91,21 +91,21 @@ def magnitude_response():
 	imsh = image.shape
 	
 	Theta = np.linspace(0, 2*np.pi, num=360, endpoint=False)
-	N_range = 2*np.arange(7) + 3
+	N_range = 2*np.arange(10) + 3
 	
 	plt.ion()
 	plt.show()
 	max_errors = []
 	for N in N_range:
 		print N
-		Psi = np.load('./filters/rs_'+str(N)+'.npy')
+		Psi = np.load('./filters/fractional_orders/rs_'+str(N)+'.npy')
 		max_error = []
 		for color_num, j in enumerate([0,2,8,10]):
 			Y = []
 			for theta in Theta:
 				# Transform
-				image_ = rotate(image, theta)
-				#image_ = xy_scale(image, scale=(np.power(1.132,theta), 1.))
+				#image_ = rotate(image, theta)
+				image_ = xy_scale(image, scale=(np.power(1.132,theta), 1.))
 				
 				# Convolve
 				inv = 0.
@@ -114,8 +114,8 @@ def magnitude_response():
 				inv = np.sqrt(inv)
 				
 				# Inverse transform
-				inv = rotate(inv, -theta)
-				#inv = xy_scale(inv, new_shape=imsh)
+				#inv = rotate(inv, -theta)
+				inv = xy_scale(inv, new_shape=imsh)
 				Y.append(inv)
 			
 			# Crop out center of image
