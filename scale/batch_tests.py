@@ -14,7 +14,7 @@ def main():
 	opt['equivariant_weight'] = 0. #1e-3
 	accs = []
 	N_trials = 10
-	'''
+	
 	for i in xrange(N_trials):
 		acc = se.main(opt)
 		accs.append(acc)
@@ -26,7 +26,7 @@ def main():
 	print('Plain: {:04f}, {:04f}'.format(np.mean(data0), np.std(data0)))
 	print data3
 	print('Equi: {:04f}, {:04f}'.format(np.mean(data3), np.std(data3)))
-	
+	'''
 
 
 if __name__ == '__main__':
