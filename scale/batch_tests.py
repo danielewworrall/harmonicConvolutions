@@ -11,14 +11,14 @@ import sgd_equivariance as se
 
 def main():
 	opt = {}
-	opt['equivariant_weight'] = 0. #1e-3
+	opt['equivariant_weight'] = 1e-3
 	accs = []
 	N_trials = 10
 	
 	for i in xrange(N_trials):
 		acc = se.main(opt)
 		accs.append(acc)
-		np.save('./batch_tests/equi_0b.npy', accs)
+		np.save('./batch_tests/equi_1e_n3b.npy', accs)
 	'''
 	data0 = np.load('./batch_tests/equi_0b.npy')
 	data3 = np.load('./batch_tests/equi_1e_n3b.npy')

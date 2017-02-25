@@ -99,9 +99,7 @@ def train(inputs, outputs, optim_step, opt):
 
 def conv(x, shape, name='0', bias_init=0.01, return_params=False):
 	"""Basic convolution"""
-	print shape
-	stddev = tf.sqrt(1./tf.reduce_sum(tf.reduce_prod(tf.to_float(shape[1:]))))
-	He_initializer = tf.random_normal_initializer(stddev=stddev)
+	He_initializer = tf.contrib.layers.variance_scaling_initializer()
 	W = tf.get_variable('W'+name, shape=shape, initializer=He_initializer)
 	z = tf.nn.conv2d(x, W, (1,1,1,1), 'SAME', name='conv'+str(name))
 	return z
