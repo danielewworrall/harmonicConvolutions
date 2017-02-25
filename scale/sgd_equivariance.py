@@ -27,46 +27,75 @@ def load_data():
 	return data
 
 
-def random_sampler(data, opt, random=True):
+def random_sampler(n_data, opt, random=True):
 	"""Return minibatched data"""
 	if random:
-		indices = np.random.permutation(data.shape[0])
+		indices = np.random.permutation(n_data)
 	else:
-		indices = np.arange(data.shape[0])
+		indices = np.arange(n_data)
 	mb_list = []
-	for i in xrange(data.shape[0]/opt['mb_size']):
+	for i in xrange(int(float(n_data)/opt['mb_size'])):
 		mb_list.append(indices[opt['mb_size']*i:opt['mb_size']*(i+1)])
 	return mb_list
 
 
-def train(inputs, loss, optim_step, lr, opt):
+def train(inputs, outputs, optim_step, opt):
 	"""Training loop"""
-	x, t_params, f_params = inputs
+	x, labels, t_params, f_params, lr = inputs
+	loss, acc, y, yr = outputs
 	
 	data = load_data()
+	n_data = data['X']['train'].shape[0]
 	with tf.Session() as sess:
 		init = tf.global_variables_initializer()
 		feed_dict = {x: data['X']['train'][:opt['mb_size'],...],
 						 t_params: np.zeros((opt['mb_size'],6))}
 		sess.run(init, feed_dict=feed_dict)
-	
+		
 		for epoch in xrange(opt['n_epochs']):
 			loss_total = 0.
-			mb_list = random_sampler(data['X']['train'], opt)
+			acc_total = 0.
+			mb_list = random_sampler(n_data, opt)
 			current_lr = opt['lr']*np.power(0.1, epoch/opt['lr_interval'])
 			for i, mb in enumerate(mb_list):
-				ops = [loss, optim_step]
+				tp, fp = random_transform(mb.shape[0], (28,28))
+				ops = [loss, acc, optim_step]
 				feed_dict = {x: data['X']['train'][mb,...],
-								 t_params: 1.,
-								 f_params: 1,
+								 labels: data['Y']['train'][mb,...],
+								 t_params: tp,
+								 f_params: fp,
 								 lr: current_lr}
-				summ, l, __ = sess.run(ops, feed_dict=feed_dict)
+				l, c, __ = sess.run(ops, feed_dict=feed_dict)
 				loss_total += l
+				acc_total += c
+				sys.stdout.write('{:03d}%\r'.format(int((100.*i)/len(mb_list))))
+				sys.stdout.flush()
 			loss_total = loss_total / (i+1.)
+			acc_total = acc_total / (i+1.)
+		
+			vacc_total = 0.
+			mb_list = random_sampler(data['Y']['valid'].shape[0], opt, random=False)
+			for i, mb in enumerate(mb_list):
+				feed_dict = {x: data['X']['valid'][mb,...],
+								 labels: data['Y']['valid'][mb,...]}
+				vc = sess.run(acc, feed_dict=feed_dict)
+				vacc_total += vc
+			vacc_total = vacc_total / (i+1.)
 			
-			print('[{:04d}]: Loss: {:04f}'.format(epoch, loss_total))			
+			print('[{:04d}]: Loss: {:04f}, Train Acc.: {:04f}, Valid Acc.: {:04f}' \
+					.format(epoch, loss_total, acc_total, vacc_total))
 	
-
+		tacc_total = 0.
+		mb_list = random_sampler(data['Y']['test'].shape[0], opt, random=False)
+		for i, mb in enumerate(mb_list):
+			feed_dict = {x: data['X']['test'][mb,...],
+							 labels: data['Y']['test'][mb,...]}
+			tc = sess.run(acc, feed_dict=feed_dict)
+			tacc_total += tc
+		tacc_total = tacc_total / (i+1.)
+		
+		print('Test Acc.: {:04f}'.format(tacc_total))
+	return tacc_total
 
 def conv(x, shape, name='0', bias_init=0.01, return_params=False):
 	"""Basic convolution"""
@@ -98,25 +127,46 @@ def S_nonlin(x, sh, nc, fnc=tf.nn.relu, eps=1e-12, name='0', device='/gpu:0'):
 
 
 def siamese_model(x, t_params, f_params, opt):
-	xsh = x.get_shape().as_list()
-	y = build_model(x, opt, name='_M1')
-	yc = transform_features(y, t_params, f_params) ###### wrong shape
+	# Mouth
+	with tf.variable_scope('mouth') as scope:
+		xsh = x.get_shape().as_list()
+		y = build_mouth(x, opt, name='_M')
+		yc = transform_features(y, t_params, f_params)
+		# Siamese loss
+		xr = transformer(x, t_params, (xsh[1],xsh[2]))
+		scope.reuse_variables()
+		yr = build_mouth(xr, opt, name='_M')
+		# Tail
+	with tf.variable_scope('tail') as scope:
+		logits = build_tail(y, opt)
 	
-	xr = transformer(x, t_params, (xsh[1],xsh[2]))
-	yr = build_model(xr, opt, name='_M2')
-	return yc, yr
+	return logits, yc, yr
 
 
-def build_model(x, opt, name='M'):
+def build_mouth(x, opt, name='mouth'):
 	"""Build the model we want"""
 	nc = opt['n_channels']
-	# Linear model
+
 	l1 = conv(x, [5,5,1,nc], name='1'+name )
 	l1 = bias_add(l1, nc, name='1'+name)
 	l1 = tf.nn.relu(l1)
 	
-	l2 = conv(l1, [5,5,nc,2], name='2'+name)
-	l2 = bias_add(l2, 2, name='2'+name)
+	l2 = conv(l1, [5,5,nc,nc], name='2'+name)
+	l2 = bias_add(l2, nc, name='2'+name)
+	return l2
+
+def build_tail(x, opt, name='tail'):
+	"""Build the model we want"""
+	nc = opt['n_channels']
+	
+	l1 = tf.nn.max_pool(x, (1,2,2,1), (1,2,2,1), padding='VALID')
+	l1 = conv(l1, [3,3,nc,nc], name='1'+name )
+	l1 = bias_add(l1, nc, name='1'+name)
+	l1 = tf.nn.relu(l1)
+	
+	l2 = conv(l1, [3,3,nc,10], name='2'+name)
+	l2 = bias_add(l2, 10, name='2'+name)
+	l2 = tf.reduce_mean(l2, reduction_indices=(1,2))
 	return l2
 
 
@@ -127,8 +177,8 @@ def transform_features(x, t_params, f_params):
 	# not currently exist in TensorFlow, so we have to do it the long way.
 	xsh = x.get_shape().as_list()
 	x = tf.reshape(x, tf.pack([xsh[0],xsh[1],xsh[2],xsh[3]/2,2]))
-	f1 = tf.reshape(f_params[:,:,0], tf.pack([xsh[0],1,1,1,2]))
-	f2 = tf.reshape(f_params[:,:,1], tf.pack([xsh[0],1,1,1,2]))
+	f1 = tf.reshape(f_params[:,0,:], tf.pack([xsh[0],1,1,1,2]))
+	f2 = tf.reshape(f_params[:,1,:], tf.pack([xsh[0],1,1,1,2]))
 	x0 = tf.reduce_sum(tf.mul(x, f1), reduction_indices=4)
 	x1 = tf.reduce_sum(tf.mul(x, f2), reduction_indices=4)
 	x = tf.pack([x0, x1], axis=-1)
@@ -138,7 +188,7 @@ def transform_features(x, t_params, f_params):
 	return y
 
 
-def get_transform(theta, imsh):
+def get_t_transform(theta, imsh):
 	scale1 = np.array([[float(imsh[0])/imsh[1], 0.], [0., 1.]])
 	scale2 = np.array([[float(imsh[1])/imsh[0], 0.], [0., 1.]])
 	rot = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
@@ -151,11 +201,19 @@ def get_transform(theta, imsh):
 	return mat
 
 
-def random_trans(mb_size):
-	trans = []
+def get_f_transform(theta):
+	rot = np.array([[np.cos(theta), -np.sin(theta)],
+						[np.sin(theta), np.cos(theta)]])
+	return rot
+
+
+def random_transform(mb_size, imsh):
+	t_params = []
+	f_params = []
 	for t in np.random.rand(mb_size):
-		trans.append(get_transform(2*np.pi*t, (1.,1.)))
-	return np.vstack(trans)
+		t_params.append(get_t_transform(2*np.pi*t, (imsh[0],imsh[1])))
+		f_params.append(get_f_transform(2*np.pi*t))
+	return np.vstack(t_params), np.stack(f_params, axis=0)
 
 	
 def main(opt):
@@ -163,60 +221,40 @@ def main(opt):
 	
 	tf.reset_default_graph()
 	opt['N'] = 28
-	opt['mb_size'] = 32
-	opt['n_channels'] = 8
+	opt['mb_size'] = 128
+	opt['n_channels'] = 10
 	opt['n_epochs'] = 100
-	opt['lr'] = 1e-3
+	opt['lr'] = 1e-2
 	opt['lr_interval'] = 33
+	#opt['equivariant_weight'] = 1e-3
 	
 	# Define variables
 	x = tf.placeholder(tf.float32, [opt['mb_size'],opt['N'],opt['N'],1], name='x')
+	labels = tf.placeholder(tf.float32, [opt['mb_size'],10], name='labels')
 	t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
 	f_params = tf.placeholder(tf.float32, [opt['mb_size'],2,2], name='f_params')
 	
 	lr = tf.placeholder(tf.float32, [], name='lr')
-	y, yr = siamese_model(x, t_params, f_params, opt)
+	logits, y, yr = siamese_model(x, t_params, f_params, opt)
 
 	# Build loss and metrics
-	loss = tf.reduce_mean(tf.square(y - yr))
+	equivariant_loss = tf.reduce_mean(tf.square(y - yr))
+	classification_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, labels))
+	loss = classification_loss + opt['equivariant_weight']*equivariant_loss
+	
+	acc = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(logits, axis=1), tf.argmax(labels, axis=1)), tf.float32))
 	
 	# Build optimizer
 	optim = tf.train.MomentumOptimizer(lr, 0.9, use_nesterov=True)
 	optim_step = optim.minimize(loss)
 	
+	inputs = [x, labels, t_params, f_params, lr]
+	outputs = [loss, acc, y, yr]
+	
 	# Train
-	train([x, t_params, f_params], loss, optim_step, lr, opt)
+	return train(inputs, outputs, optim_step, opt)
 
 
 if __name__ == '__main__':
 	opt = {}
 	main(opt)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

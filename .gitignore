@@ -15,3 +15,4 @@ rotated_mnist/
 cifar10/
 taco_cifar/
 trevi/
+*.bmp
