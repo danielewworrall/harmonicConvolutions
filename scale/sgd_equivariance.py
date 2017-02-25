@@ -127,40 +127,52 @@ def S_nonlin(x, sh, nc, fnc=tf.nn.relu, eps=1e-12, name='0', device='/gpu:0'):
 
 
 def siamese_model(x, t_params, f_params, opt):
+	"""Build siamese models for equivariance tests"""
+	nc = opt['n_channels']
+	xsh = x.get_shape().as_list()
 	# Mouth
 	with tf.variable_scope('mouth') as scope:
-		xsh = x.get_shape().as_list()
-		y = build_mouth(x, opt, name='_M')
-		yc = transform_features(y, t_params, f_params)
+		y1 = mouth_ception(x, nc, opt, name='_MC')
+		# Transformer branch
+		y_post = transform_features(y1, t_params, f_params)
+		
 		# Siamese loss
-		xr = transformer(x, t_params, (xsh[1],xsh[2]))
+		x_pre = transformer(x, t_params, (xsh[1],xsh[2]))
 		scope.reuse_variables()
-		yr = build_mouth(xr, opt, name='_M')
+		y2 = mouth_ception(x_pre, nc, opt, name='_MC')
+		
 		# Tail
 	with tf.variable_scope('tail') as scope:
-		logits = build_tail(y, opt)
+		y = tf.nn.max_pool(y1, (1,2,2,1), (1,2,2,1), padding='VALID')
+		logits = build_tail(y, 3*nc, opt, name='tail')
 	
-	return logits, yc, yr
+	return logits, y_post, y2
 
 
-def build_mouth(x, opt, name='mouth'):
+def mouth_ception(x, nc, opt, name='_MC'):
+	# L1
+	l1 = build_mouth(x, nc, opt, name='_M1'+name)
+	l1 = tf.nn.max_pool(l1, (1,2,2,1), (1,2,2,1), padding='VALID')
+	# L2
+	return build_mouth(l1, 2*nc, opt, name='_M2'+name)
+
+
+def build_mouth(x, nc, opt, name='mouth'):
 	"""Build the model we want"""
-	nc = opt['n_channels']
-
-	l1 = conv(x, [5,5,1,nc], name='1'+name )
+	xsh = x.get_shape().as_list()
+	l1 = conv(x, [3,3,xsh[3],nc], name='1'+name )
 	l1 = bias_add(l1, nc, name='1'+name)
 	l1 = tf.nn.relu(l1)
 	
-	l2 = conv(l1, [5,5,nc,nc], name='2'+name)
+	l2 = conv(l1, [3,3,nc,nc], name='2'+name)
 	l2 = bias_add(l2, nc, name='2'+name)
 	return l2
 
-def build_tail(x, opt, name='tail'):
+
+def build_tail(x, nc, opt, name='tail'):
 	"""Build the model we want"""
-	nc = opt['n_channels']
-	
-	l1 = tf.nn.max_pool(x, (1,2,2,1), (1,2,2,1), padding='VALID')
-	l1 = conv(l1, [3,3,nc,nc], name='1'+name )
+	xsh = x.get_shape().as_list()
+	l1 = conv(x, [3,3,xsh[3],nc], name='1'+name )
 	l1 = bias_add(l1, nc, name='1'+name)
 	l1 = tf.nn.relu(l1)
 	
