@@ -5,7 +5,7 @@ pics/
 data/
 *.pyc
 results/
-#*.png
+*.png
 deepboundaries/
 bsd/
 *.pdf
@@ -16,3 +16,4 @@ cifar10/
 taco_cifar/
 trevi/
 *.bmp
+*.tfevents*
