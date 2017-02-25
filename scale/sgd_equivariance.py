@@ -99,7 +99,8 @@ def train(inputs, outputs, optim_step, opt):
 
 def conv(x, shape, name='0', bias_init=0.01, return_params=False):
 	"""Basic convolution"""
-	stddev = tf.sqrt(1./tf.reduce_sum(tf.to_float(shape[1:])))
+	print shape
+	stddev = tf.sqrt(1./tf.reduce_sum(tf.reduce_prod(tf.to_float(shape[1:]))))
 	He_initializer = tf.random_normal_initializer(stddev=stddev)
 	W = tf.get_variable('W'+name, shape=shape, initializer=He_initializer)
 	z = tf.nn.conv2d(x, W, (1,1,1,1), 'SAME', name='conv'+str(name))
@@ -144,23 +145,22 @@ def siamese_model(x, t_params, f_params, opt):
 		# Tail
 	with tf.variable_scope('tail') as scope:
 		y = tf.nn.max_pool(y1, (1,2,2,1), (1,2,2,1), padding='VALID')
-		logits = build_tail(y, 3*nc, opt, name='tail')
+		logits = build_tail(y, 2*nc, 3*nc, opt, name='tail')
 	
 	return logits, y_post, y2
 
 
 def mouth_ception(x, nc, opt, name='_MC'):
 	# L1
-	l1 = build_mouth(x, nc, opt, name='_M1'+name)
+	l1 = build_mouth(x, 1, nc, opt, name='_M1'+name)
 	l1 = tf.nn.max_pool(l1, (1,2,2,1), (1,2,2,1), padding='VALID')
 	# L2
-	return build_mouth(l1, 2*nc, opt, name='_M2'+name)
+	return build_mouth(tf.nn.relu(l1), nc, 2*nc, opt, name='_M2'+name)
 
 
-def build_mouth(x, nc, opt, name='mouth'):
+def build_mouth(x, ni, nc, opt, name='mouth'):
 	"""Build the model we want"""
-	xsh = x.get_shape().as_list()
-	l1 = conv(x, [3,3,xsh[3],nc], name='1'+name )
+	l1 = conv(x, [3,3,ni,nc], name='1'+name )
 	l1 = bias_add(l1, nc, name='1'+name)
 	l1 = tf.nn.relu(l1)
 	
@@ -169,10 +169,9 @@ def build_mouth(x, nc, opt, name='mouth'):
 	return l2
 
 
-def build_tail(x, nc, opt, name='tail'):
+def build_tail(x, ni, nc, opt, name='tail'):
 	"""Build the model we want"""
-	xsh = x.get_shape().as_list()
-	l1 = conv(x, [3,3,xsh[3],nc], name='1'+name )
+	l1 = conv(x, [3,3,ni,nc], name='1'+name )
 	l1 = bias_add(l1, nc, name='1'+name)
 	l1 = tf.nn.relu(l1)
 	
