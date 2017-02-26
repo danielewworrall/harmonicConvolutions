@@ -37,6 +37,7 @@ def main(files, read_threads):
 		for i in xrange(1200):
 			# Retrieve a single instance:
 			a, l = sess.run([image_batch, label_batch])
+			print i*32
 		
 			coord.request_stop()
 			coord.join(threads)
