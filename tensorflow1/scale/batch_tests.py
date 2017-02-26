@@ -25,12 +25,16 @@ def main():
 	plt.figure(1)
 	names = ['1e_n1.npy','1e_n2.npy','1e_n3.npy','0.npy',]
 	equi = [1e-1, 1e-2, 1e-3, 0.]
+	
+	means = []
 	for i, name in enumerate(['1e_n1.npy','1e_n2.npy','1e_n3.npy','0.npy',]):
 		fname = './batch_tests/equi_' + name
 		data = np.load(fname)
+		means.append(np.mean(data))
 		print data
-		print('{:s}: {:04f}, {:04f}'.format(fname, np.mean(data), np.std(data)))
-		plt.plot(equi[i], np.mean(data))
+		print('{:s}: {:04f}, {:04f}'.format(fname, means[-1], np.std(data)))
+	print equi, means
+	plt.plot(equi, means)
 	plt.show()
 
 
