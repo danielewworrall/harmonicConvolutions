@@ -22,8 +22,8 @@ def main():
 		accs.append(acc)
 		np.save('./batch_tests/equi_{:.0e}.npy'.format(opt['equivariant_weight']), accs)
 	'''
-	plt.figure(1)
-	equi_weights = [1e-1, 1e-2, 1e-3]
+	#plt.figure(1)
+	equi_weights = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
 	
 	means = []
 	stddevs = []
@@ -34,9 +34,9 @@ def main():
 		stddevs.append(np.std(data))
 		print data
 		print('{:s}: {:04f}, {:04f}'.format(fname, 1-means[-1], stddevs[-1]))
-	plt.errorbar(equi_weights, means, yerr=stddevs)
-	plt.xscale('log')
-	plt.show()
+	#plt.errorbar(equi_weights, means, yerr=stddevs)
+	#plt.xscale('log')
+	#plt.show()
 	
 
 if __name__ == '__main__':
