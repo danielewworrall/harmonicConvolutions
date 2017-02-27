@@ -7,7 +7,7 @@ import sys
 import numpy as np
 import seaborn as sns
 
-import sgd_equivariance as se
+#import sgd_equivariance as se
 
 from matplotlib import pyplot as plt
 sns.set_style("whitegrid")
