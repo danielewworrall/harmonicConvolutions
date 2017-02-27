@@ -11,8 +11,9 @@ import numpy as np
 import skimage.io as skio
 import tensorflow as tf
 
-import models
 import equivariant_loss as el
+import imagenet_loader
+import models
 
 from matplotlib import pyplot as plt
 
@@ -46,58 +47,74 @@ def train(inputs, outputs, optim_step, opt):
 	x, labels, t_params, f_params, lr = inputs
 	loss, acc, y, yr = outputs
 	
-	data = load_data()
-	n_data = data['X']['train'].shape[0]
+	train_files = il.get_train_files(opt['train_folder'])
+	image_batch, labels_batch = il.get_batches()
+	
 	with tf.Session() as sess:
+		# Threading and queueing
+		coord = tf.train.Coordinator()
+		threads = tf.train.start_queue_runners(coord=coord)
+		
+		# Initialize variables
 		init = tf.global_variables_initializer()
 		feed_dict = {x: data['X']['train'][:opt['mb_size'],...],
 						 t_params: np.zeros((opt['mb_size'],6))}
 		sess.run(init, feed_dict=feed_dict)
 		
+		# Training loop
 		for epoch in xrange(opt['n_epochs']):
+			current_lr = opt['lr']*np.power(0.1, epoch/opt['lr_interval'])
+			
+			# Train
 			loss_total = 0.
 			acc_total = 0.
-			mb_list = random_sampler(n_data, opt)
-			current_lr = opt['lr']*np.power(0.1, epoch/opt['lr_interval'])
-			for i, mb in enumerate(mb_list):
-				tp, fp = el.random_transform(mb.shape[0], (28,28))
-				ops = [loss, acc, optim_step]
-				feed_dict = {x: data['X']['train'][mb,...],
-								 labels: data['Y']['train'][mb,...],
-								 t_params: tp,
-								 f_params: fp,
-								 lr: current_lr}
-				l, c, __ = sess.run(ops, feed_dict=feed_dict)
-				loss_total += l
-				acc_total += c
-				sys.stdout.write('{:03d}%\r'.format(int((100.*i)/len(mb_list))))
-				sys.stdout.flush()
-			loss_total = loss_total / (i+1.)
-			acc_total = acc_total / (i+1.)
-		
+			try:
+				while not coord.should_stop():
+					# Run training steps or whatever
+					tp, fp = el.random_transform(mb.shape[0], (28,28))
+					ops = [loss, acc, optim_step]
+					feed_dict = {x: data['X']['train'][mb,...],
+									 labels: data['Y']['train'][mb,...],
+									 t_params: tp,
+									 f_params: fp,
+									 lr: current_lr}
+					l, c, __ = sess.run(ops, feed_dict=feed_dict)
+					loss_total += l
+					acc_total += c
+					sys.stdout.write('{:03d}%\r'.format(int((100.*i)/len(mb_list))))
+					sys.stdout.flush()
+			except tf.errors.OutOfRangeError:
+				loss_total = loss_total / (i+1.)
+				acc_total = acc_total / (i+1.)
+			finally:
+				# When done, ask the threads to stop.
+				coord.request_stop()
+				coord.join(threads)
+			
+			# Valid
 			vacc_total = 0.
-			mb_list = random_sampler(data['Y']['valid'].shape[0], opt, random=False)
-			for i, mb in enumerate(mb_list):
-				feed_dict = {x: data['X']['valid'][mb,...],
-								 labels: data['Y']['valid'][mb,...]}
-				vc = sess.run(acc, feed_dict=feed_dict)
-				vacc_total += vc
-			vacc_total = vacc_total / (i+1.)
+			try:
+				while not coord.should_stop():
+					# Run training steps or whatever
+					tp, fp = el.random_transform(mb.shape[0], (28,28))
+					ops = [acc]
+					feed_dict = {x: data['X']['valid'][mb,...],
+									 labels: data['Y']['valid'][mb,...]}
+					c = sess.run(ops, feed_dict=feed_dict)
+					vacc_total += c
+					sys.stdout.write('{:03d}%\r'.format(int((100.*i)/len(mb_list))))
+					sys.stdout.flush()
+			except tf.errors.OutOfRangeError:
+				vacc_total = acc_total / (i+1.)
+			finally:
+				# When done, ask the threads to stop.
+				coord.request_stop()
+				coord.join(threads)
 			
 			print('[{:04d}]: Loss: {:04f}, Train Acc.: {:04f}, Valid Acc.: {:04f}' \
 					.format(epoch, loss_total, acc_total, vacc_total))
 	
-		tacc_total = 0.
-		mb_list = random_sampler(data['Y']['test'].shape[0], opt, random=False)
-		for i, mb in enumerate(mb_list):
-			feed_dict = {x: data['X']['test'][mb,...],
-							 labels: data['Y']['test'][mb,...]}
-			tc = sess.run(acc, feed_dict=feed_dict)
-			tacc_total += tc
-		tacc_total = tacc_total / (i+1.)
-		
-		print('Test Acc.: {:04f}'.format(tacc_total))
-	return tacc_total
+	return vacc_total
 
 	
 def main(opt):
@@ -110,7 +127,8 @@ def main(opt):
 	opt['n_epochs'] = 100
 	opt['lr'] = 1e-2
 	opt['lr_interval'] = 33
-	#opt['equivariant_weight'] = 1e-3
+	opt['train_folder'] = '/home/dworrall/Data/ImageNet/labels/subsets/train_0001'
+	opt['equivariant_weight'] = 1e-3
 	
 	# Define variables
 	x = tf.placeholder(tf.float32, [opt['mb_size'],opt['N'],opt['N'],1], name='x')
