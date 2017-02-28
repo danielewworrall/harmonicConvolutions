@@ -4,6 +4,7 @@ import os
 import sys
 import time
 sys.path.append('../')
+sys.path.append('./imagenet')
 
 import cv2
 import input_data
@@ -18,37 +19,15 @@ import models
 from matplotlib import pyplot as plt
 
 
-def load_data():
-	mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
-	data = {}
-	data['X'] = {'train': np.reshape(mnist.train._images, (-1,28,28,1)),
-					 'valid': np.reshape(mnist.validation._images, (-1,28,28,1)),
-					 'test': np.reshape(mnist.test._images, (-1,28,28,1))}
-	data['Y'] = {'train': mnist.train._labels,
-					 'valid': mnist.validation._labels,
-					 'test': mnist.test._labels}
-	return data
-
-
-def random_sampler(n_data, opt, random=True):
-	"""Return minibatched data"""
-	if random:
-		indices = np.random.permutation(n_data)
-	else:
-		indices = np.arange(n_data)
-	mb_list = []
-	for i in xrange(int(float(n_data)/opt['mb_size'])):
-		mb_list.append(indices[opt['mb_size']*i:opt['mb_size']*(i+1)])
-	return mb_list
-
-
-def train(inputs, outputs, optim_step, opt):
+def train(inputs, outputs, train_op, opt):
 	"""Training loop"""
-	x, labels, t_params, f_params, lr = inputs
-	loss, acc, y, yr = outputs
+	global_step, t_params, f_params, lr = inputs
+	loss, acc, merged = outputs
 	
-	train_files = il.get_train_files(opt['train_folder'])
-	image_batch, labels_batch = il.get_batches()
+	# For checkpoints
+	saver = tf.train.Saver()
+	gs = 0
+	start = time.time()
 	
 	with tf.Session() as sess:
 		# Threading and queueing
@@ -57,104 +36,183 @@ def train(inputs, outputs, optim_step, opt):
 		
 		# Initialize variables
 		init = tf.global_variables_initializer()
-		feed_dict = {x: data['X']['train'][:opt['mb_size'],...],
-						 t_params: np.zeros((opt['mb_size'],6))}
-		sess.run(init, feed_dict=feed_dict)
+		sess.run(init)
 		
+		train_writer = tf.summary.FileWriter(opt['summary_path'], sess.graph)
 		# Training loop
-		for epoch in xrange(opt['n_epochs']):
-			current_lr = opt['lr']*np.power(0.1, epoch/opt['lr_interval'])
+		try:
+			while not coord.should_stop():
+				# Learning rate
+				exponent = sum([gs > i for i in opt['lr_schedule']])
+				current_lr = opt['lr']*np.power(0.1, exponent)
+				
+				# Run training steps
+				tp, fp = el.random_transform(opt['mb_size'], opt['im_size'])
+				ops = [global_step, loss, acc, merged, train_op]
+				feed_dict = {t_params: tp, f_params: fp, lr: current_lr}
+				gs, l, top1, summary, __ = sess.run(ops, feed_dict=feed_dict)
+				
+				# Summary writers, printing, checkpoint saving and termination
+				train_writer.add_summary(summary, gs)
+				print('[{:06d} | {:06d}] Train loss: {:03f}, Train top1: {:03f}, LR: {:0.1e}' \
+						.format(int(time.time()-start), gs, l, top1, current_lr))
+				if gs % opt['save_step'] == 0:
+					save_path = saver.save(sess, opt['save_path'], global_step=gs)
+					print("Model saved in file: %s" % save_path)
+				# Escape above a certain number of iterations
+				if gs > opt['n_iterations']:
+					break
+		except tf.errors.OutOfRangeError:
+			pass
+		finally:
+			# When done, ask the threads to stop.
+			coord.request_stop()
+			coord.join(threads)
+		
+		sess.close()
 			
-			# Train
-			loss_total = 0.
-			acc_total = 0.
-			try:
-				while not coord.should_stop():
-					# Run training steps or whatever
-					tp, fp = el.random_transform(mb.shape[0], (28,28))
-					ops = [loss, acc, optim_step]
-					feed_dict = {x: data['X']['train'][mb,...],
-									 labels: data['Y']['train'][mb,...],
-									 t_params: tp,
-									 f_params: fp,
-									 lr: current_lr}
-					l, c, __ = sess.run(ops, feed_dict=feed_dict)
-					loss_total += l
-					acc_total += c
-					sys.stdout.write('{:03d}%\r'.format(int((100.*i)/len(mb_list))))
-					sys.stdout.flush()
-			except tf.errors.OutOfRangeError:
-				loss_total = loss_total / (i+1.)
-				acc_total = acc_total / (i+1.)
-			finally:
-				# When done, ask the threads to stop.
-				coord.request_stop()
-				coord.join(threads)
-			
-			# Valid
-			vacc_total = 0.
-			try:
-				while not coord.should_stop():
-					# Run training steps or whatever
-					tp, fp = el.random_transform(mb.shape[0], (28,28))
-					ops = [acc]
-					feed_dict = {x: data['X']['valid'][mb,...],
-									 labels: data['Y']['valid'][mb,...]}
-					c = sess.run(ops, feed_dict=feed_dict)
-					vacc_total += c
-					sys.stdout.write('{:03d}%\r'.format(int((100.*i)/len(mb_list))))
-					sys.stdout.flush()
-			except tf.errors.OutOfRangeError:
-				vacc_total = acc_total / (i+1.)
-			finally:
-				# When done, ask the threads to stop.
-				coord.request_stop()
-				coord.join(threads)
-			
-			print('[{:04d}]: Loss: {:04f}, Train Acc.: {:04f}, Valid Acc.: {:04f}' \
-					.format(epoch, loss_total, acc_total, vacc_total))
+
+def validate(outputs, opt):
+	"""Validate the current model"""
+	loss, acc = outputs
 	
-	return vacc_total
+	# For checkpoints
+	saver = tf.train.Saver()
+	
+	with tf.Session() as sess:
+		init_op = tf.local_variables_initializer()
+		sess.run(init_op)
+		
+		# Threading and queueing
+		coord = tf.train.Coordinator()
+		threads = tf.train.start_queue_runners(coord=coord)
+		# Restore model
+		model_file = get_latest_model(opt['save_path'])
+		saver.restore(sess, model_file)
+		print('Model restored: {:s}'.format(model_file))
+		
+		# Validation loop
+		loss_total = 0.
+		top1_total = 0.
+		i = 0
+		try:
+			while not coord.should_stop():
+				i += 1
+				ops = [loss, acc]
+				l, top1 = sess.run(ops)
+				loss_total += l
+				top1_total += top1
+				print('[{:06d}] Train loss: {:03f}, Valid top1: {:03f}' \
+						.format(i*opt['mb_size'], l, top1))
+		except tf.errors.OutOfRangeError:
+			loss_total = loss_total / (i*1.)
+			top1_total = top1_total / (i*1.)
+		finally:
+			# When done, ask the threads to stop.
+			coord.request_stop()
+			coord.join(threads)
+	
+	print('Validation loss: {:03f}, Validation accuracy: {:03f}' \
+			.format(loss_total,top1_total))
+
+
+def get_latest_model(model_file):
+	"""Model file"""
+	dirname = os.path.dirname(model_file)
+	basename = os.path.basename(model_file)
+	nums = []
+	for root, dirs, files in os.walk(dirname):
+		for f in files:
+			f = f.split('-')
+			if f[0] == basename:
+				nums.append(int(f[1].split('.')[0]))
+	model_file += '-{:05d}'.format(max(nums))
+	return model_file
 
 	
 def main(opt):
 	"""Main loop"""
 	
 	tf.reset_default_graph()
-	opt['N'] = 28
-	opt['mb_size'] = 128
-	opt['n_channels'] = 10
-	opt['n_epochs'] = 100
-	opt['lr'] = 1e-2
-	opt['lr_interval'] = 33
-	opt['train_folder'] = '/home/dworrall/Data/ImageNet/labels/subsets/train_0001'
+	root = '/home/dworrall'
+	dir_ = root + '/Code/harmonicConvolutions/tensorflow1/scale'
+	opt['mb_size'] = 64
+	opt['n_channels'] = 32
+	opt['n_iterations'] = 100000
+	opt['lr_schedule'] = [50000,75000]
+	opt['lr'] = 1e-3
+	opt['n_labels'] = 100
+	opt['save_step'] = 100
+	opt['im_size'] = (256,256)
+	opt['weight_decay'] = 0.0005
+	opt['summary_path'] = dir_ + '/summaries/train_{:04d}'.format(opt['n_labels'])
+	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}/model.ckpt'.format(opt['n_labels'])
+	opt['train_folder'] = root + '/Data/ImageNet/labels/top_k/train_{:04d}'.format(opt['n_labels'])
+	opt['valid_folder'] = root + '/Data/ImageNet/labels/top_k/validation_{:04d}'.format(opt['n_labels'])
 	opt['equivariant_weight'] = 1e-3
+	opt['is_training'] = True
 	
-	# Define variables
-	x = tf.placeholder(tf.float32, [opt['mb_size'],opt['N'],opt['N'],1], name='x')
-	labels = tf.placeholder(tf.float32, [opt['mb_size'],10], name='labels')
-	t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
-	f_params = tf.placeholder(tf.float32, [opt['mb_size'],2,2], name='f_params')
+	# Construct input graph
+	if opt['is_training']:
+		train_files = imagenet_loader.get_files(opt['train_folder'])
+		x, labels = imagenet_loader.get_batches(train_files, True, opt)
+		# Define variables
+		global_step = tf.Variable(0, name='global_step', trainable=False)
+		t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
+		f_params = tf.placeholder(tf.float32, [opt['mb_size'],2,2], name='f_params')
+		lr = tf.placeholder(tf.float32, [], name='lr')
+		# Build the model
+		logits, y, yr = models.siamese_model(x, t_params, f_params, opt)
+	else:
+		validation_files = imagenet_loader.get_files(opt['valid_folder'])
+		x, labels = imagenet_loader.get_batches(validation_files, False, opt,
+															 min_after_dequeue=1000,
+															 num_epochs=1)
+		# Build the model
+		logits = models.single_model(x, opt)
 	
-	lr = tf.placeholder(tf.float32, [], name='lr')
-	logits, y, yr = models.siamese_model(x, t_params, f_params, opt)
-
 	# Build loss and metrics
-	equi_loss = tf.reduce_mean(tf.square(y - yr))
-	classification_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels))
-	loss = classification_loss + opt['equivariant_weight']*equi_loss
+	softmax = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+																				labels=labels)
+	classification_loss = tf.reduce_mean(softmax)
+	if opt['is_training']:
+		equi_loss = 0.
+		for y_, yr_ in zip(y, yr):
+			equi_loss += tf.reduce_mean(tf.square(y_ - yr_))
+		loss = classification_loss + opt['equivariant_weight']*equi_loss
+	else:
+		loss = classification_loss
+	regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+	regularization_loss = tf.add_n(regularization_losses)
+	loss += regularization_loss
+		
+	# Accuracies
+	argmax = tf.argmax(logits, axis=1)
+	acc = tf.reduce_mean(tf.cast(tf.equal(argmax, labels), tf.float32))
 	
-	acc = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(logits, axis=1), tf.argmax(labels, axis=1)), tf.float32))
+	loss_summary = tf.summary.scalar('Loss', loss)
+	class_summary = tf.summary.scalar('Classification Loss', classification_loss)
+	equi_summary = tf.summary.scalar('Equivariant loss', equi_loss)
+	reg_loss = tf.summary.scalar('Regularization loss', regularization_loss)
+	acc_summary = tf.summary.scalar('Accuracy', acc)
+	lr_summary = tf.summary.scalar('Learning rate', lr)
+	merged = tf.summary.merge_all()
 	
-	# Build optimizer
-	optim = tf.train.MomentumOptimizer(lr, 0.9, use_nesterov=True)
-	optim_step = optim.minimize(loss)
-	
-	inputs = [x, labels, t_params, f_params, lr]
-	outputs = [loss, acc, y, yr]
-	
-	# Train
-	return train(inputs, outputs, optim_step, opt)
+	if opt['is_training']:
+		# Build optimizer
+		optim = tf.train.MomentumOptimizer(lr, 0.9, use_nesterov=True)
+		train_op = optim.minimize(loss, global_step=global_step)
+		
+		inputs = [global_step, t_params, f_params, lr]
+		outputs = [loss, acc, merged] 
+		
+		# Train
+		return train(inputs, outputs, train_op, opt)
+	else:
+		outputs = [loss, acc]
+		
+		#Validate
+		return validate(outputs, opt)
 
 
 if __name__ == '__main__':
