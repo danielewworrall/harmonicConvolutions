@@ -134,8 +134,8 @@ def main(opt):
 	"""Main loop"""
 	
 	tf.reset_default_graph()
-	root = '/home/dworrall'
-	dir_ = root + '/Code/harmonicConvolutions/tensorflow1/scale'
+	opt['root'] = '/home/dworrall'
+	dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
 	opt['mb_size'] = 64
 	opt['n_channels'] = 32
 	opt['n_iterations'] = 100000
@@ -147,8 +147,8 @@ def main(opt):
 	opt['weight_decay'] = 0.0005
 	opt['summary_path'] = dir_ + '/summaries/train_{:04d}'.format(opt['n_labels'])
 	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}/model.ckpt'.format(opt['n_labels'])
-	opt['train_folder'] = root + '/Data/ImageNet/labels/top_k/train_{:04d}'.format(opt['n_labels'])
-	opt['valid_folder'] = root + '/Data/ImageNet/labels/top_k/validation_{:04d}'.format(opt['n_labels'])
+	opt['train_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/train_{:04d}'.format(opt['n_labels'])
+	opt['valid_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/validation_{:04d}'.format(opt['n_labels'])
 	opt['equivariant_weight'] = 1e-3
 	opt['is_training'] = True
 	

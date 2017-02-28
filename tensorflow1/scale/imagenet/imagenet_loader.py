@@ -24,7 +24,7 @@ def read_my_file_format(filename_queue, im_size, opt):
 	key, value = reader.read(filename_queue)
 	record_defaults = [[""],[""]]
 	address, label = tf.decode_csv(value, record_defaults=record_defaults)
-	address = '/home/dworrall/Data/ImageNet/'+address
+	address = opt['root'] + '/Data/ImageNet/'+address
 
 	# Image reader
 	file_contents = tf.read_file(address)
