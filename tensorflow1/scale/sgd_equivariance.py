@@ -145,11 +145,11 @@ def main(opt):
 	opt['save_step'] = 100
 	opt['im_size'] = (256,256)
 	opt['weight_decay'] = 0.0005
-	opt['summary_path'] = dir_ + '/summaries/train_{:04d}'.format(opt['n_labels'])
-	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}/model.ckpt'.format(opt['n_labels'])
-	opt['train_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/train_{:04d}'.format(opt['n_labels'])
-	opt['valid_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/validation_{:04d}'.format(opt['n_labels'])
-	opt['equivariant_weight'] = 0. #1e-3
+	opt['summary_path'] = dir_ + '/summaries/train_{:04d}_2'.format(opt['n_labels'])
+	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}_2/model.ckpt'.format(opt['n_labels'])
+	opt['train_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/train_{:04d}_2'.format(opt['n_labels'])
+	opt['valid_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/validation_{:04d}_2'.format(opt['n_labels'])
+	opt['equivariant_weight'] = 1e-2
 	opt['is_training'] = True
 	
 	# Construct input graph
