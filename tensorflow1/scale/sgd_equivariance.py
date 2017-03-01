@@ -149,7 +149,7 @@ def main(opt):
 	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}/model.ckpt'.format(opt['n_labels'])
 	opt['train_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/train_{:04d}'.format(opt['n_labels'])
 	opt['valid_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/validation_{:04d}'.format(opt['n_labels'])
-	opt['equivariant_weight'] = 1e-3
+	opt['equivariant_weight'] = 0. #1e-3
 	opt['is_training'] = True
 	
 	# Construct input graph
@@ -177,8 +177,11 @@ def main(opt):
 	classification_loss = tf.reduce_mean(softmax)
 	if opt['is_training']:
 		equi_loss = 0.
-		for y_, yr_ in zip(y, yr):
-			equi_loss += tf.reduce_mean(tf.square(y_ - yr_))
+		layer_equi_summaries = []
+		for i, (y_, yr_) in enumerate(zip(y, yr)):
+			layer_equi_loss = tf.reduce_mean(tf.square(y_ - yr_))
+			equi_loss += layer_equi_loss
+			layer_equi_summaries.append(tf.summary.scalar('Equivariant loss'+str(i), layer_equi_loss))
 		loss = classification_loss + opt['equivariant_weight']*equi_loss
 	else:
 		loss = classification_loss
