@@ -140,11 +140,11 @@ def main(opt):
 	tf.reset_default_graph()
 	opt['root'] = '/home/dworrall'
 	dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
-	opt['mb_size'] = 64
+	opt['mb_size'] = 32
 	opt['n_channels'] = 64
 	opt['n_iterations'] = 100000
 	opt['lr_schedule'] = [50000,75000]
-	opt['lr'] = 1e-3
+	opt['lr'] = 1e-4
 	opt['n_labels'] = 100
 	opt['save_step'] = 100
 	opt['im_size'] = (224,224)
