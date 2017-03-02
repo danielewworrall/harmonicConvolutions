@@ -15,9 +15,6 @@ from spatial_transformer import transformer
 def load_weights_from_npz(fname, opt):
 	weights = np.load(fname)
 	
-	x = tf.placeholder(tf.float32, [32,256,256,3], name='x')
-	logits = single_model(x, opt)
-	
 	assign_ops = []
 	for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
 		for weight in weights:
