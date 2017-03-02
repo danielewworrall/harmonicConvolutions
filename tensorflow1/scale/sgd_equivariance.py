@@ -141,7 +141,7 @@ def main(opt):
 	opt['root'] = '/home/dworrall'
 	dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
 	opt['mb_size'] = 64
-	opt['n_channels'] = 32
+	opt['n_channels'] = 64
 	opt['n_iterations'] = 100000
 	opt['lr_schedule'] = [50000,75000]
 	opt['lr'] = 1e-3
