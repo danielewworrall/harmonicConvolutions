@@ -32,9 +32,9 @@ def read_my_file_format(filename_queue, im_size, opt):
 	image = tf.to_float(image)
 	# Image preprocessing
 	image = tf.image.resize_image_with_crop_or_pad(image,im_size[0],im_size[1])/255.
+	image = tf.image.per_image_standardization(image)
 	if opt['is_training']:
 		image = tf.image.random_flip_left_right(image)
-		image = tf.image.per_image_standardization(image)
 	
 	return image, tf.to_int64(tf.string_to_number(label))
 
