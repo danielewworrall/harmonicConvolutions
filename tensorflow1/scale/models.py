@@ -12,19 +12,35 @@ import equivariant_loss as el
 from spatial_transformer import transformer
 
 
-def conv(x, shape, opt, name='0', bias_init=0.01):
+def load_weights_from_npz(fname, opt):
+	weights = np.load(fname)
+	
+	x = tf.placeholder(tf.float32, [32,256,256,3], name='x')
+	logits = single_model(x, opt)
+	
+	assign_ops = []
+	for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
+		for weight in weights:
+			if weight in var.name:
+				assign_ops.append(var.assign(weights[weight]))
+				print('Added weights assignment op: {:s}'.format(var.name))
+	return assign_ops
+
+
+def conv(x, shape, opt, name='conv', bias_init=0.01):
 	"""Basic convolution"""
+	name = 'conv{:s}'.format(name)
 	He_initializer = tf.contrib.layers.variance_scaling_initializer()
 	l2_regularizer = tf.contrib.layers.l2_regularizer(opt['weight_decay'])
-	W = tf.get_variable('W'+name, shape=shape, initializer=He_initializer,
+	W = tf.get_variable(name+'_W', shape=shape, initializer=He_initializer,
 							  regularizer=l2_regularizer)
 	z = tf.nn.conv2d(x, W, (1,1,1,1), 'SAME', name='conv'+str(name))
-	return bias_add(z, shape[3], name=name)
+	return bias_add(z, shape[3], name=name+'_b')
 
 
-def bias_add(x, nc, bias_init=0.01, name='0'):
+def bias_add(x, nc, bias_init=0.01, name='b'):
 	const_initializer = tf.constant_initializer(value=bias_init)
-	b = tf.get_variable('b'+name, shape=nc, initializer=const_initializer)
+	b = tf.get_variable(name, shape=nc, initializer=const_initializer)
 	return tf.nn.bias_add(x, b)
 
 
@@ -65,34 +81,35 @@ def single_model(x, opt):
 		# Tail
 	with tf.variable_scope('tail') as scope:
 		gap = tf.reduce_mean(y[-1], axis=(1,2), keep_dims=True)
-		logits = conv(tf.nn.relu(gap), [1,1,8*nc,opt['n_labels']], opt, name='VGGout')
+		logits = conv(tf.nn.relu(gap), [1,1,8*nc,opt['n_labels']], name='VGGout')
 		logits = tf.squeeze(logits, squeeze_dims=(1,2))
 	
 	return logits
 
 
 def VGG(x, nc, opt):
-	y1 = VGG_block(x, 3, nc, 2, opt, name='_VGGB1')
+	y1 = VGG_block(x, 3, nc, 2, opt, name='1')
 	y1 = tf.nn.max_pool(y1, (1,2,2,1), (1,2,2,1), padding='VALID')
 	
-	y2 = VGG_block(y1, nc, 2*nc, 2, opt, name='_VGGB2')
+	y2 = VGG_block(y1, nc, 2*nc, 2, opt, name='2')
 	y2 = tf.nn.max_pool(y2, (1,2,2,1), (1,2,2,1), padding='VALID')
 	
-	y3 = VGG_block(y2, 2*nc, 4*nc, 3, opt, name='_VGGB3')
+	y3 = VGG_block(y2, 2*nc, 4*nc, 3, opt, name='3')
 	y3 = tf.nn.max_pool(y3, (1,2,2,1), (1,2,2,1), padding='VALID')
 	
-	y4 = VGG_block(y3, 4*nc, 8*nc, 3, opt, name='_VGGB4')
+	y4 = VGG_block(y3, 4*nc, 8*nc, 3, opt, name='4')
 	y4 = tf.nn.max_pool(y4, (1,2,2,1), (1,2,2,1), padding='VALID')
 	
-	y5 = VGG_block(y4, 8*nc, 8*nc, 3, opt, name='_VGGB5')
+	y5 = VGG_block(y4, 8*nc, 8*nc, 3, opt, name='5')
 	return [y1,y2,y3,y4,y5]
 
 
-def VGG_block(x, n_in, n_channels, n_layers, opt, name='_VGGB1'):
+def VGG_block(x, n_in, n_channels, n_layers, opt, name='VGG_block'):
 	"""Network in Network block"""
 	with tf.variable_scope('block'+name) as scope:
-		l1 = conv(x, [3,3,n_in,n_channels], opt, name='1')
-		l2 = conv(tf.nn.relu(l1), [3,3,n_channels,n_channels], opt, name='2')
+		l1 = conv(x, [3,3,n_in,n_channels], opt, name='{:s}_1'.format(name))
+		l2 = conv(tf.nn.relu(l1), [3,3,n_channels,n_channels], opt, name='{:s}_2'.format(name))
 		if n_layers == 3:
-			l2 = conv(tf.nn.relu(l2), [3,3,n_channels,n_channels], opt, name='3')
+			l2 = conv(tf.nn.relu(l2), [3,3,n_channels,n_channels], opt, name='{:s}_3'.format(name))
 	return l2
+

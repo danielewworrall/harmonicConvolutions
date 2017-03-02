@@ -19,10 +19,11 @@ import models
 from matplotlib import pyplot as plt
 
 
-def train(inputs, outputs, train_op, opt):
+def train(inputs, outputs, ops, opt):
 	"""Training loop"""
 	global_step, t_params, f_params, lr = inputs
 	loss, acc, merged = outputs
+	train_op, assign_op = ops
 	
 	# For checkpoints
 	saver = tf.train.Saver()
@@ -37,6 +38,9 @@ def train(inputs, outputs, train_op, opt):
 		# Initialize variables
 		init = tf.global_variables_initializer()
 		sess.run(init)
+		
+		is assign_op is not None:
+			sess.run(assign_op)
 		
 		train_writer = tf.summary.FileWriter(opt['summary_path'], sess.graph)
 		# Training loop
@@ -145,12 +149,14 @@ def main(opt):
 	opt['save_step'] = 100
 	opt['im_size'] = (224,224)
 	opt['weight_decay'] = 0.0005
-	opt['summary_path'] = dir_ + '/summaries/train_{:04d}'.format(opt['n_labels'])
-	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}/model.ckpt'.format(opt['n_labels'])
+	opt['equivariant_weight'] = 1e-2
+	flag = 'npz'
+	opt['summary_path'] = dir_ + '/summaries/train_{:04d}_{:.0e}_{:s}'.format(opt['n_labels'], opt['equivariant_weight'], flag)
+	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}_{:.0e}_{:s}/model.ckpt'.format(opt['n_labels'], opt['equivariant_weight'], flag)
 	opt['train_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/train_{:04d}'.format(opt['n_labels'])
 	opt['valid_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/validation_{:04d}'.format(opt['n_labels'])
-	opt['equivariant_weight'] = 0.
-	opt['is_training'] = False
+	opt['is_training'] = True
+	opt['load_npz'] = './imagenet/vgg16_weights.npz'
 	
 	# Construct input graph
 	if opt['is_training']:
@@ -170,6 +176,11 @@ def main(opt):
 															 num_epochs=1)
 		# Build the model
 		logits = models.single_model(x, opt)
+		
+	if opt['load_npz'] is not None:
+		assign_op = models.load_weights_from_npz(opt['load_npz'], opt)
+	else:
+		assign_op = None
 	
 	# Build loss and metrics
 	softmax = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
@@ -193,14 +204,13 @@ def main(opt):
 	argmax = tf.argmax(logits, axis=1)
 	acc = tf.reduce_mean(tf.cast(tf.equal(argmax, labels), tf.float32))
 	
-	if opt['is_training']:
-		loss_summary = tf.summary.scalar('Loss', loss)
-		class_summary = tf.summary.scalar('Classification Loss', classification_loss)
-		equi_summary = tf.summary.scalar('Equivariant loss', equi_loss)
-		reg_loss = tf.summary.scalar('Regularization loss', regularization_loss)
-		acc_summary = tf.summary.scalar('Accuracy', acc)
-		lr_summary = tf.summary.scalar('Learning rate', lr)
-		merged = tf.summary.merge_all()
+	loss_summary = tf.summary.scalar('Loss', loss)
+	class_summary = tf.summary.scalar('Classification Loss', classification_loss)
+	equi_summary = tf.summary.scalar('Equivariant loss', equi_loss)
+	reg_loss = tf.summary.scalar('Regularization loss', regularization_loss)
+	acc_summary = tf.summary.scalar('Accuracy', acc)
+	lr_summary = tf.summary.scalar('Learning rate', lr)
+	merged = tf.summary.merge_all()
 	
 	if opt['is_training']:
 		# Build optimizer
@@ -208,10 +218,11 @@ def main(opt):
 		train_op = optim.minimize(loss, global_step=global_step)
 		
 		inputs = [global_step, t_params, f_params, lr]
-		outputs = [loss, acc, merged] 
+		outputs = [loss, acc, merged]
+		ops = [train_op, assign_op]
 		
 		# Train
-		return train(inputs, outputs, train_op, opt)
+		return train(inputs, outputs, ops, opt)
 	else:
 		outputs = [loss, acc]
 		
