@@ -39,7 +39,7 @@ def train(inputs, outputs, ops, opt):
 		init = tf.global_variables_initializer()
 		sess.run(init)
 		
-		is assign_op is not None:
+		if assign_op is not None:
 			sess.run(assign_op)
 		
 		train_writer = tf.summary.FileWriter(opt['summary_path'], sess.graph)
