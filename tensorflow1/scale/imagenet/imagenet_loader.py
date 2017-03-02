@@ -34,7 +34,7 @@ def read_my_file_format(filename_queue, im_size, opt):
 	image = tf.image.resize_image_with_crop_or_pad(image,im_size[0],im_size[1])/255.
 	if opt['is_training']:
 		image = tf.image.random_flip_left_right(image)
-		image = tf.image.per_image_standardization(image)
+		#image = tf.image.per_image_standardization(image)
 	
 	return image, tf.to_int64(tf.string_to_number(label))
 
@@ -48,12 +48,8 @@ def get_batches(files, shuffle, opt, min_after_dequeue=1000, num_epochs=None):
 	image, label = read_my_file_format(filename_queue, im_size, opt)
 	
 	num_threads = 4
-	#min_after_dequeue = 1000
 	capacity = min_after_dequeue + (num_threads+1)*batch_size
 	
-	#image_batch, label_batch = tf.train.shuffle_batch(
-	#	[image, label], batch_size=batch_size, num_threads=num_threads, 
-	#	capacity=capacity, min_after_dequeue=min_after_dequeue)
 	image_batch, label_batch = tf.train.shuffle_batch_join(
 		[[image, label]], batch_size=batch_size, capacity=capacity,
 		min_after_dequeue=min_after_dequeue)
@@ -61,7 +57,66 @@ def get_batches(files, shuffle, opt, min_after_dequeue=1000, num_epochs=None):
 	return image_batch, label_batch
 
 
+def get_mean(train_folder):
+	"""Get mean of all images in folder"""
+	opt = {}
+	opt['mb_size'] = 8
+	opt['im_size'] = (224,224)
+	opt['root'] = '/home/dworrall'
+	opt['is_training'] = False
+	
+	print('Getting training files')
+	train_files = get_files(train_folder)
+	x, labels = get_batches(train_files, True, opt)
+	
+	print('Ready')
+	with tf.Session() as sess:
+		X, Labels = sess.run([x, labels])
+		print X.shape
+
+
 if __name__ == '__main__':
 	train_folder = "/home/dworrall/Data/ImageNet/labels/subsets/train_0004"
-	files = get_train_files(train_folder)
-	main(files, 4)
+	get_mean(train_folder)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
