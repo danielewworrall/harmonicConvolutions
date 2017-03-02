@@ -12,7 +12,7 @@ import equivariant_loss as el
 from spatial_transformer import transformer
 
 
-def conv(x, shape, opt, name='0', bias_init=0.01, return_params=False):
+def conv(x, shape, opt, name='0', bias_init=0.01):
 	"""Basic convolution"""
 	He_initializer = tf.contrib.layers.variance_scaling_initializer()
 	l2_regularizer = tf.contrib.layers.l2_regularizer(opt['weight_decay'])
