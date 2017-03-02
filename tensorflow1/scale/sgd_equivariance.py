@@ -145,12 +145,12 @@ def main(opt):
 	opt['save_step'] = 100
 	opt['im_size'] = (224,224)
 	opt['weight_decay'] = 0.0005
-	opt['summary_path'] = dir_ + '/summaries/train_{:04d}_2'.format(opt['n_labels'])
-	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}_2/model.ckpt'.format(opt['n_labels'])
+	opt['summary_path'] = dir_ + '/summaries/train_{:04d}'.format(opt['n_labels'])
+	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}/model.ckpt'.format(opt['n_labels'])
 	opt['train_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/train_{:04d}'.format(opt['n_labels'])
 	opt['valid_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/validation_{:04d}'.format(opt['n_labels'])
-	opt['equivariant_weight'] = 1e-2
-	opt['is_training'] = True
+	opt['equivariant_weight'] = 0.
+	opt['is_training'] = False
 	
 	# Construct input graph
 	if opt['is_training']:
@@ -193,13 +193,14 @@ def main(opt):
 	argmax = tf.argmax(logits, axis=1)
 	acc = tf.reduce_mean(tf.cast(tf.equal(argmax, labels), tf.float32))
 	
-	loss_summary = tf.summary.scalar('Loss', loss)
-	class_summary = tf.summary.scalar('Classification Loss', classification_loss)
-	equi_summary = tf.summary.scalar('Equivariant loss', equi_loss)
-	reg_loss = tf.summary.scalar('Regularization loss', regularization_loss)
-	acc_summary = tf.summary.scalar('Accuracy', acc)
-	lr_summary = tf.summary.scalar('Learning rate', lr)
-	merged = tf.summary.merge_all()
+	if opt['is_training']:
+		loss_summary = tf.summary.scalar('Loss', loss)
+		class_summary = tf.summary.scalar('Classification Loss', classification_loss)
+		equi_summary = tf.summary.scalar('Equivariant loss', equi_loss)
+		reg_loss = tf.summary.scalar('Regularization loss', regularization_loss)
+		acc_summary = tf.summary.scalar('Accuracy', acc)
+		lr_summary = tf.summary.scalar('Learning rate', lr)
+		merged = tf.summary.merge_all()
 	
 	if opt['is_training']:
 		# Build optimizer

@@ -65,7 +65,7 @@ def single_model(x, opt):
 		# Tail
 	with tf.variable_scope('tail') as scope:
 		gap = tf.reduce_mean(y[-1], axis=(1,2), keep_dims=True)
-		logits = conv(tf.nn.relu(gap), [1,1,8*nc,opt['n_labels']], name='VGGout')
+		logits = conv(tf.nn.relu(gap), [1,1,8*nc,opt['n_labels']], opt, name='VGGout')
 		logits = tf.squeeze(logits, squeeze_dims=(1,2))
 	
 	return logits

@@ -35,6 +35,7 @@ def read_my_file_format(filename_queue, im_size, opt):
 	if opt['is_training']:
 		image = tf.image.random_flip_left_right(image)
 		#image = tf.image.per_image_standardization(image)
+
 	
 	return image, tf.to_int64(tf.string_to_number(label))
 
