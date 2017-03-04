@@ -35,7 +35,7 @@ def read_my_file_format(filename_queue, im_size, opt):
 		# Image preprocessing
 		image = tf.image.resize_image_with_crop_or_pad(image,im_size[0],im_size[1])
 		mean = tf.constant([123.68, 116.779, 103.939], dtype=tf.float32, shape=[1, 1, 3], name='img_mean')
-		image = image-mean
+		image = (image-mean)/255.
 		if opt['is_training']:
 			image = tf.image.random_flip_left_right(image)
 			
