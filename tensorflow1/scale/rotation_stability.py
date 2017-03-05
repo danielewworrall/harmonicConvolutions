@@ -25,11 +25,10 @@ def get_feature_maps(inputs, outputs, opt):
 	features = outputs
 
 	X = skio.imread('./images/balloons.jpg')
-	X = X[:224,:224,:]
+	X = X[np.newaxis, :224,:224,:]
 
 	# For checkpoints
 	saver = tf.train.Saver()
-	feature_names = ['layer1', 'layer2', 'layer3', 'layer4', 'layer5']
 
 	with tf.Session() as sess:
 		init_op = tf.local_variables_initializer()
@@ -45,7 +44,8 @@ def get_feature_maps(inputs, outputs, opt):
 			tp = el.get_t_transform(angle, opt['im_size'])	
 			feed_dict = {x: X,is_training: False, t_params: tp}
 			Features = sess.run(features, feed_dict=feed_dict)
-			np.savez('{:s}/features_{:03f}'.format(opt['save_features_path'], angle), Features, feature_names)
+			for j, fs in enumerate(Features):			
+				np.savez('{:s}/layer_{:d}/angle_{:03f}'.format(opt['save_features_path'], j, angle), fs)
 
 
 def get_latest_model(model_file):
@@ -91,7 +91,7 @@ def main(opt):
 	# Construct input graph
 	x = tf.placeholder(tf.float32, [1,224,224,3], name='x')
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
-	t_params = tf.placeholder(tf.float32, [], name='t_params')
+	t_params = tf.placeholder(tf.float32, [6], name='t_params')
 
 	# Build the model
 	features = models.single_model_feature_maps(x, is_training, opt)
