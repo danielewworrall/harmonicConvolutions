@@ -23,7 +23,10 @@ def get_feature_maps(inputs, outputs, opt):
 	"""Validate the current model"""
 	x, is_training, t_params = inputs
 	features = outputs
-	
+
+	X = skio.imread('./images/balloons.jpg')
+	X = X[:224,:224,:]
+
 	# For checkpoints
 	saver = tf.train.Saver()
 	feature_names = ['layer1', 'layer2', 'layer3', 'layer4', 'layer5']
