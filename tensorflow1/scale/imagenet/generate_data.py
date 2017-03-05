@@ -1,22 +1,81 @@
 '''Generate ImageNet subsamples'''
 
+import operator
 import os
 import sys
 import time
 
-
+import numpy as np
 def main():
+	k = 25
 	folder = '/home/dworrall/Data/ImageNet/labels/'
 	get_stats(folder)
-	wnid_dict = wnid_list(folder, save=True)
-	for i in xrange(10):
-		print 2**i
-		build_train_set(folder, 2**i, wnid_dict)
-	build_validation_set(folder, wnid_dict)
+	wnid_dict = wnid_list(folder, save=False)
+	#for i in xrange(10):
+	#	print 2**i
+	#	build_train_set(folder, 2**i, wnid_dict)
+	#build_validation_set(folder, wnid_dict)
+	sorted_keys, wnid_relabels = top_k_categories(folder, k, wnid_dict)
+	top_k_validation(folder, k, sorted_keys, wnid_dict, wnid_relabels)
+
+
+def top_k_validation(folder, k, sorted_keys, wnid_dict, wnid_relabels):
+	"""Only use the validation examples from the top k sorted keys"""
+	fname = folder + '/top_k/validation.txt'
+	new_fname = folder + 'top_k/validation_{:04d}.txt'.format(k)
+	'''
+	top_k = []
+	n_cats = len(sorted_keys)
+	for i in xrange(k):
+		key = sorted_keys[n_cats-i-1][0]
+		top_k.append(wnid_dict[key])
+	'''
+		
+	with open(fname, 'r') as fp:
+		lines = fp.readlines()
+	with open(new_fname, 'w') as fp:
+		for line in lines:
+			string = line.split(',')
+			wnid_num = int(string[1].replace('\n',''))
+			wnid = wnid_dict.keys()[wnid_dict.values().index(wnid_num)]
+			if wnid in wnid_relabels:
+				fp.write('{:s},{:d}\n'.format(string[0],wnid_relabels[wnid]))
+
+
+def top_k_categories(folder, k, wnid_dict):
+	"""Keep the k categories of largest size"""
+	fname = folder + 'train.txt'
+	new_fname = folder + 'top_k/train_{:04d}.txt'.format(k)
+	relabel_fname = folder + 'top_k/relabels_{:04d}.txt'.format(k)
+	
+	categories = read_categories(fname)
+	category_sizes = {}
+	for key, val in categories.iteritems():
+		category_sizes[key] = len(val)
+	sorted_keys = sorted(category_sizes.items(), key=operator.itemgetter(1))
+	
+	n_cats = len(category_sizes)
+	wnid_relabels = {}
+	for j in xrange(k):
+		key = sorted_keys[n_cats-j-1][0]
+		wnid_relabels[key] = j
+	
+	with open(new_fname, 'w') as fp:
+		for i in xrange(k):
+			key = sorted_keys[n_cats-i-1][0]
+			new_label = wnid_relabels[key]
+			string = ['{:s},{:d}\n'.format(address.replace('\n',''),new_label) \
+						 for address in categories[key]]
+			fp.writelines(string)
+	
+	with open(relabel_fname, 'w') as fp:
+		for key, val in wnid_relabels.iteritems():
+			fp.write('{:s},{:d}\n'.format(key,val))
+	return sorted_keys, wnid_relabels
 
 
 def read_categories(fname):
-	"""Build training set, using first n_images per category"""
+	"""Return categories"""
 	categories = {}
 	
 	with open(fname, 'r') as fp:
