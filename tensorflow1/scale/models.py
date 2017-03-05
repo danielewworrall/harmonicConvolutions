@@ -55,7 +55,7 @@ def siamese_model(x, is_training, t_params, f_params, opt):
 
 
 def single_model(x, is_training, opt):
-	"""Build siamese models for equivariance tests"""
+	"""Return single branch of the siamere model"""
 	nc = opt['n_channels']
 	xsh = x.get_shape().as_list()
 	# Mouth
@@ -69,6 +69,14 @@ def single_model(x, is_training, opt):
 		logits = tf.squeeze(logits, squeeze_dims=(1,2))
 	
 	return logits
+
+
+def single_model_feature_maps(x, is_training, opt):
+	"""Return feature maps from single branch of the siamese model"""
+	with tf.variable_scope('siamese') as scope:
+		y = VGG(x, is_training, opt)
+	
+	return y
 
 
 def VGG(x, is_training, opt, branch=1):
