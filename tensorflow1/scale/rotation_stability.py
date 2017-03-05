@@ -39,7 +39,7 @@ def get_feature_maps(inputs, outputs, opt):
 
 		for i in xrange(opt['n_angles']):
 			angle = (2.*np.pi*i)/opt['n_angles']
-			tp = el.get_transform(angle, opt['im_size'])	
+			tp = el.get_t_transform(angle, opt['im_size'])	
 			feed_dict = {x: X,is_training: False, t_params: tp}
 			Features = sess.run(features, feed_dict=feed_dict)
 			np.savez('{:s}/features_{:03f}'.format(opt['save_features_path'], angle), Features, feature_names)
