@@ -11,19 +11,33 @@ import tensorflow as tf
 from spatial_transformer import transformer
 
 
-def transform_features(x, t_params, f_params):
-	"""Rotate features in the channels"""
-	# 1) Rotate features through channels. We have to perform a broadcasted
-	# matrix--matrix multiply on two subarrays of the whole tensor, but this does
-	# not currently exist in TensorFlow, so we have to do it the long way.
-	xsh = x.get_shape().as_list()
+def feature_space_transform2d(x, xsh, f_params):
+	x = tf.reshape(x, tf.stack([xsh[0],xsh[1]/2,2]))
+	f1 = tf.reshape(f_params[:,0,:], tf.stack([xsh[0],1,2]))
+	f2 = tf.reshape(f_params[:,1,:], tf.stack([xsh[0],1,2]))
+	x0 = tf.reduce_sum(tf.multiply(x, f1), axis=2)
+	x1 = tf.reduce_sum(tf.multiply(x, f2), axis=2)
+	x = tf.stack([x0, x1], axis=-1)
+	return tf.reshape(x, tf.stack([xsh[0],xsh[1]]))
+
+
+def feature_space_transform4d(x, xsh, f_params):
 	x = tf.reshape(x, tf.stack([xsh[0],xsh[1],xsh[2],xsh[3]/2,2]))
 	f1 = tf.reshape(f_params[:,0,:], tf.stack([xsh[0],1,1,1,2]))
 	f2 = tf.reshape(f_params[:,1,:], tf.stack([xsh[0],1,1,1,2]))
 	x0 = tf.reduce_sum(tf.multiply(x, f1), axis=4)
 	x1 = tf.reduce_sum(tf.multiply(x, f2), axis=4)
 	x = tf.stack([x0, x1], axis=-1)
-	x = tf.reshape(x, tf.stack([xsh[0],xsh[1],xsh[2],xsh[3]]))
+	return tf.reshape(x, tf.stack([xsh[0],xsh[1],xsh[2],xsh[3]]))
+
+
+def transform_features(x, t_params, f_params):
+	"""Rotate features in the channels"""
+	# 1) Rotate features through channels. We have to perform a broadcasted
+	# matrix--matrix multiply on two subarrays of the whole tensor, but this does
+	# not currently exist in TensorFlow, so we have to do it the long way.
+	xsh = x.get_shape().as_list()
+	x = feature_space_transform4d(x,xsh)
 	# 2) Rotate features spatially
 	y = transformer(x, t_params, (xsh[1],xsh[2]))
 	return y
