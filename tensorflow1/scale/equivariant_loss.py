@@ -29,11 +29,14 @@ def transform_features(x, t_params, f_params):
 	return y
 
 
-def get_t_transform(theta, imsh):
+def get_t_transform(theta, imsh, scale=1):
 	scale1 = np.array([[float(imsh[0])/imsh[1], 0.], [0., 1.]])
 	scale2 = np.array([[float(imsh[1])/imsh[0], 0.], [0., 1.]])
 	rot = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-	mat = np.dot(scale1, rot)
+	Scale = np.array([[scale, 0.], [0., 1.]])
+	linear = np.dot(Scale, dot)
+	
+	mat = np.dot(scale1, linear)
 	mat = np.dot(mat, scale2)
 	
 	mat = np.hstack((mat,np.zeros((2,1))))

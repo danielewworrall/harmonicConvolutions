@@ -145,7 +145,7 @@ def main(opt):
 	opt['mb_size'] = 25
 	opt['n_channels'] = 64
 	opt['n_iterations'] = 50000
-	opt['lr_schedule'] = [25000,37500]
+	opt['lr_schedule'] = [35000,45000]
 	opt['lr'] = 1e-2
 	opt['n_labels'] = 50
 	opt['save_step'] = 100
