@@ -13,10 +13,11 @@ import skimage.io as skio
 import tensorflow as tf
 
 import equivariant_loss as el
-import imagenet_loader
+#import imagenet_loader
 import models
 
 from matplotlib import pyplot as plt
+from spatial_transformer import transformer
 
 
 def get_feature_maps(inputs, outputs, opt):
@@ -24,8 +25,8 @@ def get_feature_maps(inputs, outputs, opt):
 	x, is_training, t_params = inputs
 	features = outputs
 
-	X = skio.imread('./images/balloons.jpg')
-	X = X[np.newaxis, :224,:224,:]
+	X = skio.imread('../images/balloons.jpg')
+	X = X[np.newaxis, :224,100:324,:]
 
 	# For checkpoints
 	saver = tf.train.Saver()
@@ -44,8 +45,15 @@ def get_feature_maps(inputs, outputs, opt):
 			tp = el.get_t_transform(angle, opt['im_size'])	
 			feed_dict = {x: X,is_training: False, t_params: tp}
 			Features = sess.run(features, feed_dict=feed_dict)
-			for j, fs in enumerate(Features):			
+			for j, fs in enumerate(Features):	
 				np.savez('{:s}/layer_{:d}/angle_{:03f}'.format(opt['save_features_path'], j, angle), fs)
+
+
+def create_folder(folder):
+	"""Create folder if it doesn't exist"""
+	if not os.path.exists(folder):
+		os.mkdir(folder)
+		print('Created: {:s}'.format(folder))
 
 
 def get_latest_model(model_file):
@@ -73,20 +81,25 @@ def main(opt):
 	opt['n_iterations'] = 50000
 	opt['lr_schedule'] = [25000,37500]
 	opt['lr'] = 1e-2
-	opt['n_labels'] = 50
+	opt['n_labels'] = 100
 	opt['save_step'] = 100
 	opt['im_size'] = (224,224)
 	opt['weight_decay'] = 1e-5
-	opt['equivariant_weight'] = 1e-1
+	opt['equivariant_weight'] = 1e-3
 	opt['equivariance_end'] = 3
-	opt['n_angles'] = 20
+	opt['n_angles'] = 360
 	flag = 'bn'
 	opt['summary_path'] = dir_ + '/summaries/train_{:04d}_{:.0e}_{:s}'.format(opt['n_labels'], opt['equivariant_weight'], flag)
 	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}_{:.0e}_{:s}/model.ckpt'.format(opt['n_labels'], opt['equivariant_weight'], flag)
 	opt['train_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/train_{:04d}'.format(opt['n_labels'])
 	opt['valid_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/validation_{:04d}'.format(opt['n_labels'])
 	opt['is_training'] = False
-	opt['save_features_path'] = './feature_maps'
+	opt['save_features_path'] = './feature_maps/feature_maps_{:.0e}'.format(opt['equivariant_weight'])
+	
+	create_folder(opt['save_features_path'])
+	for layer in xrange(5):
+		folder = '{:s}/layer_{:d}'.format(opt['save_features_path'], layer)
+		create_folder(folder)
 	
 	# Construct input graph
 	x = tf.placeholder(tf.float32, [1,224,224,3], name='x')
@@ -94,7 +107,8 @@ def main(opt):
 	t_params = tf.placeholder(tf.float32, [6], name='t_params')
 
 	# Build the model
-	features = models.single_model_feature_maps(x, is_training, opt)
+	x_trans = transformer(x, t_params, (224,224))
+	features = models.single_model_feature_maps(x_trans, is_training, opt)
 	
 	# Construct io
 	inputs = [x, is_training, t_params]
