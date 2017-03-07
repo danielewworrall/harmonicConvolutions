@@ -151,14 +151,15 @@ def main(opt):
 	opt['save_step'] = 100
 	opt['im_size'] = (224,224)
 	opt['weight_decay'] = 1e-5
-	opt['equivariant_weight'] = 1e-1
+	opt['equivariant_weight'] = 1e+1
 	opt['equivariance_end'] = 3
 	flag = 'bn'
 	opt['summary_path'] = dir_ + '/summaries/train_{:04d}_{:.0e}_{:s}'.format(opt['n_labels'], opt['equivariant_weight'], flag)
 	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}_{:.0e}_{:s}/model.ckpt'.format(opt['n_labels'], opt['equivariant_weight'], flag)
 	opt['train_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/train_{:04d}'.format(opt['n_labels'])
 	opt['valid_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/validation_{:04d}'.format(opt['n_labels'])
-	opt['is_training'] = True
+	opt['is_training'] = False
+	
 	
 	if not os.path.isdir(os.path.dirname(opt['save_path'])):
 		os.mkdir(os.path.dirname(opt['save_path']))
