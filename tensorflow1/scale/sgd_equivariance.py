@@ -48,7 +48,8 @@ def train(inputs, outputs, ops, opt):
 				current_lr = opt['lr']*np.power(0.1, exponent)
 				
 				# Run training steps
-				tp, fp = el.random_transform(opt['mb_size'], opt['im_size'])
+				#tp, fp = el.random_transform(opt['mb_size'], opt['im_size'])
+				tp, fp = el.random_transform_6(opt['mb_size'], opt['im_size'])
 				ops = [global_step, loss, top1, top5, merged, train_op]
 				feed_dict = {t_params: tp, f_params: fp, lr: current_lr, is_training: True}
 				gs, l, t1, t5, summary, __ = sess.run(ops, feed_dict=feed_dict)
@@ -143,22 +144,23 @@ def main(opt):
 	opt['root'] = '/home/dworrall'
 	dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
 	opt['mb_size'] = 25
-	opt['n_channels'] = 64
+	opt['n_channels'] = 60
 	opt['n_iterations'] = 50000
 	opt['lr_schedule'] = [35000,45000]
 	opt['lr'] = 1e-2
-	opt['n_labels'] = 50
+	opt['n_labels'] = 1000
+	opt['density'] = 32
 	opt['save_step'] = 100
 	opt['im_size'] = (224,224)
 	opt['weight_decay'] = 1e-5
-	opt['equivariant_weight'] = 1e+1
+	opt['equivariant_weight'] = 1e-3
 	opt['equivariance_end'] = 3
 	flag = 'bn'
-	opt['summary_path'] = dir_ + '/summaries/train_{:04d}_{:.0e}_{:s}'.format(opt['n_labels'], opt['equivariant_weight'], flag)
-	opt['save_path'] = dir_ + '/checkpoints/train_{:04d}_{:.0e}_{:s}/model.ckpt'.format(opt['n_labels'], opt['equivariant_weight'], flag)
-	opt['train_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/train_{:04d}'.format(opt['n_labels'])
-	opt['valid_folder'] = opt['root'] + '/Data/ImageNet/labels/top_k/validation_{:04d}'.format(opt['n_labels'])
-	opt['is_training'] = False
+	opt['summary_path'] = dir_ + '/summaries/subsets/train_{:04d}_{:.0e}_{:s}'.format(opt['density'], opt['equivariant_weight'], flag)
+	opt['save_path'] = dir_ + '/checkpoints/subsets/train_{:04d}_{:.0e}_{:s}/model.ckpt'.format(opt['density'], opt['equivariant_weight'], flag)
+	opt['train_folder'] = opt['root'] + '/Data/ImageNet/labels/subsets/train_{:04d}'.format(opt['density'])
+	opt['valid_folder'] = opt['root'] + '/Data/ImageNet/labels/subsets/validation_{:04d}'.format(opt['density'])
+	opt['is_training'] = True
 	
 	
 	if not os.path.isdir(os.path.dirname(opt['save_path'])):
@@ -172,7 +174,7 @@ def main(opt):
 		# Define variables
 		global_step = tf.Variable(0, name='global_step', trainable=False)
 		t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
-		f_params = tf.placeholder(tf.float32, [opt['mb_size'],2,2], name='f_params')
+		f_params = tf.placeholder(tf.float32, [opt['mb_size'],6,6], name='f_params')
 		lr = tf.placeholder(tf.float32, [], name='lr')
 		is_training = tf.placeholder(tf.bool, [], name='is_training')
 		# Build the model

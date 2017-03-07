@@ -39,7 +39,8 @@ def siamese_model(x, is_training, t_params, f_params, opt):
 		# Transformer branch
 		y1 = []
 		for features in y[:-1]:
-			y1.append(el.transform_features(features, t_params, f_params))
+			# y1.append(el.transform_features(features, t_params, f_params))
+			y1.append(el.transform_features_6(features, t_params, f_params))
 		# Siamese loss
 		x_pre = transformer(x, t_params, (xsh[1],xsh[2]))
 		scope.reuse_variables()

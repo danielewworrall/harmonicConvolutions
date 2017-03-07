@@ -5,6 +5,7 @@ import sys
 import time
 
 import numpy as np
+import scipy.linalg as splin
 
 import tensorflow as tf
 
@@ -49,7 +50,7 @@ def get_t_transform(theta, imsh, scale_x=1., scale_y=1.):
 	scale2 = np.array([[float(imsh[1])/imsh[0], 0.], [0., 1.]])
 	rot = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
 	Scale = np.array([[scale_x, 0.], [0., scale_y]])
-	linear = np.dot(Scale, dot)
+	linear = np.dot(Scale, rot)
 	
 	mat = np.dot(scale1, linear)
 	mat = np.dot(mat, scale2)
@@ -94,12 +95,21 @@ def feature_space_transform4d_6(x, xsh, f_params):
 	operating on a 6D representation
 	"""
 	x = tf.reshape(x, tf.stack([xsh[0],xsh[1],xsh[2],xsh[3]/6,6]))
-	f1 = tf.reshape(f_params[:,0,:], tf.stack([xsh[0],1,1,1,2]))
-	f2 = tf.reshape(f_params[:,1,:], tf.stack([xsh[0],1,1,1,2]))
-	x0 = tf.reduce_sum(tf.multiply(x, f1), axis=4)
-	x1 = tf.reduce_sum(tf.multiply(x, f2), axis=4)
-	x = tf.stack([x0, x1], axis=-1)
+	f1 = tf.reshape(f_params[:,0,:], tf.stack([xsh[0],1,1,1,6]))
+	f2 = tf.reshape(f_params[:,1,:], tf.stack([xsh[0],1,1,1,6]))
+	f3 = tf.reshape(f_params[:,2,:], tf.stack([xsh[0],1,1,1,6]))
+	f4 = tf.reshape(f_params[:,3,:], tf.stack([xsh[0],1,1,1,6]))
+	f5 = tf.reshape(f_params[:,4,:], tf.stack([xsh[0],1,1,1,6]))
+	f6 = tf.reshape(f_params[:,5,:], tf.stack([xsh[0],1,1,1,6]))
+	x1 = tf.reduce_sum(tf.multiply(x, f1), axis=4)
+	x2 = tf.reduce_sum(tf.multiply(x, f2), axis=4)
+	x3 = tf.reduce_sum(tf.multiply(x, f3), axis=4)
+	x4 = tf.reduce_sum(tf.multiply(x, f4), axis=4)
+	x5 = tf.reduce_sum(tf.multiply(x, f5), axis=4)
+	x6 = tf.reduce_sum(tf.multiply(x, f6), axis=4)
+	x = tf.stack([x1, x2, x3, x4, x5, x6], axis=-1)
 	return tf.reshape(x, tf.stack([xsh[0],xsh[1],xsh[2],xsh[3]]))
+
 
 
 def get_f_transform_6(theta, scale_x=1., scale_y=1.):
@@ -109,20 +119,26 @@ def get_f_transform_6(theta, scale_x=1., scale_y=1.):
 								[np.sin(scale_x), np.cos(scale_x)]])
 	Scale_y = np.array([[np.cos(scale_y), -np.sin(scale_y)],
 								[np.sin(scale_y), np.cos(scale_y)]])
-	
-	return np.hstack([Rot, Scale_x, Scale_y])
+	return splin.block_diag(Rot, Scale_x, Scale_y)
 
 
 def random_transform_6(mb_size, imsh):
 	t_params = []
 	f_params = []
+	
+	def sc(x, u, l):
+		return (u-l)*x + l
+	
 	for __ in xrange(mb_size):
 		t = np.random.rand()
-		rng = 1.6 - (1./1.6)
-		scale_x = rng*np.random.rand() + (1./1.6)
-		scale_y = rng*np.random.rand() + (1./1.6)
-		t_params.append(get_t_transform(2*np.pi*t, (imsh[0],imsh[1]), scale_x=scale_x, scale_y=scale_y))
-		f_params.append(get_f_transform_6(2*np.pi*t))
+		sx = np.random.rand()
+		sy = np.random.rand()
+		t_params.append(get_t_transform(2*np.pi*t, (imsh[0],imsh[1]),
+												  scale_x=sc(sx, 1.3, 1./1.3),
+												  scale_y=sc(sy, 1.3, 1./1.3)))
+		f_params.append(get_f_transform_6(2*np.pi*t,
+													 scale_x=np.pi*sx,
+													 scale_y=np.pi*sy))
 	return np.vstack(t_params), np.stack(f_params, axis=0)
 
 
