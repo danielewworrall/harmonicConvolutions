@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 # %% Create a batch of three images (1600 x 1200)
 # %% Image retrieved from:
 # %% https://raw.githubusercontent.com/skaae/transformer_network/master/cat.jpg
-im = ndimage.imread('../images/balloons.jpg')
+im = ndimage.imread('./images/balloons.jpg')
 im = im / 255.
 
 im = im.reshape(1, 306,700, 3)
