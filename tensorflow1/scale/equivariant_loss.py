@@ -16,9 +16,9 @@ def feature_space_transform2d(x, xsh, f_params):
 	x = tf.reshape(x, tf.stack([xsh[0],xsh[1]/2,2]))
 	f1 = tf.reshape(f_params[:,0,:], tf.stack([xsh[0],1,2]))
 	f2 = tf.reshape(f_params[:,1,:], tf.stack([xsh[0],1,2]))
-	x0 = tf.reduce_sum(tf.multiply(x, f1), axis=2)
-	x1 = tf.reduce_sum(tf.multiply(x, f2), axis=2)
-	x = tf.stack([x0, x1], axis=-1)
+	x1 = tf.reduce_sum(tf.multiply(x, f1), axis=2)
+	x2 = tf.reduce_sum(tf.multiply(x, f2), axis=2)
+	x = tf.stack([x1, x2], axis=-1)
 	return tf.reshape(x, tf.stack([xsh[0],xsh[1]]))
 
 

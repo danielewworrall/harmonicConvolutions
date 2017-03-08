@@ -74,7 +74,7 @@ def siamese_model(x, t_params, f_params, opt):
 		x2_ = tf.reshape(x2, tf.stack([xsh[0],784]))
 		z2, r2 = autoencoder(x2_)
 		r2 = tf.reshape(r2, tf.stack([xsh[0],28,28,1]))
-	
+
 	return x2, r1, r2, z1, z2
 
 
@@ -174,12 +174,13 @@ def train(inputs, outputs, ops, opt):
 			print('[{:03d}]: {:03f}'.format(epoch, train_loss))
 			
 			# Validation
-			if epoch % 100 == 0:
+			if epoch % 10 == 0:
 				Recon = []
 				sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
 				max_angles = 20*20
 				for i in xrange(max_angles):
 					fp = el.get_f_transform(2.*np.pi*i/(1.*max_angles))[np.newaxis,:,:]
+					print fp
 					ops = recon
 					feed_dict = {xs: sample, fs_params: fp}
 					Recon.append(sess.run(ops, feed_dict=feed_dict))
@@ -206,11 +207,11 @@ def main(opt):
 	opt['n_channels'] = 10
 	opt['n_epochs'] = 10000
 	opt['lr_schedule'] = [50, 75]
-	opt['lr'] = 1e-2
+	opt['lr'] = 1e-3
 	opt['save_step'] = 10
 	opt['im_size'] = (28,28)
 	opt['train_size'] = 55000
-	opt['equivariant_weight'] = 1e-1 #1e-3
+	opt['equivariant_weight'] = 1e0 #1e-3
 	flag = 'bn'
 	opt['summary_path'] = dir_ + '/summaries/autotrain_{:.0e}_{:s}'.format(opt['equivariant_weight'], flag)
 	opt['save_path'] = dir_ + '/checkpoints/autotrain_{:.0e}_{:s}/model.ckpt'.format(opt['equivariant_weight'], flag)
@@ -230,9 +231,9 @@ def main(opt):
 	recon = single_model(xs, fs_params)
 	
 	# Build loss and metrics
-	branch1_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x - r), axis=1))
-	branch2_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_ - r_), axis=1))
-	equi_loss = tf.reduce_mean(tf.square(zt - z_))
+	branch1_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x - r), axis=(1,2)))
+	branch2_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_ - r_), axis=(1,2)))
+	equi_loss = tf.reduce_mean(tf.reduce_sum(tf.square(zt - z_), axis=1))
 	loss = branch1_loss + branch2_loss + opt['equivariant_weight']*equi_loss
 	
 	loss_summary = tf.summary.scalar('Loss', loss)
@@ -241,7 +242,8 @@ def main(opt):
 	merged = tf.summary.merge_all()
 	
 	# Build optimizer
-	optim = tf.train.MomentumOptimizer(lr, 0.9, use_nesterov=True)
+	#optim = tf.train.MomentumOptimizer(lr, 0.9, use_nesterov=True)
+	optim = tf.train.AdamOptimizer(lr)
 	train_op = optim.minimize(loss, global_step=global_step)
 	
 	inputs = [x, global_step, t_params, f_params, lr, xs, fs_params]
