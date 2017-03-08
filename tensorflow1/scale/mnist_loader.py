@@ -33,9 +33,9 @@ def extract_images(filename):
     num_images = _read32(bytestream)
     rows = _read32(bytestream)
     cols = _read32(bytestream)
-    buf = bytestream.read(rows * cols * num_images)
-    data = numpy.frombuffer(buf, dtype=numpy.uint8)
-    data = data.reshape(num_images, rows, cols, 1)
+    buf = bytestream.read(rows[0] * cols[0] * num_images[0])
+    data = numpy.frombuffer(buf, dtype=numpy.uint8) #change for numpy version
+    data = data.reshape(num_images[0], rows[0], cols[0], 1)
     return data
   
 def dense_to_one_hot(labels_dense, num_classes=10):
@@ -56,7 +56,7 @@ def extract_labels(filename, one_hot=False):
           'Invalid magic number %d in MNIST label file: %s' %
           (magic, filename))
     num_items = _read32(bytestream)
-    buf = bytestream.read(num_items)
+    buf = bytestream.read(num_items[0])
     labels = numpy.frombuffer(buf, dtype=numpy.uint8)
     if one_hot:
       return dense_to_one_hot(labels)

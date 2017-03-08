@@ -4,10 +4,9 @@ import os
 import sys
 import time
 sys.path.append('../')
-sys.path.append('./imagenet')
 
-import cv2
-import input_data
+#import cv2
+#import input_data
 import numpy as np
 import skimage.io as skio
 import tensorflow as tf
@@ -180,7 +179,7 @@ def train(inputs, outputs, ops, opt):
 				max_angles = 20*20
 				for i in xrange(max_angles):
 					fp = el.get_f_transform(2.*np.pi*i/(1.*max_angles))[np.newaxis,:,:]
-					print fp
+					#print fp
 					ops = recon
 					feed_dict = {xs: sample, fs_params: fp}
 					Recon.append(sess.run(ops, feed_dict=feed_dict))
@@ -201,8 +200,8 @@ def train(inputs, outputs, ops, opt):
 def main(opt):
 	"""Main loop"""
 	tf.reset_default_graph()
-	opt['root'] = '/home/daniel'
-	dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
+	opt['root'] = '/home/sgarbin'
+	dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
 	opt['mb_size'] = 128
 	opt['n_channels'] = 10
 	opt['n_epochs'] = 10000
