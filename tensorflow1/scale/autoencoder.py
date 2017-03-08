@@ -29,6 +29,11 @@ def load_data():
 					 'test': mnist.test._labels}
 	return data
 
+def dot_product(x, y):
+	return tf.reduce_sum(tf.multiply(x,y), axis=1)
+
+def cosine_distance(x, y):
+	return tf.reduce_mean(dot_product(x, y) / (dot_product(x, x) * dot_product(y, y)))
 
 def random_sampler(n_data, opt, random=True):
 	"""Return minibatched data"""
@@ -42,6 +47,20 @@ def random_sampler(n_data, opt, random=True):
 	return mb_list
 
 ############## MODEL ####################
+def convolutional(x, conv_size, num_filters, stride=1, name='c0',
+		bias_init=0.01, padding='SAME', non_linear_func=tf.nn.relu):
+	w = tf.get_variable(name + '_conv_w', [conv_size, conv_size, x.get_shape()[3], num_filters])
+	b = tf.get_variable(name + '_conv_b', [num_filters])
+	result = tf.nn.conv2d(x, w, [1, stride, stride, 1], padding, name = name + 'conv')
+	return non_linear_func(bias_add(result, num_filters, name=name), name = name + '_conv_nl')
+
+def flatten(input):
+	s = input.get_shape().as_list()
+	num_params = 1
+	for i in range(1, len(s)): #ignore batch size
+		num_params *= s[i]
+	return tf.reshape(input, [s[0], num_params]), num_params
+
 def linear(x, shape, name='0', bias_init=0.01):
 	"""Basic linea matmul layer"""
 	He_initializer = tf.contrib.layers.variance_scaling_initializer()
@@ -64,7 +83,11 @@ def siamese_model(x, t_params, f_params, opt):
 		# Basic branch
 		x1 = tf.reshape(x, tf.stack([xsh[0],784]))
 		z1, r1 = autoencoder(x1)
-		z1 = el.feature_space_transform2d(z1, [xsh[0], 250], f_params)
+		
+		#split into invariant and equivariant
+		z1_stream1, z1_stream2 = tf.split(z1, opt['latent_split'], axis=1)
+		z1_stream1 = el.feature_space_transform2d(z1_stream1, [xsh[0], opt['latent_split'][0]], f_params)
+
 		r1 = tf.reshape(r1, tf.stack([xsh[0],28,28,1]))
 		
 		# Transformer branch
@@ -72,9 +95,14 @@ def siamese_model(x, t_params, f_params, opt):
 		x2 = transformer(x, t_params, (28,28))
 		x2_ = tf.reshape(x2, tf.stack([xsh[0],784]))
 		z2, r2 = autoencoder(x2_)
+		z2_stream1, z2_stream2 = tf.split(z2, opt['latent_split'], axis=1)
 		r2 = tf.reshape(r2, tf.stack([xsh[0],28,28,1]))
 
-	return x2, r1, r2, z1, z2
+		#concat back
+		#z1 = tf.concat([z1_stream1, z1_stream2], 1)
+		#z2 = tf.concat([z2_stream1, z2_stream2], 1)
+	return x2, r1, r2, z1_stream1, z1_stream2, z2_stream1, z2_stream2
+	#return x2, r1, r2, z1, z2
 
 
 def single_model(x, f_params):
@@ -85,8 +113,8 @@ def single_model(x, f_params):
 		# Basic branch
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("Encoder", reuse=True) as scope:
-			z = encoder(x)
-		z = el.feature_space_transform2d(z, [xsh[0], 250], f_params)
+			z = encoder(x, conv=False)
+		z = el.feature_space_transform2d(z, [xsh[0], 256], f_params)
 		with tf.variable_scope("Decoder", reuse=True) as scope:
 			r = decoder(z)
 	return r
@@ -96,25 +124,36 @@ def autoencoder(x):
 	"""Build autoencoder"""
 	xsh = x.get_shape().as_list()
 	with tf.variable_scope("Encoder") as scope:
-		z = encoder(x)
+		z = encoder(x, conv=False)
 	with tf.variable_scope("Decoder") as scope:
 		r = decoder(z)
 	return z, r
 
 
-def encoder(x):
-	"""Encoder MLP"""
-	l1 = linear(x, [784,500], name='1')
-	l2 = linear(tf.nn.relu(l1), [500,500], name='2')
-	l3 = linear(tf.nn.relu(l2), [500,250], name='3')
-	return linear(tf.nn.relu(l3), [250,250], name='4')
+def encoder(x, conv=False):
+	if conv:
+		stream = tf.reshape(x, [x.get_shape().as_list()[0], 28, 28, 1])
+		stream = convolutional(stream, 3, 16, stride=2, name='c1')
+		stream = convolutional(stream, 3, 32, stride=2, name='c2')
+		#stream = convolutional(stream, 3, 64, stride=2, name='c2')
+		stream, num_units = flatten(stream)
+		return linear(stream, [num_units,256], name='c3')
+	else:
+		"""Encoder MLP"""
+		l1 = linear(x, [784,500], name='1')
+		l2 = linear(tf.nn.relu(l1), [500,500], name='2')
+		l3 = linear(tf.nn.relu(l2), [500,256], name='3')
+		return tf.nn.sigmoid(linear(tf.nn.relu(l3), [256,256], name='4'))
 
-def decoder(z):
-	"""Encoder MLP"""
-	l1 = linear(z, [250,250], name='5')
-	l2 = linear(tf.nn.relu(l1), [250,500], name='6')
-	l3 = linear(tf.nn.relu(l2), [500,500], name='7')
-	return tf.nn.sigmoid(linear(tf.nn.relu(l3), [500,784], name='8'))
+def decoder(z, conv=False):
+	if conv:
+		print('ERROR! Not implemented')
+	else:
+		"""Encoder MLP"""
+		l1 = linear(z, [256,256], name='5')
+		l2 = linear(tf.nn.relu(l1), [256,500], name='6')
+		l3 = linear(tf.nn.relu(l2), [500,500], name='7')
+		return tf.nn.sigmoid(linear(tf.nn.relu(l3), [500,784], name='8'))
 	
 
 ######################################################
@@ -210,10 +249,13 @@ def main(opt):
 	opt['save_step'] = 10
 	opt['im_size'] = (28,28)
 	opt['train_size'] = 55000
-	opt['equivariant_weight'] = 1e0 #1e-3
+	opt['equivariant_weight'] = 1 #1e-3
 	flag = 'bn'
 	opt['summary_path'] = dir_ + '/summaries/autotrain_{:.0e}_{:s}'.format(opt['equivariant_weight'], flag)
 	opt['save_path'] = dir_ + '/checkpoints/autotrain_{:.0e}_{:s}/model.ckpt'.format(opt['equivariant_weight'], flag)
+	opt['latent_split'] = [246, 10]
+	opt['loss_type_image'] = 'l2'
+	opt['loss_type_latents'] = 'l2'
 
 	
 	# Construct input graph
@@ -226,14 +268,27 @@ def main(opt):
 	lr = tf.placeholder(tf.float32, [], name='lr')
 	fs_params = tf.placeholder(tf.float32, [1,2,2], name='fs_params')
 	# Build the model
-	x_, r, r_, zt, z_ = siamese_model(x, t_params, f_params, opt)
+	#x_, r, r_, zt, z_ = siamese_model(x, t_params, f_params, opt)
+	x_, r, r_, zt1, zt2, z1_, z2_ = siamese_model(x, t_params, f_params, opt)
 	recon = single_model(xs, fs_params)
 	
 	# Build loss and metrics
-	branch1_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x - r), axis=(1,2)))
-	branch2_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_ - r_), axis=(1,2)))
-	equi_loss = tf.reduce_mean(tf.reduce_sum(tf.square(zt - z_), axis=1))
-	loss = branch1_loss + branch2_loss + opt['equivariant_weight']*equi_loss
+	if opt['loss_type_image'] == 'l2':
+		branch1_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x - r), axis=(1,2)))
+		branch2_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_ - r_), axis=(1,2)))
+	elif opt['loss_type_image'] == 'l1':
+		branch1_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(x - r), axis=(1,2)))
+		branch2_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(x_ - r_), axis=(1,2)))
+	#build loss for latents
+	if opt['loss_type_latents'] == 'l2':
+		equi_loss = tf.reduce_mean(tf.reduce_sum(tf.square(zt1 - z1_), axis=1))
+	elif opt['loss_type_latents'] == 'l1':
+		equi_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(zt1 - z1_), axis=1))
+	elif opt['loss_type_latents'] == 'cos':
+		equi_loss =cosine_distance(zt1, z1_)
+	
+	#assemble overall loss
+	loss = (branch1_loss + branch2_loss) + opt['equivariant_weight']*equi_loss
 	
 	loss_summary = tf.summary.scalar('Loss', loss)
 	equi_summary = tf.summary.scalar('Equivariant loss', equi_loss)
