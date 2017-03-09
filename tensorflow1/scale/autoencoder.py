@@ -85,24 +85,27 @@ def siamese_model(x, t_params, f_params, opt):
 		z1, r1 = autoencoder(x1)
 		
 		#split into invariant and equivariant
-		z1_stream1, z1_stream2 = tf.split(z1, opt['latent_split'], axis=1)
-		z1_stream1 = el.feature_space_transform2d(z1_stream1, [xsh[0], opt['latent_split'][0]], f_params)
-
+		if len(opt['latent_split']) > 1:
+			z1_stream1, z1_stream2 = tf.split(z1, opt['latent_split'], axis=1)
+			z1_stream1 = el.feature_space_transform2d(z1_stream1, [xsh[0], opt['latent_split'][0]], f_params)
+		else:
+			z1_stream1 = el.feature_space_transform2d(z1, [xsh[0], opt['latent_split'][0]], f_params)
 		r1 = tf.reshape(r1, tf.stack([xsh[0],28,28,1]))
 		
 		# Transformer branch
 		scope.reuse_variables()
 		x2 = transformer(x, t_params, (28,28))
+		tf.summary.image('input_images', x, max_outputs=4)
+		tf.summary.image('rotated_images', x2, max_outputs=4)
+
 		x2_ = tf.reshape(x2, tf.stack([xsh[0],784]))
 		z2, r2 = autoencoder(x2_)
-		z2_stream1, z2_stream2 = tf.split(z2, opt['latent_split'], axis=1)
-		r2 = tf.reshape(r2, tf.stack([xsh[0],28,28,1]))
-
-		#concat back
-		#z1 = tf.concat([z1_stream1, z1_stream2], 1)
-		#z2 = tf.concat([z2_stream1, z2_stream2], 1)
-	return x2, r1, r2, z1_stream1, z1_stream2, z2_stream1, z2_stream2
-	#return x2, r1, r2, z1, z2
+		if len(opt['latent_split']) > 1:
+			z2_stream1, z2_stream2 = tf.split(z2, opt['latent_split'], axis=1)
+			r2 = tf.reshape(r2, tf.stack([xsh[0],28,28,1]))
+			return x2, r1, r2, z1_stream1, z1_stream2, z2_stream1, z2_stream2
+		else:
+			return x2, r1, r2, z1, z2
 
 
 def single_model(x, f_params):
@@ -114,7 +117,7 @@ def single_model(x, f_params):
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("Encoder", reuse=True) as scope:
 			z = encoder(x, conv=False)
-		z = el.feature_space_transform2d(z, [xsh[0], 256], f_params)
+		z = el.feature_space_transform2d(z, [xsh[0], 128], f_params)
 		with tf.variable_scope("Decoder", reuse=True) as scope:
 			r = decoder(z)
 	return r
@@ -140,20 +143,24 @@ def encoder(x, conv=False):
 		return linear(stream, [num_units,256], name='c3')
 	else:
 		"""Encoder MLP"""
-		l1 = linear(x, [784,500], name='1')
-		l2 = linear(tf.nn.relu(l1), [500,500], name='2')
-		l3 = linear(tf.nn.relu(l2), [500,256], name='3')
-		return tf.nn.sigmoid(linear(tf.nn.relu(l3), [256,256], name='4'))
+		l1 = linear(x, [784,512], name='1')
+		#l2 = linear(tf.nn.relu(l1), [500,500], name='2')
+		#l2 = linear(tf.nn.relu(l2), [500,500], name='2b')
+		#l2 = linear(tf.nn.relu(l2), [500,500], name='2c')
+		#l3 = linear(tf.nn.relu(l2), [500,256], name='3')
+		return linear(tf.nn.sigmoid(l1), [512,128], name='4')
 
 def decoder(z, conv=False):
 	if conv:
 		print('ERROR! Not implemented')
 	else:
 		"""Encoder MLP"""
-		l1 = linear(z, [256,256], name='5')
-		l2 = linear(tf.nn.relu(l1), [256,500], name='6')
-		l3 = linear(tf.nn.relu(l2), [500,500], name='7')
-		return tf.nn.sigmoid(linear(tf.nn.relu(l3), [500,784], name='8'))
+		l1 = linear(z, [128,512], name='5')
+		#l2 = linear(tf.nn.relu(l1), [256,500], name='6')
+		#l3 = linear(tf.nn.relu(l2), [500,500], name='7')
+		#l3 = linear(tf.nn.relu(l3), [500,500], name='7b')
+		#l3 = linear(tf.nn.relu(l3), [500,500], name='7c')
+		return tf.nn.sigmoid(linear(tf.nn.sigmoid(l1), [512,784], name='8'))
 	
 
 ######################################################
@@ -253,7 +260,7 @@ def main(opt):
 	flag = 'bn'
 	opt['summary_path'] = dir_ + '/summaries/autotrain_{:.0e}_{:s}'.format(opt['equivariant_weight'], flag)
 	opt['save_path'] = dir_ + '/checkpoints/autotrain_{:.0e}_{:s}/model.ckpt'.format(opt['equivariant_weight'], flag)
-	opt['latent_split'] = [246, 10]
+	opt['latent_split'] = [128]#[246, 10]
 	opt['loss_type_image'] = 'l2'
 	opt['loss_type_latents'] = 'l2'
 
@@ -269,7 +276,13 @@ def main(opt):
 	fs_params = tf.placeholder(tf.float32, [1,2,2], name='fs_params')
 	# Build the model
 	#x_, r, r_, zt, z_ = siamese_model(x, t_params, f_params, opt)
-	x_, r, r_, zt1, zt2, z1_, z2_ = siamese_model(x, t_params, f_params, opt)
+	if len(opt['latent_split']) > 1:
+ 		x_, r, r_, zt1, zt2, z1_, z2_ = siamese_model(x, t_params, f_params, opt)
+	else:
+		x_, r, r_, zt, z_ = siamese_model(x, t_params, f_params, opt)
+		zt1 = zt
+		z1_ = z_
+
 	recon = single_model(xs, fs_params)
 	
 	# Build loss and metrics
@@ -293,6 +306,7 @@ def main(opt):
 	loss_summary = tf.summary.scalar('Loss', loss)
 	equi_summary = tf.summary.scalar('Equivariant loss', equi_loss)
 	lr_summary = tf.summary.scalar('Learning rate', lr)
+	
 	merged = tf.summary.merge_all()
 	
 	# Build optimizer
