@@ -29,12 +29,6 @@ def load_data():
 					 'test': mnist.test._labels}
 	return data
 
-def dot_product(x, y):
-	return tf.reduce_sum(tf.multiply(x,y), axis=1)
-
-def cosine_distance(x, y):
-	return tf.reduce_mean(dot_product(x, y) / (dot_product(x, x) * dot_product(y, y)))
-
 def random_sampler(n_data, opt, random=True):
 	"""Return minibatched data"""
 	if random:
@@ -47,6 +41,12 @@ def random_sampler(n_data, opt, random=True):
 	return mb_list
 
 ############## MODEL ####################
+def dot_product(x, y):
+	return tf.reduce_sum(tf.multiply(x,y), axis=1)
+
+def cosine_distance(x, y):
+	return tf.reduce_mean(dot_product(x, y) / (dot_product(x, x) * dot_product(y, y)))
+
 def convolutional(x, conv_size, num_filters, stride=1, name='c0',
 		bias_init=0.01, padding='SAME', non_linear_func=tf.nn.relu):
 	w = tf.get_variable(name + '_conv_w', [conv_size, conv_size, x.get_shape()[3], num_filters])
@@ -108,11 +108,11 @@ def siamese_model(x, t_params, f_params, opt):
 			return x2, r1, r2, z1, z2
 
 
-def single_model(x, f_params):
+def single_model(x, f_params, name_scope='siamese'):
 	"""Build a model to rotate features"""
 	xsh = x.get_shape().as_list()
 	# Mouth
-	with tf.variable_scope('siamese', reuse=True) as scope:
+	with tf.variable_scope(name_scope, reuse=True) as scope:
 		# Basic branch
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("Encoder", reuse=True) as scope:
@@ -121,6 +121,20 @@ def single_model(x, f_params):
 		with tf.variable_scope("Decoder", reuse=True) as scope:
 			r = decoder(z)
 	return r
+
+def single_model_non_siamese(x, f_params):
+	"""Build a model to rotate features"""
+	xsh = x.get_shape().as_list()
+	# Mouth
+	with tf.variable_scope('mainModel', reuse=False) as scope:
+		# Basic branch
+		x = tf.reshape(x, tf.stack([xsh[0],784]))
+		with tf.variable_scope("Encoder", reuse=False) as scope:
+			z = encoder(x, conv=False)
+		z = el.feature_space_transform2d(z, [xsh[0], 128], f_params)
+		with tf.variable_scope("Decoder", reuse=False) as scope:
+			r = decoder(z)
+	return r, z
 
 
 def autoencoder(x):
@@ -138,9 +152,9 @@ def encoder(x, conv=False):
 		stream = tf.reshape(x, [x.get_shape().as_list()[0], 28, 28, 1])
 		stream = convolutional(stream, 3, 16, stride=2, name='c1')
 		stream = convolutional(stream, 3, 32, stride=2, name='c2')
-		#stream = convolutional(stream, 3, 64, stride=2, name='c2')
-		stream, num_units = flatten(stream)
-		return linear(stream, [num_units,256], name='c3')
+		stream = convolutional(stream, 3, 64, stride=2, name='c2')
+		#stream, num_units = flatten(stream)
+		#return linear(stream, [num_units,256], name='c3')
 	else:
 		"""Encoder MLP"""
 		l1 = linear(x, [784,512], name='1')
@@ -166,7 +180,7 @@ def decoder(z, conv=False):
 ######################################################
 
 
-def train(inputs, outputs, ops, opt):
+def train_siamese(inputs, outputs, ops, opt):
 	"""Training loop"""
 	x, global_step, t_params, f_params, lr, xs, fs_params = inputs
 	loss, merged, recon = outputs
@@ -242,8 +256,88 @@ def train(inputs, outputs, ops, opt):
 				save_name = './samples/image_%04d.png' % epoch
 				skio.imsave(save_name, tile_image)
 
+def train(inputs, outputs, ops, opt):
+	"""Training loop"""
+	x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params = inputs
+	loss, merged, recon = outputs
+	train_op = ops
+	
+	# For checkpoints
+	saver = tf.train.Saver()
+	gs = 0
+	start = time.time()
+	
+	data = load_data()
+	data['X']['train'] = data['X']['train'][:opt['train_size'],:]
+	data['Y']['train'] = data['Y']['train'][:opt['train_size'],:]
+	n_train = data['X']['train'].shape[0]
+	n_valid = data['X']['valid'].shape[0]
+	n_test = data['X']['test'].shape[0]
+	with tf.Session() as sess:
+		# Threading and queueing
+		coord = tf.train.Coordinator()
+		threads = tf.train.start_queue_runners(coord=coord)
+		
+		# Initialize variables
+		init = tf.global_variables_initializer()
+		sess.run(init)
+		
+		train_writer = tf.summary.FileWriter(opt['summary_path'], sess.graph)
+		# Training loop
+		for epoch in xrange(opt['n_epochs']):
+			# Learning rate
+			exponent = sum([epoch > i for i in opt['lr_schedule']])
+			current_lr = opt['lr']*np.power(0.1, exponent)	
+			
+			# Train
+			train_loss = 0.
+			train_acc = 0.
+			# Run training steps
+			mb_list = random_sampler(n_train, opt)
+			for i, mb in enumerate(mb_list):
+				#initial random transform
+				tp_init, fp_init = el.random_transform(opt['mb_size'], opt['im_size'])
 
-def main(opt):
+				tp, fp = el.random_transform(opt['mb_size'], opt['im_size'])
+				ops = [global_step, loss, merged, train_op]
+				feed_dict = {x: data['X']['train'][mb,...],
+								 t_params: tp,
+								 f_params: fp,
+								 t_params_initial: tp_init,
+								 lr: current_lr}
+				gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
+				train_loss += l
+				# Summary writers
+				train_writer.add_summary(summary, gs)
+			train_loss /= (i+1.)
+			print('[{:03d}]: {:03f}'.format(epoch, train_loss))
+			
+			# Validation
+			if epoch % 10 == 0:
+				Recon = []
+				sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
+				max_angles = 20*20
+				for i in xrange(max_angles):
+					fp = el.get_f_transform(2.*np.pi*i/(1.*max_angles))[np.newaxis,:,:]
+					#print fp
+					ops = recon
+					feed_dict = {xs: sample, fs_params: fp}
+					Recon.append(sess.run(ops, feed_dict=feed_dict))
+				
+				samples_ = np.reshape(Recon, (-1,28,28))
+				
+				ns = 20
+				sh = 28
+				tile_image = np.zeros((ns*sh,ns*sh))
+				for j in xrange(ns*ns):
+					m = sh*(j/ns) 
+					n = sh*(j%ns)
+					tile_image[m:m+sh,n:n+sh] = 1.-samples_[j,...]
+				save_name = './samples/image_%04d.png' % epoch
+				skio.imsave(save_name, tile_image)
+
+
+def main_siamese(opt):
 	"""Main loop"""
 	tf.reset_default_graph()
 	opt['root'] = '/home/sgarbin'
@@ -321,6 +415,87 @@ def main(opt):
 	# Train
 	return train(inputs, outputs, ops, opt)
 
+def main(opt):
+	"""Main loop"""
+	tf.reset_default_graph()
+	opt['root'] = '/home/sgarbin'
+	dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
+	opt['mb_size'] = 128
+	opt['n_channels'] = 10
+	opt['n_epochs'] = 10000
+	opt['lr_schedule'] = [50, 75]
+	opt['lr'] = 1e-3
+	opt['save_step'] = 10
+	opt['im_size'] = (28,28)
+	opt['train_size'] = 55000
+	opt['equivariant_weight'] = 1 #1e-3
+	flag = 'bn'
+	opt['summary_path'] = dir_ + '/summaries/autotrain_{:.0e}_{:s}'.format(opt['equivariant_weight'], flag)
+	opt['save_path'] = dir_ + '/checkpoints/autotrain_{:.0e}_{:s}/model.ckpt'.format(opt['equivariant_weight'], flag)
+	opt['latent_split'] = [128]#[246, 10]
+	opt['loss_type_image'] = 'l2'
+	opt['loss_type_latents'] = 'l2'
+
+	
+	# Construct input graph
+	#input image
+	x = tf.placeholder(tf.float32, [opt['mb_size'],28,28,1], name='x')
+	#input for validation
+	xs = tf.placeholder(tf.float32, [1,28,28,1], name='xs')
+	# Define variables
+	global_step = tf.Variable(0, name='global_step', trainable=False)
+	#initial transformation
+	t_params_initial = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
+	#transform corresponding to latents
+	t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
+	#latent transform
+	f_params = tf.placeholder(tf.float32, [opt['mb_size'],2,2], name='f_params')
+	#transform for validation
+	fs_params = tf.placeholder(tf.float32, [1,2,2], name='fs_params')
+	lr = tf.placeholder(tf.float32, [], name='lr')
+	
+	# Build the model
+	shape_temp = x.get_shape()
+	x_initial_transform = transformer(x, t_params_initial, (28,28))
+	x_initial_transform.set_shape(shape_temp)
+	#build encoder
+	print(x_initial_transform, t_params)
+	reconstruction, latents = single_model_non_siamese(x_initial_transform, f_params)
+	reconstruction = tf.reshape(reconstruction, x.get_shape())
+	#transform input corres to latents
+	reconstruction_transform = transformer(x_initial_transform, t_params, (28,28))
+
+	loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - reconstruction), axis=(1,2)))
+
+	recon = single_model(xs, fs_params, name_scope='mainModel')
+	
+	'''# Build loss and metrics
+	if opt['loss_type_image'] == 'l2':
+		branch1_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x - r), axis=(1,2)))
+		branch2_loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_ - r_), axis=(1,2)))
+	elif opt['loss_type_image'] == 'l1':
+		branch1_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(x - r), axis=(1,2)))
+		branch2_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(x_ - r_), axis=(1,2)))
+	
+	#assemble overall loss
+	loss = (branch1_loss + branch2_loss) + opt['equivariant_weight']*equi_loss
+	'''
+
+	loss_summary = tf.summary.scalar('Loss', loss)
+	lr_summary = tf.summary.scalar('LearningRate', lr)
+	
+	merged = tf.summary.merge_all()
+	
+	# Build optimizer
+	optim = tf.train.AdamOptimizer(lr)
+	train_op = optim.minimize(loss, global_step=global_step)
+	
+	inputs = [x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params]
+	outputs = [loss, merged, recon]
+	ops = [train_op]
+	
+	# Train
+	return train(inputs, outputs, ops, opt)
 
 if __name__ == '__main__':
 	opt = {}
