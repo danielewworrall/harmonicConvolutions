@@ -34,6 +34,7 @@ def feature_space_transform4d(x, xsh, f_params):
 
 
 def transform_features(x, t_params, f_params):
+	temp_shape = x.get_shape()
 	"""Rotate features in the channels"""
 	# 1) Rotate features through channels. We have to perform a broadcasted
 	# matrix--matrix multiply on two subarrays of the whole tensor, but this does
@@ -42,6 +43,7 @@ def transform_features(x, t_params, f_params):
 	x = feature_space_transform4d(x,xsh,f_params)
 	# 2) Rotate features spatially
 	y = transformer(x, t_params, (xsh[1],xsh[2]))
+	y.set_shape(temp_shape)
 	return y
 
 

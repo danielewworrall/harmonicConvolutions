@@ -77,7 +77,7 @@ def convolutional(x, conv_size, num_filters, stride=1, name='c0',
 	return non_linear_func(bias_add(result, num_filters, name=name), name = name + '_conv_nl')
 
 def deconvolutional_deepmind(x, conv_size, out_shape, stride=1, name='c0',
-		bias_init=0.01, padding='VALID', non_linear_func=tf.nn.relu):
+		bias_init=0.01, padding='SAME', non_linear_func=tf.nn.relu):
 	#resize images
 	result = tf.image.resize_images(x, [out_shape[1], out_shape[2]],
 		method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
@@ -108,7 +108,7 @@ def bias_add(x, nc, bias_init=0.01, name='0'):
 	return tf.nn.bias_add(x, b)
 
 
-def single_model(x, f_params, name_scope='siamese', conv=False):
+def single_model(x, f_params, name_scope='siamese', conv=False, t_params=[]):
 	"""Build a model to rotate features"""
 	xsh = x.get_shape().as_list()
 	# Mouth
@@ -117,7 +117,10 @@ def single_model(x, f_params, name_scope='siamese', conv=False):
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("Encoder", reuse=True) as scope:
 			z = encoder(x, conv=conv)
-		z = el.feature_space_transform2d(z, [xsh[0], 128], f_params)
+		if conv:
+			z = el.transform_features(z, t_params, f_params)
+		else:
+			z = el.feature_space_transform2d(z, [xsh[0], 128], f_params)
 		with tf.variable_scope("Decoder", reuse=True) as scope:
 			r = decoder(z, conv=conv)
 	return r
@@ -152,12 +155,16 @@ def autoencoder(x):
 
 def encoder(x, conv=False):
 	if conv:
+		print('encoder activation sizes:')
 		stream = tf.reshape(x, [x.get_shape().as_list()[0], 28, 28, 1])
+		print(stream.get_shape().as_list())
 		stream = convolutional(stream, 3, 16, stride=2, name='c1')
+		print(stream.get_shape().as_list())
 		stream = convolutional(stream, 3, 32, stride=2, name='c2')
-		stream = convolutional(stream, 3, 64, stride=2, name='c2')
-		#stream, num_units = flatten(stream)
-		#return linear(stream, [num_units,256], name='c3')
+		print(stream.get_shape().as_list())
+		stream = convolutional(stream, 3, 64, stride=2, name='c3')
+		print(stream.get_shape().as_list())
+		return stream
 	else:
 		"""Encoder MLP"""
 		l1 = linear(x, [784,512], name='1')
@@ -168,8 +175,13 @@ def encoder(x, conv=False):
 		return linear(tf.nn.sigmoid(l1), [512,128], name='4')
 
 def decoder(z, conv=False):
+	bs = z.get_shape()[0]
 	if conv:
-		print('ERROR! Not implemented')
+		#stream = deconvolutional_deepmind(z, 3, [bs, 4, 4, 32], name='c13')
+		stream = deconvolutional_deepmind(z, 3, [bs, 7, 7, 32], name='c13')
+		stream = deconvolutional_deepmind(stream, 3, [bs, 14, 14, 16], name='c14')
+		stream = deconvolutional_deepmind(stream, 3, [bs, 28, 28, 1], name='c15')
+		return stream
 	else:
 		"""Encoder MLP"""
 		l1 = linear(z, [128,512], name='5')
@@ -238,16 +250,21 @@ def train(inputs, outputs, ops, opt):
 			train_loss /= (i+1.)
 			print('[{:03d}]: {:03f}'.format(epoch, train_loss))
 			
+			
 			# Validation
 			if epoch % 10 == 0:
 				Recon = []
 				sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
 				max_angles = 20*20
+				#pick a random initial transformation
+				tp_init, fp_init = el.random_transform(opt['mb_size'], opt['im_size'])
 				for i in xrange(max_angles):
 					fp = el.get_f_transform(2.*np.pi*i/(1.*max_angles))[np.newaxis,:,:]
 					#print fp
 					ops = recon
-					feed_dict = {xs: sample, fs_params: fp}
+					feed_dict = {xs: sample,
+								fs_params: fp,
+								t_params: tp_init}
 					Recon.append(sess.run(ops, feed_dict=feed_dict))
 				
 				samples_ = np.reshape(Recon, (-1,28,28))
@@ -280,7 +297,7 @@ def main(opt):
 	opt['summary_path'] = dir_ + '/summaries/autotrain_{:.0e}_{:s}'.format(opt['equivariant_weight'], flag)
 	opt['save_path'] = dir_ + '/checkpoints/autotrain_{:.0e}_{:s}/model.ckpt'.format(opt['equivariant_weight'], flag)
 	opt['loss_type_image'] = 'l2'
-	opt['convolutional'] = False
+	opt['convolutional'] = True
 
 	# Construct input graph
 	#input image
@@ -305,14 +322,15 @@ def main(opt):
 	x_initial_transform = transformer(x, t_params_initial, (28,28))
 	x_initial_transform.set_shape(shape_temp)
 	#build encoder
-	reconstruction, latents = single_model_non_siamese(x_initial_transform, f_params, t_params=t_params, conv=opt['convolutional'])
+	reconstruction, latents = single_model_non_siamese(x_initial_transform,
+		f_params, t_params=t_params, conv=opt['convolutional'])
 	reconstruction = tf.reshape(reconstruction, x.get_shape())
 	#transform input corresponding to latents for loss
 	reconstruction_transform = transformer(x_initial_transform, t_params, (28,28))
 
 	loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - reconstruction), axis=(1,2)))
 
-	recon = single_model(xs, fs_params, name_scope='mainModel', conv=opt['convolutional'])
+	recon = single_model(xs, fs_params, name_scope='mainModel', conv=opt['convolutional'], t_params=t_params)
 
 	loss_summary = tf.summary.scalar('Loss', loss)
 	lr_summary = tf.summary.scalar('LearningRate', lr)
