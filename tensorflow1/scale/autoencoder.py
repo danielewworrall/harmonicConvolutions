@@ -162,7 +162,7 @@ def encoder(x, conv=False):
 		print(stream.get_shape().as_list())
 		stream = convolutional(stream, 3, 32, stride=2, name='c2')
 		print(stream.get_shape().as_list())
-		stream = convolutional(stream, 3, 64, stride=2, name='c3')
+		stream = convolutional(stream, 3, 64, stride=2, name='c3', non_linear_func=tf.identity)
 		print(stream.get_shape().as_list())
 		return stream
 	else:
@@ -196,7 +196,7 @@ def decoder(z, conv=False):
 
 def train(inputs, outputs, ops, opt):
 	"""Training loop"""
-	x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params = inputs
+	x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params, ts_params = inputs
 	loss, merged, recon = outputs
 	train_op = ops
 	
@@ -259,12 +259,15 @@ def train(inputs, outputs, ops, opt):
 				#pick a random initial transformation
 				tp_init, fp_init = el.random_transform(opt['mb_size'], opt['im_size'])
 				for i in xrange(max_angles):
-					fp = el.get_f_transform(2.*np.pi*i/(1.*max_angles))[np.newaxis,:,:]
+					#fp = el.get_f_transform(2.*np.pi*i/(1.*max_angles))[np.newaxis,:,:]
+					tp, fp = el.random_transform_theta(1, opt['im_size'],
+						2.*np.pi*i/(1.*max_angles)) # last arg is theta
 					#print fp
 					ops = recon
 					feed_dict = {xs: sample,
 								fs_params: fp,
-								t_params: tp_init}
+								ts_params: tp,
+								t_params_initial: tp_init}
 					Recon.append(sess.run(ops, feed_dict=feed_dict))
 				
 				samples_ = np.reshape(Recon, (-1,28,28))
@@ -313,7 +316,8 @@ def main(opt):
 	#latent transform
 	f_params = tf.placeholder(tf.float32, [opt['mb_size'],2,2], name='f_params')
 	#transform for validation
-	fs_params = tf.placeholder(tf.float32, [1,2,2], name='fs_params')
+	ts_params = tf.placeholder(tf.float32, [1,6], name='ts_params') #image
+	fs_params = tf.placeholder(tf.float32, [1,2,2], name='fs_params') #latents
 	lr = tf.placeholder(tf.float32, [], name='lr')
 	
 	# Build the model
@@ -330,7 +334,7 @@ def main(opt):
 
 	loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - reconstruction), axis=(1,2)))
 
-	recon = single_model(xs, fs_params, name_scope='mainModel', conv=opt['convolutional'], t_params=t_params)
+	recon = single_model(xs, fs_params, name_scope='mainModel', conv=opt['convolutional'], t_params=ts_params)
 
 	loss_summary = tf.summary.scalar('Loss', loss)
 	lr_summary = tf.summary.scalar('LearningRate', lr)
@@ -341,7 +345,7 @@ def main(opt):
 	optim = tf.train.AdamOptimizer(lr)
 	train_op = optim.minimize(loss, global_step=global_step)
 	
-	inputs = [x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params]
+	inputs = [x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params, ts_params]
 	outputs = [loss, merged, recon]
 	ops = [train_op]
 	
