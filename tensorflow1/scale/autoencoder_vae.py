@@ -31,6 +31,7 @@ flags.DEFINE_integer('eq_dim', -1, 'number of latent units to rotate')
 flags.DEFINE_integer('num_latents', 32, 'Dimension of the latent variables')
 flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on latents')
 flags.DEFINE_integer('save_step', 50, 'Interval (epoch) for which to save')
+flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 ##---------------------
 
 ################ DATA #################
@@ -461,8 +462,12 @@ def main(_):
 	opt = {}
 	"""Main loop"""
 	tf.reset_default_graph()
-	opt['root'] = '/home/sgarbin'
-	dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
+	if FLAGS.Daniel:
+		opt['root'] = '/home/daniel'
+		dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
+	else:
+		opt['root'] = '/home/sgarbin'
+		dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
 	opt['mb_size'] = 128
 	opt['n_channels'] = 10
 	opt['n_epochs'] = 2000
