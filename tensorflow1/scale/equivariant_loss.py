@@ -82,7 +82,6 @@ def random_transform_theta(mb_size, imsh, theta):
 	t_params = []
 	f_params = []
 	for __ in xrange(mb_size):
-		t = np.random.rand()
 		t_params.append(get_t_transform(theta, (imsh[0],imsh[1])))
 		f_params.append(get_f_transform(theta))
 	return np.vstack(t_params), np.stack(f_params, axis=0)
