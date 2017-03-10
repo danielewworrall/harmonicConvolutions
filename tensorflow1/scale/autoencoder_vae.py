@@ -463,7 +463,7 @@ def main(_):
 	"""Main loop"""
 	tf.reset_default_graph()
 	if FLAGS.Daniel:
-		print'Hello Daniel!')
+		print('Hello Daniel!')
 		opt['root'] = '/home/daniel'
 		dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
 	else:
@@ -537,7 +537,7 @@ def main(_):
 	#kl_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + 2.0 * log_sigma - tf.square(mu) - tf.exp(2.0 * log_sigma), axis=1))
 	kl_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + 2.0 * tf.log(log_sigma) - tf.square(mu) - 2.0 * log_sigma, axis=1))
 	img_loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - reconstruction), axis=(1,2)))
-	loss = img_loss + kl_loss
+	loss = img_loss
 
 	recon = single_model(xs, fs_params, name_scope='mainModel', conv=opt['convolutional'],
 		t_params=ts_params, random_sample=random_sample)
