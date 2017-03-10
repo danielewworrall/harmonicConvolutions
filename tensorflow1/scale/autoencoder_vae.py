@@ -463,6 +463,7 @@ def main(_):
 	"""Main loop"""
 	tf.reset_default_graph()
 	if FLAGS.Daniel:
+		print'Hello Daniel!')
 		opt['root'] = '/home/daniel'
 		dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
 	else:
