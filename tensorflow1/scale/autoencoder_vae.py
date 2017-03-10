@@ -30,6 +30,7 @@ flags.DEFINE_boolean('ANALISE', False, 'runs model analysis')
 flags.DEFINE_integer('eq_dim', -1, 'number of latent units to rotate')
 flags.DEFINE_integer('num_latents', 32, 'Dimension of the latent variables')
 flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on latents')
+flags.DEFINE_integer('save_step', 50, 'Interval (epoch) for which to save')
 ##---------------------
 
 ################ DATA #################
@@ -116,7 +117,7 @@ def bias_add(x, nc, bias_init=0.01, name='0'):
 	return tf.nn.bias_add(x, b)
 
 
-def single_model(x, f_params, name_scope='siamese', conv=False, t_params=[]):
+def single_model(x, f_params, random_sample, name_scope='siamese', conv=False, t_params=[]):
 	"""Build a model to rotate features"""
 	xsh = x.get_shape().as_list()
 	# Mouth
@@ -124,7 +125,8 @@ def single_model(x, f_params, name_scope='siamese', conv=False, t_params=[]):
 		# Basic branch
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("Encoder", reuse=True) as scope:
-			z = encoder(x, conv=conv)
+			mu, log_sigma = encoder(x, conv=conv)
+			z = mu + tf.exp(log_sigma) * random_sample
 		if conv:
 			z = el.transform_features(z, t_params, f_params)
 		else:
@@ -146,7 +148,8 @@ def single_model_non_siamese(x, f_params, conv=False, t_params=[]):
 		# Basic branch
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("Encoder", reuse=False) as scope:
-			z = encoder(x, conv=conv)
+			mu, log_sigma = encoder(x, conv=conv)
+			z, eps = sampler(mu, log_sigma)
 		if conv:
 			z = el.transform_features(z, t_params, f_params)
 		else:
@@ -158,7 +161,7 @@ def single_model_non_siamese(x, f_params, conv=False, t_params=[]):
 				z = tf.concat([eq_part, inv_part], 1)
 		with tf.variable_scope("Decoder", reuse=False) as scope:
 			r = decoder(z, conv=conv)
-	return r, z
+	return r, z, mu, log_sigma, eps
 
 
 def autoencoder(x):
@@ -170,6 +173,10 @@ def autoencoder(x):
 		r = decoder(z)
 	return z, r
 
+def sampler(mu, log_sigma):
+	#reparam trick :)
+	eps = tf.random_normal(mu.get_shape())
+	return mu + tf.exp(log_sigma) * eps, eps
 
 def encoder(x, conv=False):
 	if conv:
@@ -190,7 +197,11 @@ def encoder(x, conv=False):
 		#l2 = linear(tf.nn.elu(l2), [500,500], name='2b')
 		#l2 = linear(tf.nn.elu(l2), [500,500], name='2c')
 		#l3 = linear(tf.nn.elu(l2), [500,256], name='3')
-		return linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='4')
+		mu = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='mu')
+		rho = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='rho')
+		#log_sigma = tf.nn.softplus(rho)
+		log_sigma = rho
+		return mu, log_sigma
 
 def decoder(z, conv=False):
 	bs = z.get_shape()[0]
@@ -355,7 +366,7 @@ def debug(opt, data):
 
 def train(inputs, outputs, ops, opt, data):
 	"""Training loop"""
-	x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params, ts_params = inputs
+	x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params, ts_params, random_sample = inputs
 	loss, merged, recon = outputs
 	train_op = ops
 	
@@ -406,13 +417,15 @@ def train(inputs, outputs, ops, opt, data):
 		print('[{:03d}]: {:03f}'.format(epoch, train_loss))
 		
 		#save model
-		if epoch % opt['save_step'] == 0:
+		if epoch % FLAGS.save_step == 0:
 			path = saver.save(sess, opt['save_path'], epoch)
 			print('Saved model to ' + path)
 		# Validation
 		if epoch % 10 == 0:
 			Recon = []
 			sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
+			#noise_sample = np.random.normal(size=[1, FLAGS.num_latents])
+			noise_sample = np.ones([1, FLAGS.num_latents])
 			max_angles = 20*20
 			#pick a random initial transformation
 			tp_init, fp_init = el.random_transform(opt['mb_size'], opt['im_size'])
@@ -425,7 +438,8 @@ def train(inputs, outputs, ops, opt, data):
 				feed_dict = {xs: sample,
 							fs_params: fp,
 							ts_params: tp,
-							t_params_initial: tp_init}
+							t_params_initial: tp_init,
+							random_sample: noise_sample}
 				Recon.append(sess.run(ops, feed_dict=feed_dict))
 			
 			samples_ = np.reshape(Recon, (-1,28,28))
@@ -437,7 +451,7 @@ def train(inputs, outputs, ops, opt, data):
 				m = sh*(j/ns) 
 				n = sh*(j%ns)
 				tile_image[m:m+sh,n:n+sh] = 1.-samples_[j,...]
-			save_name = './samples/image_%04d.png' % epoch
+			save_name = './samples/vae/image_%04d.png' % epoch
 			skio.imsave(save_name, tile_image)
 
 def main(_):
@@ -448,14 +462,13 @@ def main(_):
 	dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
 	opt['mb_size'] = 128
 	opt['n_channels'] = 10
-	opt['n_epochs'] = 200
+	opt['n_epochs'] = 2000
 	opt['lr_schedule'] = [50, 75]
 	opt['lr'] = 1e-3
-	opt['save_step'] = 10
 	opt['im_size'] = (28,28)
 	opt['train_size'] = 55000
 	opt['equivariant_weight'] = 1 #1e-3
-	flag = 'bn'
+	flag = 'vae'
 	opt['convolutional'] = False
 	if opt['convolutional']:
 		opt['summary_path'] = dir_ + '/summaries/autotrain_conv_{:s}'.format(flag)
@@ -498,24 +511,31 @@ def main(_):
 	fs_params = tf.placeholder(tf.float32, [1,2,2], name='fs_params') #latents
 	lr = tf.placeholder(tf.float32, [], name='lr')
 	
+	random_sample = tf.placeholder(tf.float32, [1,FLAGS.num_latents], name='random_sample')
+	
 	# Build the model
 	#transform input
 	shape_temp = x.get_shape()
 	x_initial_transform = transformer(x, t_params_initial, (28,28))
 	x_initial_transform.set_shape(shape_temp)
 	#build encoder
-	reconstruction, latents = single_model_non_siamese(x_initial_transform,
+	reconstruction, latents, mu, log_sigma, eps = single_model_non_siamese(x_initial_transform,
 		f_params, t_params=t_params, conv=opt['convolutional'])
 	reconstruction = tf.reshape(reconstruction, x.get_shape())
 	#transform input corresponding to latents for loss
 	reconstruction_transform = transformer(x_initial_transform, t_params, (28,28))
 
-	loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - reconstruction), axis=(1,2)))
+	kl_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + 2.0 * log_sigma - tf.square(mu) - tf.exp(2.0 * log_sigma), axis=1))
+	img_loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - reconstruction), axis=(1,2)))
+	loss = img_loss + kl_loss
 
-	recon = single_model(xs, fs_params, name_scope='mainModel', conv=opt['convolutional'], t_params=ts_params)
+	recon = single_model(xs, fs_params, name_scope='mainModel', conv=opt['convolutional'],
+		t_params=ts_params, random_sample=random_sample)
 
-	loss_summary = tf.summary.scalar('Loss', loss)
-	lr_summary = tf.summary.scalar('LearningRate', lr)
+	tf.summary.scalar('Loss', loss)
+	tf.summary.scalar('Loss_KL', kl_loss)
+	tf.summary.scalar('Loss_Img', img_loss)
+	tf.summary.scalar('LearningRate', lr)
 	
 	merged = tf.summary.merge_all()
 	
@@ -523,7 +543,7 @@ def main(_):
 	optim = tf.train.AdamOptimizer(lr)
 	train_op = optim.minimize(loss, global_step=global_step)
 	
-	inputs = [x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params, ts_params]
+	inputs = [x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params, ts_params, random_sample]
 	outputs = [loss, merged, recon]
 	ops = [train_op]
 	
@@ -531,4 +551,4 @@ def main(_):
 	return train(inputs, outputs, ops, opt, data)
 
 if __name__ == '__main__':
-    tf.app.run()
+	tf.app.run()
