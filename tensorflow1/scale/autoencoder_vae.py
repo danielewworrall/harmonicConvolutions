@@ -126,7 +126,8 @@ def single_model(x, f_params, random_sample, name_scope='siamese', conv=False, t
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("Encoder", reuse=True) as scope:
 			mu, log_sigma = encoder(x, conv=conv)
-			z = mu + tf.exp(log_sigma) * random_sample
+			#z = mu + tf.exp(log_sigma) * random_sample
+			z = mu + log_sigma * random_sample
 		if conv:
 			z = el.transform_features(z, t_params, f_params)
 		else:
