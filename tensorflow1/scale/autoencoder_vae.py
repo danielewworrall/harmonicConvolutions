@@ -176,7 +176,9 @@ def autoencoder(x):
 def sampler(mu, log_sigma):
 	#reparam trick :)
 	eps = tf.random_normal(mu.get_shape())
-	return mu + tf.exp(log_sigma) * eps, eps
+	#return mu + tf.exp(log_sigma) * eps, eps
+	return mu + log_sigma * eps, eps
+
 
 def encoder(x, conv=False):
 	if conv:
@@ -199,8 +201,8 @@ def encoder(x, conv=False):
 		#l3 = linear(tf.nn.elu(l2), [500,256], name='3')
 		mu = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='mu')
 		rho = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='rho')
-		#log_sigma = tf.nn.softplus(rho)
-		log_sigma = rho
+		log_sigma = tf.nn.softplus(rho)
+		#log_sigma = rho
 		return mu, log_sigma
 
 def decoder(z, conv=False):
@@ -425,7 +427,7 @@ def train(inputs, outputs, ops, opt, data):
 			Recon = []
 			sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
 			#noise_sample = np.random.normal(size=[1, FLAGS.num_latents])
-			noise_sample = np.ones([1, FLAGS.num_latents])
+			noise_sample = np.zeros([1, FLAGS.num_latents])
 			max_angles = 20*20
 			#pick a random initial transformation
 			tp_init, fp_init = el.random_transform(opt['mb_size'], opt['im_size'])
@@ -525,7 +527,8 @@ def main(_):
 	#transform input corresponding to latents for loss
 	reconstruction_transform = transformer(x_initial_transform, t_params, (28,28))
 
-	kl_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + 2.0 * log_sigma - tf.square(mu) - tf.exp(2.0 * log_sigma), axis=1))
+	#kl_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + 2.0 * log_sigma - tf.square(mu) - tf.exp(2.0 * log_sigma), axis=1))
+	kl_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + 2.0 * tf.log(log_sigma) - tf.square(mu) - 2.0 * log_sigma, axis=1))
 	img_loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - reconstruction), axis=(1,2)))
 	loss = img_loss + kl_loss
 
