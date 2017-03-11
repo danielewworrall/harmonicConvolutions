@@ -135,7 +135,8 @@ def single_model(x, f_params, random_sample, name_scope='siamese', conv=False, t
 			z = el.transform_features(z, t_params, f_params)
 		else:
 			if FLAGS.eq_dim == - 1:
-				z = el.feature_space_transform2d(z, [xsh[0], z.get_shape()[1]], f_params)
+				#z = el.feature_space_transform2d(z, [xsh[0], z.get_shape()[1]], f_params)
+				z = el.feature_space_transform_n(z, [xsh[0], z.get_shape()[1]], f_params)
 			else:
 				eq_part, inv_part = tf.split(z, [FLAGS.eq_dim, z.get_shape().as_list()[1] - FLAGS.eq_dim], axis=1)
 				eq_part = el.feature_space_transform2d(eq_part, [xsh[0], FLAGS.eq_dim], f_params)
@@ -158,7 +159,8 @@ def single_model_non_siamese(x, f_params, conv=False, t_params=[]):
 			z = el.transform_features(z, t_params, f_params)
 		else:
 			if FLAGS.eq_dim == - 1:
-				z = el.feature_space_transform2d(z, [xsh[0], z.get_shape()[1]], f_params)
+				#z = el.feature_space_transform2d(z, [xsh[0], z.get_shape()[1]], f_params)
+				z = el.feature_space_transform_n(z, [xsh[0], z.get_shape()[1]], f_params)
 			else:
 				eq_part, inv_part = tf.split(z, [FLAGS.eq_dim, z.get_shape().as_list()[1] - FLAGS.eq_dim], axis=1)
 				eq_part = el.feature_space_transform2d(eq_part, [xsh[0], FLAGS.eq_dim], f_params)
@@ -213,6 +215,20 @@ def decoder(z, conv=False):
 		"""Encoder MLP"""
 		l1 = linear(z, [z.get_shape()[1], 512], name='5')
 		return linear(tf.nn.elu(l1), [512,784], name='8')
+
+
+def bernoulli_xentropy(x, recon):
+	"""Cross-entropy for Bernoulli variables"""
+	x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=recon)
+	return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2)))
+
+
+def gaussian_kl(mu, sigma):
+	"""Reverse KL-divergence from Gaussian variational to unit Gaussian prior"""
+	per_neuron_kl = 1. + 2.*tf.log(sigma) - tf.square(mu) - tf.square(sigma)
+	return -0.5*tf.reduce_mean(tf.reduce_sum(per_neuron_kl, axis=1))
+	
+
 	
 ##################EVALUATION##########################
 def debug_latents_mlp(opt, data, sample, img_transforms, feat_transforms, angle_transforms):
@@ -526,11 +542,12 @@ def main(_):
 	reconstruction = tf.reshape(reconstruction, x.get_shape())
 	#transform input corresponding to latents for loss
 	reconstruction_transform = transformer(x_initial_transform, t_params, (28,28))
-
-	kl_loss = -0.5*tf.reduce_mean(tf.reduce_sum(1. + 2.*tf.log(sigma) - tf.square(mu) - tf.square(sigma), axis=1))
-	#img_loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - tf.nn.sigmoid(reconstruction)), axis=(1,2)))
-	img_loss = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=reconstruction_transform, logits=reconstruction), axis=(1,2)))
-	loss = img_loss + kl_loss
+	
+	# KL-divergence of posterior from prior
+	kl_loss = gaussian_kl(mu, sigma)
+	# Negative log-likelihood
+	nll = bernoulli_xentropy(reconstruction_transform, reconstruction)
+	loss = nll + kl_loss
 
 	recon_pre_sigmoid = single_model(xs, fs_params, name_scope='mainModel',
 												conv=opt['convolutional'],
@@ -539,7 +556,7 @@ def main(_):
 
 	tf.summary.scalar('Loss', loss)
 	tf.summary.scalar('Loss_KL', kl_loss)
-	tf.summary.scalar('Loss_Img', img_loss)
+	tf.summary.scalar('Loss_Img', nll)
 	tf.summary.scalar('LearningRate', lr)
 	
 	merged = tf.summary.merge_all()
