@@ -140,11 +140,26 @@ def get_t_transform_n(transform, imsh):
 	return mat.flatten()
 
 
-def feature_space_transform_n(x, xsh, f_params):
-	"""Perform a block matrix multiplication on the last dimension of a tensor,
-	operating on an n-D representation
+def feature_transform_matrix_n(x, xsh, f_params):
+	"""Perform feature space transform on size n_dims blocks of the last
+	dimension of a matrix.
 	"""
-	n_dims = f_params.get_shape()
+	n_dims = f_params.get_shape()[1]
+	x = tf.reshape(x, tf.stack([xsh[0],xsh[1]/n_dims,n_dims]))
+	xi = []
+	# Perform a matrix multiplication on the last dimension of the tensor
+	for i in xrange(n_dims):
+		fi = tf.reshape(f_params[:,i,:], tf.stack([xsh[0],1,n_dims]))
+		xi.append(tf.reduce_sum(tf.multiply(x, fi), axis=2))
+	x = tf.stack(xi, axis=-1)
+	return tf.reshape(x, tf.stack([xsh[0],xsh[1]]))
+
+
+def feature_transform_tensor_n(x, xsh, f_params):
+	"""Perform feature space transform on size n_dims blocks of the last
+	dimension of a 4d tensor.
+	"""
+	n_dims = f_params.get_shape()[1]
 	x = tf.reshape(x, tf.stack([xsh[0],xsh[1],xsh[2],xsh[3]/n_dims,n_dims]))
 	xi = []
 	# Perform a matrix multiplication on the last dimension of the tensor

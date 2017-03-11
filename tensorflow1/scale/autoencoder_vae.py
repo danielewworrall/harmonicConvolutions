@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 #execution modes
-flags.DEFINE_boolean('ANALISE', False, 'runs model analysis')
+flags.DEFINE_boolean('ANALYSE', False, 'runs model analysis')
 flags.DEFINE_integer('eq_dim', -1, 'number of latent units to rotate')
 flags.DEFINE_integer('num_latents', 32, 'Dimension of the latent variables')
 flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on latents')
@@ -47,6 +47,7 @@ def load_data():
 					 'test': mnist.test._labels}
 	return data
 
+
 def random_sampler(n_data, opt, random=True):
 	"""Return minibatched data"""
 	if random:
@@ -58,6 +59,7 @@ def random_sampler(n_data, opt, random=True):
 		mb_list.append(indices[opt['mb_size']*i:opt['mb_size']*(i+1)])
 	return mb_list
 
+
 def checkFolder(dir):
 	"""Checks if a folder exists and creates it if not.
 	dir: directory
@@ -65,7 +67,8 @@ def checkFolder(dir):
 	"""
 	if not os.path.exists(dir):
 		os.makedirs(dir)
-		
+
+
 def removeAllFilesInDirectory(directory, extension):
 	cwd = os.getcwd()
 	os.chdir(directory)
@@ -73,30 +76,16 @@ def removeAllFilesInDirectory(directory, extension):
 	for f in filelist:
 		os.remove(f)
 	os.chdir(cwd)
+
+
 ############## MODEL ####################
-def dot_product(x, y):
-	return tf.reduce_sum(tf.multiply(x,y), axis=1)
-
-def cosine_distance(x, y):
-	return tf.reduce_mean(dot_product(x, y) / (dot_product(x, x) * dot_product(y, y)))
-
-def convolutional(x, conv_size, num_filters, stride=1, name='c0',
-		bias_init=0.01, padding='SAME', non_linear_func=tf.nn.elu):
-	w = tf.get_variable(name + '_conv_w', [conv_size, conv_size, x.get_shape()[3], num_filters])
-	b = tf.get_variable(name + '_conv_b', [num_filters])
-	result = tf.nn.conv2d(x, w, [1, stride, stride, 1], padding, name = name + 'conv')
-	return non_linear_func(bias_add(result, num_filters, name=name), name = name + '_conv_nl')
-
-def deconvolutional_deepmind(x, conv_size, out_shape, stride=1, name='c0',
-		bias_init=0.01, padding='SAME', non_linear_func=tf.nn.elu):
-	#resize images
-	result = tf.image.resize_images(x, [out_shape[1], out_shape[2]],
-		method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
-	#perform convolution
-	result = convolutional(result, conv_size, out_shape[3], stride=stride,
-		name=name, bias_init=bias_init, padding=padding, non_linear_func=non_linear_func)
-	return result
-
+def transformer_layer(x, t_params, imsh):
+	"""Spatial transformer wtih shapes sets"""
+	xsh = x.get_shape()
+	x_in = transformer(x, t_params, imsh)
+	x_in.set_shape(xsh)
+	return x_in
+	
 
 def flatten(input):
 	s = input.get_shape().as_list()
@@ -120,106 +109,48 @@ def bias_add(x, nc, bias_init=0.01, name='0'):
 	return tf.nn.bias_add(x, b)
 
 
-def single_model(x, f_params, random_sample, name_scope='siamese', conv=False, t_params=[]):
+def autoencoder(x, f_params, reuse=False):
 	"""Build a model to rotate features"""
 	xsh = x.get_shape().as_list()
-	# Mouth
-	with tf.variable_scope(name_scope, reuse=True) as scope:
-		# Basic branch
+	with tf.variable_scope('mainModel', reuse=reuse) as scope:
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
-		with tf.variable_scope("Encoder", reuse=True) as scope:
-			mu, sigma = encoder(x, conv=conv)
-			#z = mu + tf.exp(sigma) * random_sample
-			z = mu + sigma * random_sample
-		if conv:
-			z = el.transform_features(z, t_params, f_params)
-		else:
-			if FLAGS.eq_dim == - 1:
-				#z = el.feature_space_transform2d(z, [xsh[0], z.get_shape()[1]], f_params)
-				z = el.feature_space_transform_n(z, [xsh[0], z.get_shape()[1]], f_params)
-			else:
-				eq_part, inv_part = tf.split(z, [FLAGS.eq_dim, z.get_shape().as_list()[1] - FLAGS.eq_dim], axis=1)
-				eq_part = el.feature_space_transform2d(eq_part, [xsh[0], FLAGS.eq_dim], f_params)
-				z = tf.concat([eq_part, inv_part], 1)
-		with tf.variable_scope("Decoder", reuse=True) as scope:
-			r = decoder(z, conv=conv)
-	return r
-
-def single_model_non_siamese(x, f_params, conv=False, t_params=[]):
-	"""Build a model to rotate features"""
-	xsh = x.get_shape().as_list()
-	# Mouth
-	with tf.variable_scope('mainModel', reuse=False) as scope:
-		# Basic branch
-		x = tf.reshape(x, tf.stack([xsh[0],784]))
-		with tf.variable_scope("Encoder", reuse=False) as scope:
-			mu, sigma = encoder(x, conv=conv)
-			z, eps = sampler(mu, sigma)
-		if conv:
-			z = el.transform_features(z, t_params, f_params)
-		else:
-			if FLAGS.eq_dim == - 1:
-				#z = el.feature_space_transform2d(z, [xsh[0], z.get_shape()[1]], f_params)
-				z = el.feature_space_transform_n(z, [xsh[0], z.get_shape()[1]], f_params)
-			else:
-				eq_part, inv_part = tf.split(z, [FLAGS.eq_dim, z.get_shape().as_list()[1] - FLAGS.eq_dim], axis=1)
-				eq_part = el.feature_space_transform2d(eq_part, [xsh[0], FLAGS.eq_dim], f_params)
-				z = tf.concat([eq_part, inv_part], 1)
-		with tf.variable_scope("Decoder", reuse=False) as scope:
-			r = decoder(z, conv=conv)
-	return r, z, mu, sigma, eps
+		with tf.variable_scope("encoder", reuse=reuse) as scope:
+			mu, sigma = encoder(x)
+			z = sampler(mu, sigma, sample=(not reuse))
+		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
+			matrix_shape = [xsh[0], z.get_shape()[1]]
+			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
+		with tf.variable_scope("decoder", reuse=reuse) as scope:
+			r = decoder(z)
+	return r, z, mu, sigma
 
 
-def autoencoder(x):
-	"""Build autoencoder"""
-	xsh = x.get_shape().as_list()
-	with tf.variable_scope("Encoder") as scope:
-		z = encoder(x, conv=False)
-	with tf.variable_scope("Decoder") as scope:
-		r = decoder(z)
-	return z, r
-
-def sampler(mu, sigma):
-	eps = tf.random_normal(mu.get_shape())
-	return mu + sigma * eps, eps
-
-
-def encoder(x, conv=False):
-	if conv:
-		print('encoder activation sizes:')
-		stream = tf.reshape(x, [x.get_shape().as_list()[0], 28, 28, 1])
-		print(stream.get_shape().as_list())
-		stream = convolutional(stream, 3, 16, stride=2, name='c1')
-		print(stream.get_shape().as_list())
-		stream = convolutional(stream, 3, 32, stride=2, name='c2')
-		print(stream.get_shape().as_list())
-		stream = convolutional(stream, 3, 64, stride=2, name='c3', non_linear_func=tf.identity)
-		print(stream.get_shape().as_list())
-		return stream
+def sampler(mu, sigma, sample=True):
+	if sample:
+		z = mu + sigma*tf.random_normal(mu.get_shape())
 	else:
-		"""Encoder MLP"""
-		l1 = linear(x, [784,512], name='1')
-		mu = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='mu')
-		rho = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='rho')
-		sigma = tf.nn.softplus(rho)
-		return mu, sigma
-
-def decoder(z, conv=False):
-	bs = z.get_shape()[0]
-	if conv:
-		stream = deconvolutional_deepmind(z, 3, [bs, 7, 7, 32], name='c13')
-		stream = deconvolutional_deepmind(stream, 3, [bs, 14, 14, 16], name='c14')
-		stream = deconvolutional_deepmind(stream, 3, [bs, 28, 28, 1], name='c15')
-		return stream
-	else:
-		"""Encoder MLP"""
-		l1 = linear(z, [z.get_shape()[1], 512], name='5')
-		return linear(tf.nn.elu(l1), [512,784], name='8')
+		z = mu
+	return z
 
 
-def bernoulli_xentropy(x, recon):
+def encoder(x):
+	"""Encoder MLP"""
+	l1 = linear(x, [784,512], name='1')
+	mu = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='mu')
+	rho = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='rho')
+	sigma = tf.nn.softplus(rho)
+	return mu, sigma
+
+
+def decoder(z):
+	"""Encoder MLP"""
+	l1 = linear(z, [z.get_shape()[1], 512], name='d0')
+	return linear(tf.nn.elu(l1), [512,784], name='d1')
+
+
+def bernoulli_xentropy(x, recon_test):
 	"""Cross-entropy for Bernoulli variables"""
-	x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=recon)
+	x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=recon_test)
 	return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2)))
 
 
@@ -230,168 +161,24 @@ def gaussian_kl(mu, sigma):
 	
 
 	
-##################EVALUATION##########################
-def debug_latents_mlp(opt, data, sample, img_transforms, feat_transforms, angle_transforms):
-	#create the model
-	#sample input
-	x = tf.placeholder(tf.float32, [1,28,28,1], name='x')
-	#random initial transformation
-	#t_params_initial_tf = tf.placeholder(tf.float32, [1,6], name='t_params_initial')
-	#...and apply to image
-	#x_initial = tf.reshape(transformer(x, t_params_initial_tf, [28, 28]), [1,28, 28, 1])
-	
-	#transformation parameters
-	t_params = tf.placeholder(tf.float32, [1,6], name='t_params')
-	#input image under transformation
-	x_transformed = transformer(x, t_params, [28,28])
-	x_transformed.set_shape([1, 28, 28, 1])
-
-	#the reference latents
-	z_reference_tf = tf.placeholder(tf.float32, [1, FLAGS.num_latents], name='z_reference')
-
-	#build the encoder
-	with tf.variable_scope('mainModel', reuse=False):
-		with tf.variable_scope("Encoder", reuse=False):
-			z = encoder(flatten(x))
-		with tf.variable_scope('Encoder', reuse=True):
-			z_for_transformed = encoder(flatten(x_transformed))
-	with tf.variable_scope('mainModel', reuse=False):
-		with tf.variable_scope('Decoder', reuse=False):
-			recon = decoder(z_for_transformed)
-
-	if FLAGS.eq_dim > 0:
-		
-		z_for_transformed_eq, z_for_transformed_inv = tf.split(z_for_transformed,
-			[FLAGS.eq_dim, z_for_transformed.get_shape().as_list()[1] - FLAGS.eq_dim], axis=1)
-
-		z_reference_tf_eq, z_reference_tf_inv = tf.split(z_reference_tf,
-			[FLAGS.eq_dim, z_reference_tf.get_shape().as_list()[1] - FLAGS.eq_dim], axis=1)
-		
-		l_shape = z_for_transformed_eq.get_shape()
-		#angle in latent space
-		inv_rep = tf.reshape(z_for_transformed_eq, tf.stack([l_shape[0],l_shape[1]/2,2]))
-		inv_vec = tf.reduce_sum(tf.square(inv_rep),axis=2)
-
-		inv_rep_ref = tf.reshape(z_reference_tf_eq, tf.stack([l_shape[0],l_shape[1]/2,2]))
-		inv_vec_ref = tf.reduce_sum(tf.square(inv_rep_ref),axis=2)
-
-		norm_inv_vec = tf.reduce_mean(tf.square(inv_vec), axis=1)
-
-		angle_tf = tf.sqrt(tf.reduce_mean(tf.square(inv_vec_ref - inv_vec), axis=1) / (norm_inv_vec))
-		per_invariant_diff = tf.square(inv_vec_ref - inv_vec) #/ (tf.square(inv_vec) + 1e-3)
-
-	else:
-		l_shape = z_for_transformed.get_shape()
-		#angle in latent space
-		inv_rep = tf.reshape(z_for_transformed, tf.stack([l_shape[0],l_shape[1]/2,2]))
-		inv_vec = tf.reduce_sum(tf.square(inv_rep),axis=2)
-
-		inv_rep_ref = tf.reshape(z_reference_tf, tf.stack([l_shape[0],l_shape[1]/2,2]))
-		inv_vec_ref = tf.reduce_sum(tf.square(inv_rep_ref),axis=2)
-
-		norm_inv_vec = tf.reduce_mean(tf.square(inv_vec), axis=1)
-
-		angle_tf = tf.sqrt(tf.reduce_mean(tf.square(inv_vec_ref - inv_vec), axis=1) / (norm_inv_vec))
-		per_invariant_diff = tf.square(inv_vec_ref - inv_vec) #/ (tf.square(inv_vec) + 1e-3)
-
-	#model for forward reconstruction
-	f_params = tf.placeholder(tf.float32, [1,2,2], name='f_params')
-	if FLAGS.eq_dim == - 1:
-		forward_z = el.feature_space_transform2d(z, [z.get_shape()[0], z.get_shape()[1]], f_params)
-	else:
-		eq_part, inv_part = tf.split(z, [FLAGS.eq_dim, z.get_shape().as_list()[1] - FLAGS.eq_dim], axis=1)
-		eq_part = el.feature_space_transform2d(eq_part, [z.get_shape()[0], FLAGS.eq_dim], f_params)
-		forward_z = tf.concat([eq_part, inv_part], 1)
-		
-	with tf.variable_scope('mainModel', reuse=False):
-		with tf.variable_scope('Decoder', reuse=True):
-			recon_forward = decoder(forward_z)
-
-	#now start the session
-	sess = tf.Session()
-
-	#create tf stuff 
-	print('Attempting to restore from [{:s}]'.format(opt['save_path']))
-	saver = tf.train.Saver()
-	#saver.restore(sess, tf.train.latest_checkpoint(opt['save_path']))
-	saver.restore(sess, "/home/sgarbin/Projects/harmonicConvolutions/tensorflow1/scale/checkpoints/autotrain_bn/model.ckpt-190")
-	#pick a random initial transformation
-	t_params_initial, _ = el.random_transform(1, opt['im_size'])
-
-	#get reference latents
-	z_reference = sess.run(z, feed_dict={
-		x : sample,
-		#t_params_initial_tf: t_params_initial
-	})
-	print('Got initial latents, now performing tests...')
-	checkFolder('samples/debug_imgs')
-	removeAllFilesInDirectory('samples/debug_imgs', '.*')
-	#get latents for all other inputs
-	latent_angles = []
-	per_invariant_diffs = []
-	for img_t, feat_t, idx in zip(img_transforms, feat_transforms, xrange(len(img_transforms))):
-		latent_angle, img_initial, img_recon, img_recon_foward, inv_diff = sess.run([angle_tf, x_transformed, recon, recon_forward, per_invariant_diff], feed_dict={
-			x: sample,
-			#t_params_initial_tf: t_params_initial,
-			z_reference_tf: z_reference,
-			t_params: img_t,
-			f_params: feat_t
-		})
-		latent_angles.append(latent_angle[0])
-		per_invariant_diffs.append(inv_diff)
-		skio.imsave('samples/debug_imgs/img_input' + str(idx) + '.png', np.clip(np.reshape(img_initial, [28, 28]), 0, 1))
-		skio.imsave('samples/debug_imgs/img_reconstruction' + str(idx) + '.png', np.clip(np.reshape(img_recon, [28, 28]), 0, 1))
-		skio.imsave('samples/debug_imgs/img_forward' + str(idx) + '.png', np.clip(np.reshape(img_recon_foward, [28, 28]), 0, 1))
-	print(angle_transforms)
-	print(latent_angles)
-
-	#differences_per_invariant = np.transpose(np.squeeze(np.asarray(per_invariant_diffs)))
-	differences_per_invariant = np.squeeze(np.asarray(per_invariant_diffs))
-	plt.plot(differences_per_invariant)
-	plt.ylabel('invariant differences')
-	plt.show()
-
-
-
-######################################################
-
-def debug(opt, data):
-	sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
-	#generate image space and latent space transformations
-	max_angles = 360
-	image_transforms = []
-	feature_transforms = []
-	angle_transforms = []
-	for i in xrange(max_angles):
-		theta = 2.*np.pi*i/(1.*max_angles)
-		img_t, feat_t = el.random_transform_theta(1, opt['im_size'],
-			theta) # last arg is theta
-		#print(img_t)
-		#print(feat_t)
-		image_transforms.append(img_t)
-		feature_transforms.append(feat_t)
-		angle_transforms.append(theta)
-
-	debug_latents_mlp(opt, data, sample, image_transforms, feature_transforms, angle_transforms)
-
+############################################
 def train(inputs, outputs, ops, opt, data):
 	"""Training loop"""
-	x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params, ts_params, random_sample = inputs
-	loss, merged, recon = outputs
+	# Unpack inputs, outputs and ops
+	x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val = inputs
+	loss, merged, recon_test = outputs
 	train_op = ops
 	
 	# For checkpoints
-	saver = tf.train.Saver()
 	gs = 0
 	start = time.time()
 	n_train = data['X']['train'].shape[0]
 	n_valid = data['X']['valid'].shape[0]
 	n_test = data['X']['test'].shape[0]
-	sess = tf.Session()
-	# Threading and queueing
-	#coord = tf.train.Coordinator()
-	#threads = tf.train.start_queue_runners(coord=coord)
 	
+	saver = tf.train.Saver()
+	sess = tf.Session()
+
 	# Initialize variables
 	init = tf.global_variables_initializer()
 	sess.run(init)
@@ -411,13 +198,12 @@ def train(inputs, outputs, ops, opt, data):
 		for i, mb in enumerate(mb_list):
 			#initial random transform
 			tp_init, fp_init = el.random_transform(opt['mb_size'], opt['im_size'])
-
 			tp, fp = el.random_transform(opt['mb_size'], opt['im_size'])
 			ops = [global_step, loss, merged, train_op]
 			feed_dict = {x: data['X']['train'][mb,...],
 								t_params: tp,
 								f_params: fp,
-								t_params_initial: tp_init,
+								t_params_in: tp_init,
 								lr: current_lr}
 			gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
 			train_loss += l
@@ -443,12 +229,11 @@ def train(inputs, outputs, ops, opt, data):
 				for i in xrange(max_angles):
 					theta = 2.*np.pi*i/(1.*max_angles)
 					tp, fp = el.random_transform_theta(1, opt['im_size'], theta)
-					ops = recon
+					ops = recon_test
 					feed_dict = {xs: sample,
-									 fs_params: fp,
-									 ts_params: tp,
-									 t_params_initial: tp_init,
-									 random_sample: noise_sample}
+									 f_params_val: fp,
+									 t_params_val: tp,
+									 t_params_in: tp_init}
 					Recon.append(sess.run(ops, feed_dict=feed_dict))
 			
 			samples_ = np.reshape(Recon, (-1,28,28))
@@ -462,6 +247,7 @@ def train(inputs, outputs, ops, opt, data):
 				tile_image[m:m+sh,n:n+sh] = 1.-samples_[j,...]
 			save_name = './samples/vae/image_%04d.png' % epoch
 			skio.imsave(save_name, tile_image)
+
 
 def main(_):
 	opt = {}
@@ -487,86 +273,61 @@ def main(_):
 	opt['train_size'] = 55000
 	opt['equivariant_weight'] = 1 
 	flag = 'vae'
-	opt['convolutional'] = False
-	if opt['convolutional']:
-		opt['summary_path'] = dir_ + '/summaries/autotrain_conv_{:s}'.format(flag)
-		opt['save_path'] = dir_ + '/checkpoints/autotrain_conv_{:s}/model.ckpt'.format(flag)
-	else:
-		opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(flag)
-		opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/model.ckpt'.format(flag)
-	opt['loss_type_image'] = 'l2'
+	opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(flag)
+	opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/model.ckpt'.format(flag)
 
 	#check and clear directories
 	checkFolder(opt['summary_path'])
 	checkFolder(opt['save_path'])
 	removeAllFilesInDirectory(opt['summary_path'], '.*')
 	removeAllFilesInDirectory(opt['save_path'], '.*')
-
-
+	
+	# Load data
 	data = load_data()
 	data['X']['train'] = data['X']['train'][:opt['train_size'],:]
 	data['Y']['train'] = data['Y']['train'][:opt['train_size'],:]
 
-	if FLAGS.ANALISE:
-		debug(opt, data)
-		sys.exit(0)
-
-	# Construct input graph
-	#input image
+	# Placeholders
 	x = tf.placeholder(tf.float32, [opt['mb_size'],28,28,1], name='x')
-	#input for validation
 	xs = tf.placeholder(tf.float32, [1,28,28,1], name='xs')
-	# Define variables
-	global_step = tf.Variable(0, name='global_step', trainable=False)
-	#initial transformation
-	t_params_initial = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
-	#transform corresponding to latents
+	t_params_in = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params_in')
 	t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
-	#latent transform
 	f_params = tf.placeholder(tf.float32, [opt['mb_size'],2,2], name='f_params')
-	#transform for validation
-	ts_params = tf.placeholder(tf.float32, [1,6], name='ts_params') #image
-	fs_params = tf.placeholder(tf.float32, [1,2,2], name='fs_params') #latents
+	t_params_val = tf.placeholder(tf.float32, [1,6], name='t_params_val') 
+	f_params_val = tf.placeholder(tf.float32, [1,2,2], name='f_params_val') 
+	global_step = tf.Variable(0, name='global_step', trainable=False)
 	lr = tf.placeholder(tf.float32, [], name='lr')
 	
-	random_sample = tf.placeholder(tf.float32, [1,FLAGS.num_latents], name='random_sample')
+	# Build the training model
+	x_in = transformer_layer(x, t_params_in, opt['im_size'])
+	target = transformer_layer(x_in, t_params, opt['im_size'])
+	recon, latents, mu, sigma = autoencoder(x_in, f_params)
+	recon = tf.reshape(recon, x.get_shape())
+	# Test model
+	recon_test_, __, __, __ = autoencoder(xs, f_params_val, reuse=True)
+	recon_test = tf.nn.sigmoid(recon_test_)
 	
-	# Build the model
-	#transform input
-	shape_temp = x.get_shape()
-	x_initial_transform = transformer(x, t_params_initial, (28,28))
-	x_initial_transform.set_shape(shape_temp)
-	#build encoder
-	reconstruction, latents, mu, sigma, eps = single_model_non_siamese(x_initial_transform,
-		f_params, t_params=t_params, conv=opt['convolutional'])
-	reconstruction = tf.reshape(reconstruction, x.get_shape())
-	#transform input corresponding to latents for loss
-	reconstruction_transform = transformer(x_initial_transform, t_params, (28,28))
-	
+	# LOSS
 	# KL-divergence of posterior from prior
 	kl_loss = gaussian_kl(mu, sigma)
 	# Negative log-likelihood
-	nll = bernoulli_xentropy(reconstruction_transform, reconstruction)
+	nll = bernoulli_xentropy(target, recon)
 	loss = nll + kl_loss
-
-	recon_pre_sigmoid = single_model(xs, fs_params, name_scope='mainModel',
-												conv=opt['convolutional'],
-												t_params=ts_params, random_sample=random_sample)
-	recon = tf.nn.sigmoid(recon_pre_sigmoid)
-
+	
+	# Summaries
 	tf.summary.scalar('Loss', loss)
 	tf.summary.scalar('Loss_KL', kl_loss)
 	tf.summary.scalar('Loss_Img', nll)
 	tf.summary.scalar('LearningRate', lr)
-	
 	merged = tf.summary.merge_all()
 	
 	# Build optimizer
 	optim = tf.train.AdamOptimizer(lr)
 	train_op = optim.minimize(loss, global_step=global_step)
 	
-	inputs = [x, global_step, t_params_initial, t_params, f_params, lr, xs, fs_params, ts_params, random_sample]
-	outputs = [loss, merged, recon]
+	# Set inputs, outputs, and training ops
+	inputs = [x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val]
+	outputs = [loss, merged, recon_test]
 	ops = [train_op]
 	
 	# Train
