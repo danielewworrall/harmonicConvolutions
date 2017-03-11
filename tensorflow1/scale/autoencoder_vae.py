@@ -394,7 +394,7 @@ def main(_):
 	kl_loss = gaussian_kl(mu, sigma)
 	# Negative log-likelihood
 	nll = bernoulli_xentropy(target, recon)
-	loss = nll + kl_loss
+	loss = nll #+ kl_loss
 	
 	# Summaries
 	tf.summary.scalar('Loss', loss)
