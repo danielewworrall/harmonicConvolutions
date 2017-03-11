@@ -1,4 +1,4 @@
-'''Autoencoder'''
+'''Autoencoder faces'''
 
 import os
 import sys
@@ -6,8 +6,6 @@ import time
 import glob
 sys.path.append('../')
 
-#import cv2
-#import input_data
 import numpy as np
 import skimage.io as skio
 import tensorflow as tf
@@ -47,16 +45,6 @@ def load_data():
 					 'test': mnist.test._labels}
 	return data
 
-def random_sampler(n_data, opt, random=True):
-	"""Return minibatched data"""
-	if random:
-		indices = np.random.permutation(n_data)
-	else:
-		indices = np.arange(n_data)
-	mb_list = []
-	for i in xrange(int(float(n_data)/opt['mb_size'])):
-		mb_list.append(indices[opt['mb_size']*i:opt['mb_size']*(i+1)])
-	return mb_list
 
 def checkFolder(dir):
 	"""Checks if a folder exists and creates it if not.
@@ -66,6 +54,7 @@ def checkFolder(dir):
 	if not os.path.exists(dir):
 		os.makedirs(dir)
 		
+
 def removeAllFilesInDirectory(directory, extension):
 	cwd = os.getcwd()
 	os.chdir(directory)
@@ -74,18 +63,13 @@ def removeAllFilesInDirectory(directory, extension):
 		os.remove(f)
 	os.chdir(cwd)
 ############## MODEL ####################
-def dot_product(x, y):
-	return tf.reduce_sum(tf.multiply(x,y), axis=1)
-
-def cosine_distance(x, y):
-	return tf.reduce_mean(dot_product(x, y) / (dot_product(x, x) * dot_product(y, y)))
-
 def convolutional(x, conv_size, num_filters, stride=1, name='c0',
 		bias_init=0.01, padding='SAME', non_linear_func=tf.nn.elu):
 	w = tf.get_variable(name + '_conv_w', [conv_size, conv_size, x.get_shape()[3], num_filters])
 	b = tf.get_variable(name + '_conv_b', [num_filters])
 	result = tf.nn.conv2d(x, w, [1, stride, stride, 1], padding, name = name + 'conv')
 	return non_linear_func(bias_add(result, num_filters, name=name), name = name + '_conv_nl')
+
 
 def deconvolutional_deepmind(x, conv_size, out_shape, stride=1, name='c0',
 		bias_init=0.01, padding='SAME', non_linear_func=tf.nn.elu):
@@ -168,15 +152,6 @@ def single_model_non_siamese(x, f_params, conv=False, t_params=[]):
 	return r, z, mu, sigma, eps
 
 
-def autoencoder(x):
-	"""Build autoencoder"""
-	xsh = x.get_shape().as_list()
-	with tf.variable_scope("Encoder") as scope:
-		z = encoder(x, conv=False)
-	with tf.variable_scope("Decoder") as scope:
-		r = decoder(z)
-	return z, r
-
 def sampler(mu, sigma):
 	eps = tf.random_normal(mu.get_shape())
 	return mu + sigma * eps, eps
@@ -214,149 +189,8 @@ def decoder(z, conv=False):
 		l1 = linear(z, [z.get_shape()[1], 512], name='5')
 		return linear(tf.nn.elu(l1), [512,784], name='8')
 	
-##################EVALUATION##########################
-def debug_latents_mlp(opt, data, sample, img_transforms, feat_transforms, angle_transforms):
-	#create the model
-	#sample input
-	x = tf.placeholder(tf.float32, [1,28,28,1], name='x')
-	#random initial transformation
-	#t_params_initial_tf = tf.placeholder(tf.float32, [1,6], name='t_params_initial')
-	#...and apply to image
-	#x_initial = tf.reshape(transformer(x, t_params_initial_tf, [28, 28]), [1,28, 28, 1])
-	
-	#transformation parameters
-	t_params = tf.placeholder(tf.float32, [1,6], name='t_params')
-	#input image under transformation
-	x_transformed = transformer(x, t_params, [28,28])
-	x_transformed.set_shape([1, 28, 28, 1])
+################## TRAIN ##########################
 
-	#the reference latents
-	z_reference_tf = tf.placeholder(tf.float32, [1, FLAGS.num_latents], name='z_reference')
-
-	#build the encoder
-	with tf.variable_scope('mainModel', reuse=False):
-		with tf.variable_scope("Encoder", reuse=False):
-			z = encoder(flatten(x))
-		with tf.variable_scope('Encoder', reuse=True):
-			z_for_transformed = encoder(flatten(x_transformed))
-	with tf.variable_scope('mainModel', reuse=False):
-		with tf.variable_scope('Decoder', reuse=False):
-			recon = decoder(z_for_transformed)
-
-	if FLAGS.eq_dim > 0:
-		
-		z_for_transformed_eq, z_for_transformed_inv = tf.split(z_for_transformed,
-			[FLAGS.eq_dim, z_for_transformed.get_shape().as_list()[1] - FLAGS.eq_dim], axis=1)
-
-		z_reference_tf_eq, z_reference_tf_inv = tf.split(z_reference_tf,
-			[FLAGS.eq_dim, z_reference_tf.get_shape().as_list()[1] - FLAGS.eq_dim], axis=1)
-		
-		l_shape = z_for_transformed_eq.get_shape()
-		#angle in latent space
-		inv_rep = tf.reshape(z_for_transformed_eq, tf.stack([l_shape[0],l_shape[1]/2,2]))
-		inv_vec = tf.reduce_sum(tf.square(inv_rep),axis=2)
-
-		inv_rep_ref = tf.reshape(z_reference_tf_eq, tf.stack([l_shape[0],l_shape[1]/2,2]))
-		inv_vec_ref = tf.reduce_sum(tf.square(inv_rep_ref),axis=2)
-
-		norm_inv_vec = tf.reduce_mean(tf.square(inv_vec), axis=1)
-
-		angle_tf = tf.sqrt(tf.reduce_mean(tf.square(inv_vec_ref - inv_vec), axis=1) / (norm_inv_vec))
-		per_invariant_diff = tf.square(inv_vec_ref - inv_vec) #/ (tf.square(inv_vec) + 1e-3)
-
-	else:
-		l_shape = z_for_transformed.get_shape()
-		#angle in latent space
-		inv_rep = tf.reshape(z_for_transformed, tf.stack([l_shape[0],l_shape[1]/2,2]))
-		inv_vec = tf.reduce_sum(tf.square(inv_rep),axis=2)
-
-		inv_rep_ref = tf.reshape(z_reference_tf, tf.stack([l_shape[0],l_shape[1]/2,2]))
-		inv_vec_ref = tf.reduce_sum(tf.square(inv_rep_ref),axis=2)
-
-		norm_inv_vec = tf.reduce_mean(tf.square(inv_vec), axis=1)
-
-		angle_tf = tf.sqrt(tf.reduce_mean(tf.square(inv_vec_ref - inv_vec), axis=1) / (norm_inv_vec))
-		per_invariant_diff = tf.square(inv_vec_ref - inv_vec) #/ (tf.square(inv_vec) + 1e-3)
-
-	#model for forward reconstruction
-	f_params = tf.placeholder(tf.float32, [1,2,2], name='f_params')
-	if FLAGS.eq_dim == - 1:
-		forward_z = el.feature_space_transform2d(z, [z.get_shape()[0], z.get_shape()[1]], f_params)
-	else:
-		eq_part, inv_part = tf.split(z, [FLAGS.eq_dim, z.get_shape().as_list()[1] - FLAGS.eq_dim], axis=1)
-		eq_part = el.feature_space_transform2d(eq_part, [z.get_shape()[0], FLAGS.eq_dim], f_params)
-		forward_z = tf.concat([eq_part, inv_part], 1)
-		
-	with tf.variable_scope('mainModel', reuse=False):
-		with tf.variable_scope('Decoder', reuse=True):
-			recon_forward = decoder(forward_z)
-
-	#now start the session
-	sess = tf.Session()
-
-	#create tf stuff 
-	print('Attempting to restore from [{:s}]'.format(opt['save_path']))
-	saver = tf.train.Saver()
-	#saver.restore(sess, tf.train.latest_checkpoint(opt['save_path']))
-	saver.restore(sess, "/home/sgarbin/Projects/harmonicConvolutions/tensorflow1/scale/checkpoints/autotrain_bn/model.ckpt-190")
-	#pick a random initial transformation
-	t_params_initial, _ = el.random_transform(1, opt['im_size'])
-
-	#get reference latents
-	z_reference = sess.run(z, feed_dict={
-		x : sample,
-		#t_params_initial_tf: t_params_initial
-	})
-	print('Got initial latents, now performing tests...')
-	checkFolder('samples/debug_imgs')
-	removeAllFilesInDirectory('samples/debug_imgs', '.*')
-	#get latents for all other inputs
-	latent_angles = []
-	per_invariant_diffs = []
-	for img_t, feat_t, idx in zip(img_transforms, feat_transforms, xrange(len(img_transforms))):
-		latent_angle, img_initial, img_recon, img_recon_foward, inv_diff = sess.run([angle_tf, x_transformed, recon, recon_forward, per_invariant_diff], feed_dict={
-			x: sample,
-			#t_params_initial_tf: t_params_initial,
-			z_reference_tf: z_reference,
-			t_params: img_t,
-			f_params: feat_t
-		})
-		latent_angles.append(latent_angle[0])
-		per_invariant_diffs.append(inv_diff)
-		skio.imsave('samples/debug_imgs/img_input' + str(idx) + '.png', np.clip(np.reshape(img_initial, [28, 28]), 0, 1))
-		skio.imsave('samples/debug_imgs/img_reconstruction' + str(idx) + '.png', np.clip(np.reshape(img_recon, [28, 28]), 0, 1))
-		skio.imsave('samples/debug_imgs/img_forward' + str(idx) + '.png', np.clip(np.reshape(img_recon_foward, [28, 28]), 0, 1))
-	print(angle_transforms)
-	print(latent_angles)
-
-	#differences_per_invariant = np.transpose(np.squeeze(np.asarray(per_invariant_diffs)))
-	differences_per_invariant = np.squeeze(np.asarray(per_invariant_diffs))
-	plt.plot(differences_per_invariant)
-	plt.ylabel('invariant differences')
-	plt.show()
-
-
-
-######################################################
-
-def debug(opt, data):
-	sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
-	#generate image space and latent space transformations
-	max_angles = 360
-	image_transforms = []
-	feature_transforms = []
-	angle_transforms = []
-	for i in xrange(max_angles):
-		theta = 2.*np.pi*i/(1.*max_angles)
-		img_t, feat_t = el.random_transform_theta(1, opt['im_size'],
-			theta) # last arg is theta
-		#print(img_t)
-		#print(feat_t)
-		image_transforms.append(img_t)
-		feature_transforms.append(feat_t)
-		angle_transforms.append(theta)
-
-	debug_latents_mlp(opt, data, sample, image_transforms, feature_transforms, angle_transforms)
 
 def train(inputs, outputs, ops, opt, data):
 	"""Training loop"""
@@ -417,23 +251,24 @@ def train(inputs, outputs, ops, opt, data):
 		# Validation
 		if epoch % 10 == 0:
 			Recon = []
+			sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
 			#noise_sample = np.random.normal(size=[1, FLAGS.num_latents])
 			noise_sample = np.zeros([1, FLAGS.num_latents])
-			max_angles = 20
+			max_angles = 20*20
 			#pick a random initial transformation
 			tp_init, fp_init = el.random_transform(opt['mb_size'], opt['im_size'])
-			for j in xrange(max_angles):
-				sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
-				for i in xrange(max_angles):
-					theta = 2.*np.pi*i/(1.*max_angles)
-					tp, fp = el.random_transform_theta(1, opt['im_size'], theta)
-					ops = recon
-					feed_dict = {xs: sample,
-									 fs_params: fp,
-									 ts_params: tp,
-									 t_params_initial: tp_init,
-									 random_sample: noise_sample}
-					Recon.append(sess.run(ops, feed_dict=feed_dict))
+			for i in xrange(max_angles):
+				#fp = el.get_f_transform(2.*np.pi*i/(1.*max_angles))[np.newaxis,:,:]
+				tp, fp = el.random_transform_theta(1, opt['im_size'],
+					2.*np.pi*i/(1.*max_angles)) # last arg is theta
+				#print fp
+				ops = recon
+				feed_dict = {xs: sample,
+							fs_params: fp,
+							ts_params: tp,
+							t_params_initial: tp_init,
+							random_sample: noise_sample}
+				Recon.append(sess.run(ops, feed_dict=feed_dict))
 			
 			samples_ = np.reshape(Recon, (-1,28,28))
 			
@@ -528,8 +363,8 @@ def main(_):
 	reconstruction_transform = transformer(x_initial_transform, t_params, (28,28))
 
 	kl_loss = -0.5*tf.reduce_mean(tf.reduce_sum(1. + 2.*tf.log(sigma) - tf.square(mu) - tf.square(sigma), axis=1))
-	#img_loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - tf.nn.sigmoid(reconstruction)), axis=(1,2)))
-	img_loss = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=reconstruction_transform, logits=reconstruction), axis=(1,2)))
+	img_loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - tf.nn.sigmoid(reconstruction)), axis=(1,2)))
+	#img_loss = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=reconstruction_transform, logits=reconstruction), axis=(1,2)))
 	loss = img_loss + kl_loss
 
 	recon_pre_sigmoid = single_model(xs, fs_params, name_scope='mainModel',
