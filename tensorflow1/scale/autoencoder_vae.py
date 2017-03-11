@@ -100,7 +100,7 @@ def linear(x, shape, name='0', bias_init=0.01):
 	He_initializer = tf.contrib.layers.variance_scaling_initializer()
 	W = tf.get_variable(name+'_W', shape=shape, initializer=He_initializer)
 	z = tf.matmul(x, W, name='mul'+str(name))
-	return bias_add(z, shape[1], name=name)
+	return bias_add(z, shape[1], bias_init=bias_init, name=name)
 
 
 def bias_add(x, nc, bias_init=0.01, name='0'):
@@ -109,19 +109,19 @@ def bias_add(x, nc, bias_init=0.01, name='0'):
 	return tf.nn.bias_add(x, b)
 
 
-def autoencoder(x, f_params, reuse=False):
+def autoencoder(x, f_params, is_training, reuse=False):
 	"""Build a model to rotate features"""
 	xsh = x.get_shape().as_list()
 	with tf.variable_scope('mainModel', reuse=reuse) as scope:
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("encoder", reuse=reuse) as scope:
-			mu, sigma = encoder(x)
+			mu, sigma = encoder(x, is_training, reuse=reuse)
 			z = sampler(mu, sigma, sample=(not reuse))
 		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
 			matrix_shape = [xsh[0], z.get_shape()[1]]
 			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
 		with tf.variable_scope("decoder", reuse=reuse) as scope:
-			r = decoder(z)
+			r = decoder(z, is_training, reuse=reuse)
 	return r, z, mu, sigma
 
 
@@ -133,21 +133,25 @@ def sampler(mu, sigma, sample=True):
 	return z
 
 
-def encoder(x):
+def encoder(x, is_training, reuse=False):
 	"""Encoder MLP"""
 	l1 = linear(x, [784,512], name='e0')
-	l2 = linear(tf.nn.relu(l1), [512,512], name='e1')
-	mu = linear(tf.nn.relu(l2), [512,FLAGS.num_latents], name='mu')
-	rho = linear(tf.nn.relu(l2), [512,FLAGS.num_latents], name='rho')
+	l1 = bn2d(l1, is_training, reuse=reuse, name='b1')
+	l2 = linear(tf.nn.elu(l1), [512,512], name='e1')
+	l2 = bn2d(l2, is_training, reuse=reuse, name='b2')
+	mu = linear(tf.nn.elu(l2), [512,FLAGS.num_latents], name='mu')
+	rho = linear(tf.nn.elu(l2), [512,FLAGS.num_latents], name='rho')
 	sigma = tf.nn.softplus(rho)
 	return mu, sigma
 
 
-def decoder(z):
+def decoder(z, is_training, reuse=False):
 	"""Encoder MLP"""
-	l1 = linear(z, [z.get_shape()[1], 512], name='d2')
-	l2 = linear(tf.nn.relu(l1), [512,512], name='d1')
-	return linear(tf.nn.relu(l2), [512,784], name='d0')
+	l2 = linear(z, [z.get_shape()[1], 512], name='d2')
+	l2 = bn2d(l2, is_training, reuse=reuse, name='b2')
+	l1 = linear(tf.nn.elu(l2), [512,512], name='d1')
+	l1 = bn2d(l1, is_training, reuse=reuse, name='b1')
+	return linear(tf.nn.elu(l1), [512,784], name='d0')
 
 
 def bernoulli_xentropy(x, recon_test):
@@ -186,11 +190,54 @@ def random_rss(mb_size, imsh, fv=None):
 	return np.vstack(t_params), np.stack(f_params, axis=0)
 
 
+##### SPECIAL FUNCTIONS #####
+def bn2d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
+	"""Batch normalization module.
+	
+	X: tf tensor
+	train_phase: boolean flag True: training mode, False: test mode
+	decay: decay rate: 0 is memory-less, 1 no updates (default 0.99)
+	name: (default batchNorm)
+	
+	Source: bgshi @ http://stackoverflow.com/questions/33949786/how-could-i-use-
+	batch-normalization-in-tensorflow"""
+	n_out = X.get_shape().as_list()[1]
+	
+	beta = tf.get_variable('beta_'+name, dtype=tf.float32, shape=n_out,
+								  initializer=tf.constant_initializer(0.0))
+	gamma = tf.get_variable('gamma_'+name, dtype=tf.float32, shape=n_out,
+									initializer=tf.constant_initializer(1.0))
+	pop_mean = tf.get_variable('pop_mean_'+name, dtype=tf.float32,
+										shape=n_out, trainable=False)
+	pop_var = tf.get_variable('pop_var_'+name, dtype=tf.float32,
+									  shape=n_out, trainable=False)
+	batch_mean, batch_var = tf.nn.moments(X, [0], name='moments_'+name)
+	
+	if not reuse:
+		ema = tf.train.ExponentialMovingAverage(decay=decay)
+
+		def mean_var_with_update():
+			ema_apply_op = ema.apply([batch_mean, batch_var])
+			pop_mean_op = tf.assign(pop_mean, ema.average(batch_mean))
+			pop_var_op = tf.assign(pop_var, ema.average(batch_var))
+	
+			with tf.control_dependencies([ema_apply_op, pop_mean_op, pop_var_op]):
+				return tf.identity(batch_mean), tf.identity(batch_var)
+		
+		mean, var = tf.cond(train_phase, mean_var_with_update,
+					lambda: (pop_mean, pop_var))
+	else:
+		mean, var = tf.cond(train_phase, lambda: (batch_mean, batch_var),
+				lambda: (pop_mean, pop_var))
+		
+	return tf.nn.batch_normalization(X, mean, var, beta, gamma, 1e-3)
+
+
 ############################################
 def train(inputs, outputs, ops, opt, data):
 	"""Training loop"""
 	# Unpack inputs, outputs and ops
-	x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val = inputs
+	x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val, is_training = inputs
 	loss, merged, recon_test = outputs
 	train_op = ops
 	
@@ -230,7 +277,8 @@ def train(inputs, outputs, ops, opt, data):
 								t_params: tp,
 								f_params: fp,
 								t_params_in: tp_in,
-								lr: current_lr}
+								lr: current_lr,
+								is_training: True}
 			gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
 			train_loss += l
 			# Summary writers
@@ -256,23 +304,27 @@ def train(inputs, outputs, ops, opt, data):
 				r1 = np.random.rand() > 0.5
 				r2 = np.random.rand() > 0.5
 				fv_ = np.vstack([2.*r0*fv, r1*fv, r2*fv]).T
+				
+				Recon.append(np.reshape(sample, (1,784)))
 				for i in xrange(max_angles):
 					tp, fp = random_rss(1, opt['im_size'], fv_[np.newaxis,i,:])
 					ops = recon_test
 					feed_dict = {xs: sample,
 									 f_params_val: fp,
 									 t_params_val: tp,
-									 t_params_in: tp_in}
+									 t_params_in: tp_in,
+									 is_training: False}
+					y= sess.run(ops, feed_dict=feed_dict)
 					Recon.append(sess.run(ops, feed_dict=feed_dict))
 			
 			samples_ = np.reshape(Recon, (-1,28,28))
 			
-			ns = 20
+			ns = max_angles
 			sh = 28
-			tile_image = np.zeros((ns*sh,ns*sh))
-			for j in xrange(ns*ns):
-				m = sh*(j/ns) 
-				n = sh*(j%ns)
+			tile_image = np.zeros((ns*sh,(ns+1)*sh))
+			for j in xrange((ns+1)*ns):
+				m = sh*(j/(ns+1)) 
+				n = sh*(j%(ns+1))
 				tile_image[m:m+sh,n:n+sh] = 1.-samples_[j,...]
 			save_name = './samples/vae/image_%04d.png' % epoch
 			skio.imsave(save_name, tile_image)
@@ -326,14 +378,15 @@ def main(_):
 	f_params_val = tf.placeholder(tf.float32, [1,6,6], name='f_params_val') 
 	global_step = tf.Variable(0, name='global_step', trainable=False)
 	lr = tf.placeholder(tf.float32, [], name='lr')
+	is_training = tf.placeholder(tf.bool, [], name='is_training')
 	
 	# Build the training model
 	x_in = transformer_layer(x, t_params_in, opt['im_size'])
 	target = transformer_layer(x_in, t_params, opt['im_size'])
-	recon, latents, mu, sigma = autoencoder(x_in, f_params)
+	recon, latents, mu, sigma = autoencoder(x_in, f_params, is_training)
 	recon = tf.reshape(recon, x.get_shape())
 	# Test model
-	recon_test_, __, __, __ = autoencoder(xs, f_params_val, reuse=True)
+	recon_test_, __, __, __ = autoencoder(xs, f_params_val, is_training, reuse=True)
 	recon_test = tf.nn.sigmoid(recon_test_)
 	
 	# LOSS
@@ -355,7 +408,7 @@ def main(_):
 	train_op = optim.minimize(loss, global_step=global_step)
 	
 	# Set inputs, outputs, and training ops
-	inputs = [x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val]
+	inputs = [x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val, is_training]
 	outputs = [loss, merged, recon_test]
 	ops = [train_op]
 	
