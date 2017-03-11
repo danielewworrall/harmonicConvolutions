@@ -17,3 +17,4 @@ taco_cifar/
 trevi/
 *.bmp
 *.tfevents*
+*.pkl
