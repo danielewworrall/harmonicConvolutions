@@ -31,6 +31,8 @@ flags.DEFINE_integer('eq_dim', -1, 'number of latent units to rotate')
 flags.DEFINE_integer('num_latents', 32, 'Dimension of the latent variables')
 flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on latents')
 flags.DEFINE_integer('save_step', 50, 'Interval (epoch) for which to save')
+flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
+flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 ##---------------------
 
 ################ DATA #################
@@ -103,8 +105,9 @@ def flatten(input):
 		num_params *= s[i]
 	return tf.reshape(input, [s[0], num_params])
 
+
 def linear(x, shape, name='0', bias_init=0.01):
-	"""Basic linea matmul layer"""
+	"""Basic linear matmul layer"""
 	He_initializer = tf.contrib.layers.variance_scaling_initializer()
 	W = tf.get_variable(name+'_W', shape=shape, initializer=He_initializer)
 	z = tf.matmul(x, W, name='mul'+str(name))
@@ -125,9 +128,9 @@ def single_model(x, f_params, random_sample, name_scope='siamese', conv=False, t
 		# Basic branch
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("Encoder", reuse=True) as scope:
-			mu, log_sigma = encoder(x, conv=conv)
-			#z = mu + tf.exp(log_sigma) * random_sample
-			z = mu + log_sigma * random_sample
+			mu, sigma = encoder(x, conv=conv)
+			#z = mu + tf.exp(sigma) * random_sample
+			z = mu + sigma * random_sample
 		if conv:
 			z = el.transform_features(z, t_params, f_params)
 		else:
@@ -149,8 +152,8 @@ def single_model_non_siamese(x, f_params, conv=False, t_params=[]):
 		# Basic branch
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("Encoder", reuse=False) as scope:
-			mu, log_sigma = encoder(x, conv=conv)
-			z, eps = sampler(mu, log_sigma)
+			mu, sigma = encoder(x, conv=conv)
+			z, eps = sampler(mu, sigma)
 		if conv:
 			z = el.transform_features(z, t_params, f_params)
 		else:
@@ -162,7 +165,7 @@ def single_model_non_siamese(x, f_params, conv=False, t_params=[]):
 				z = tf.concat([eq_part, inv_part], 1)
 		with tf.variable_scope("Decoder", reuse=False) as scope:
 			r = decoder(z, conv=conv)
-	return r, z, mu, log_sigma, eps
+	return r, z, mu, sigma, eps
 
 
 def autoencoder(x):
@@ -174,11 +177,11 @@ def autoencoder(x):
 		r = decoder(z)
 	return z, r
 
-def sampler(mu, log_sigma):
+def sampler(mu, sigma):
 	#reparam trick :)
 	eps = tf.random_normal(mu.get_shape())
-	#return mu + tf.exp(log_sigma) * eps, eps
-	return mu + log_sigma * eps, eps
+	#return mu + tf.exp(sigma) * eps, eps
+	return mu + sigma * eps, eps
 
 
 def encoder(x, conv=False):
@@ -202,9 +205,9 @@ def encoder(x, conv=False):
 		#l3 = linear(tf.nn.elu(l2), [500,256], name='3')
 		mu = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='mu')
 		rho = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='rho')
-		log_sigma = tf.nn.softplus(rho)
-		#log_sigma = rho
-		return mu, log_sigma
+		sigma = tf.nn.softplus(rho)
+		#sigma = rho
+		return mu, sigma
 
 def decoder(z, conv=False):
 	bs = z.get_shape()[0]
@@ -221,7 +224,7 @@ def decoder(z, conv=False):
 		#l3 = linear(tf.nn.elu(l2), [500,500], name='7')
 		#l3 = linear(tf.nn.elu(l3), [500,500], name='7b')
 		#l3 = linear(tf.nn.elu(l3), [500,500], name='7c')
-		return tf.nn.sigmoid(linear(tf.nn.elu(l1), [512,784], name='8'))
+		return linear(tf.nn.elu(l1), [512,784], name='8')
 	
 ##################EVALUATION##########################
 def debug_latents_mlp(opt, data, sample, img_transforms, feat_transforms, angle_transforms):
@@ -461,8 +464,17 @@ def main(_):
 	opt = {}
 	"""Main loop"""
 	tf.reset_default_graph()
-	opt['root'] = '/home/sgarbin'
-	dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
+	if FLAGS.Daniel:
+		print('Hello Daniel!')
+		opt['root'] = '/home/daniel'
+		dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
+	elif FLAGS.Sleepy:
+		print('Hello dworrall!')
+		opt['root'] = '/home/dworrall'
+		dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
+	else:
+		opt['root'] = '/home/sgarbin'
+		dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
 	opt['mb_size'] = 128
 	opt['n_channels'] = 10
 	opt['n_epochs'] = 2000
@@ -470,7 +482,7 @@ def main(_):
 	opt['lr'] = 1e-3
 	opt['im_size'] = (28,28)
 	opt['train_size'] = 55000
-	opt['equivariant_weight'] = 1 #1e-3
+	opt['equivariant_weight'] = 1 
 	flag = 'vae'
 	opt['convolutional'] = False
 	if opt['convolutional']:
@@ -522,19 +534,21 @@ def main(_):
 	x_initial_transform = transformer(x, t_params_initial, (28,28))
 	x_initial_transform.set_shape(shape_temp)
 	#build encoder
-	reconstruction, latents, mu, log_sigma, eps = single_model_non_siamese(x_initial_transform,
+	reconstruction, latents, mu, sigma, eps = single_model_non_siamese(x_initial_transform,
 		f_params, t_params=t_params, conv=opt['convolutional'])
 	reconstruction = tf.reshape(reconstruction, x.get_shape())
 	#transform input corresponding to latents for loss
 	reconstruction_transform = transformer(x_initial_transform, t_params, (28,28))
 
-	#kl_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + 2.0 * log_sigma - tf.square(mu) - tf.exp(2.0 * log_sigma), axis=1))
-	kl_loss = tf.reduce_mean(-0.5 * tf.reduce_sum(1.0 + 2.0 * tf.log(log_sigma) - tf.square(mu) - 2.0 * log_sigma, axis=1))
-	img_loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - reconstruction), axis=(1,2)))
+	kl_loss = -0.5*tf.reduce_mean(tf.reduce_sum(1. + 2.*tf.log(sigma) - tf.square(mu) - tf.square(sigma), axis=1))
+	#img_loss = tf.reduce_mean(tf.reduce_sum(tf.square(reconstruction_transform - tf.nn.sigmoid(reconstruction)), axis=(1,2)))
+	img_loss = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=reconstruction_transform, logits=reconstruction), axis=(1,2)))
 	loss = img_loss + kl_loss
 
-	recon = single_model(xs, fs_params, name_scope='mainModel', conv=opt['convolutional'],
-		t_params=ts_params, random_sample=random_sample)
+	recon_pre_sigmoid = single_model(xs, fs_params, name_scope='mainModel',
+												conv=opt['convolutional'],
+												t_params=ts_params, random_sample=random_sample)
+	recon = tf.nn.sigmoid(recon_pre_sigmoid)
 
 	tf.summary.scalar('Loss', loss)
 	tf.summary.scalar('Loss_KL', kl_loss)
