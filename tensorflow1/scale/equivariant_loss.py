@@ -121,7 +121,6 @@ def random_transform_6(mb_size, imsh):
 
 
 ############ n-tuples of n-D transforms ###############
-
 def get_f_transform_n(variables):
 	"""Return block matrix of 2D transformations"""
 	blocks = []
@@ -134,7 +133,9 @@ def get_f_transform_n(variables):
 
 def get_t_transform_n(transform, imsh):
 	"""Rescale the spatial transform for normalized coordinates"""
-	mat = np.dot(np.dot(scale1, transform, scale2))
+	scale1 = np.array([[float(imsh[0])/imsh[1], 0.], [0., 1.]])
+	scale2 = np.array([[float(imsh[1])/imsh[0], 0.], [0., 1.]])
+	mat = np.dot(np.dot(scale1, transform), scale2)
 	mat = np.hstack((mat, np.zeros((2,1))))
 	mat = mat.astype('float32')
 	return mat.flatten()

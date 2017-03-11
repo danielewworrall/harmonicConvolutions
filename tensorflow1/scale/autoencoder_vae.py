@@ -28,7 +28,7 @@ FLAGS = flags.FLAGS
 #execution modes
 flags.DEFINE_boolean('ANALYSE', False, 'runs model analysis')
 flags.DEFINE_integer('eq_dim', -1, 'number of latent units to rotate')
-flags.DEFINE_integer('num_latents', 32, 'Dimension of the latent variables')
+flags.DEFINE_integer('num_latents', 30, 'Dimension of the latent variables')
 flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on latents')
 flags.DEFINE_integer('save_step', 50, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
@@ -135,17 +135,19 @@ def sampler(mu, sigma, sample=True):
 
 def encoder(x):
 	"""Encoder MLP"""
-	l1 = linear(x, [784,512], name='1')
-	mu = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='mu')
-	rho = linear(tf.nn.elu(l1), [512,FLAGS.num_latents], name='rho')
+	l1 = linear(x, [784,512], name='e0')
+	l2 = linear(tf.nn.relu(l1), [512,512], name='e1')
+	mu = linear(tf.nn.relu(l2), [512,FLAGS.num_latents], name='mu')
+	rho = linear(tf.nn.relu(l2), [512,FLAGS.num_latents], name='rho')
 	sigma = tf.nn.softplus(rho)
 	return mu, sigma
 
 
 def decoder(z):
 	"""Encoder MLP"""
-	l1 = linear(z, [z.get_shape()[1], 512], name='d0')
-	return linear(tf.nn.elu(l1), [512,784], name='d1')
+	l1 = linear(z, [z.get_shape()[1], 512], name='d2')
+	l2 = linear(tf.nn.relu(l1), [512,512], name='d1')
+	return linear(tf.nn.relu(l2), [512,784], name='d0')
 
 
 def bernoulli_xentropy(x, recon_test):
@@ -160,7 +162,30 @@ def gaussian_kl(mu, sigma):
 	return -0.5*tf.reduce_mean(tf.reduce_sum(per_neuron_kl, axis=1))
 	
 
+def random_rss(mb_size, imsh, fv=None):
+	"""Random rotation, scalex and scaley"""
+	t_params = []
+	f_params = []
+	def scale_(t, a, b):
+		t_ = t / np.pi
+		return (b-a)*t_ + a
 	
+	if fv is None:
+		fv = np.pi*np.random.rand(mb_size, 3)
+		fv[:,0] = 2.*fv[:,0]
+
+	for i in xrange(mb_size):
+		# Anisotropically scaled and rotated
+		rot = np.array([[np.cos(fv[i,0]), -np.sin(fv[i,0])],
+							[np.sin(fv[i,0]), np.cos(fv[i,0])]])
+		scale = np.array([[scale_(fv[i,1],0.8,1.2),0.],[0., scale_(fv[i,2],0.8,1.2)]])
+		transform = np.dot(scale, rot)
+		# Compute transformer matrices
+		t_params.append(el.get_t_transform_n(transform, (imsh[0],imsh[1])))
+		f_params.append(el.get_f_transform_n(fv[i,:]))
+	return np.vstack(t_params), np.stack(f_params, axis=0)
+
+
 ############################################
 def train(inputs, outputs, ops, opt, data):
 	"""Training loop"""
@@ -197,13 +222,14 @@ def train(inputs, outputs, ops, opt, data):
 		mb_list = random_sampler(n_train, opt)
 		for i, mb in enumerate(mb_list):
 			#initial random transform
-			tp_init, fp_init = el.random_transform(opt['mb_size'], opt['im_size'])
-			tp, fp = el.random_transform(opt['mb_size'], opt['im_size'])
+			tp_in, fp_in = el.random_transform(opt['mb_size'], opt['im_size'])
+			#tp, fp = el.random_transform(opt['mb_size'], opt['im_size'])
+			tp, fp = random_rss(opt['mb_size'], opt['im_size'])
 			ops = [global_step, loss, merged, train_op]
 			feed_dict = {x: data['X']['train'][mb,...],
 								t_params: tp,
 								f_params: fp,
-								t_params_in: tp_init,
+								t_params_in: tp_in,
 								lr: current_lr}
 			gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
 			train_loss += l
@@ -212,28 +238,31 @@ def train(inputs, outputs, ops, opt, data):
 		train_loss /= (i+1.)
 		print('[{:03d}]: {:03f}'.format(epoch, train_loss))
 		
-		#save model
+		# Save model
 		if epoch % FLAGS.save_step == 0:
 			path = saver.save(sess, opt['save_path'], epoch)
 			print('Saved model to ' + path)
+		
 		# Validation
 		if epoch % 10 == 0:
 			Recon = []
-			#noise_sample = np.random.normal(size=[1, FLAGS.num_latents])
-			noise_sample = np.zeros([1, FLAGS.num_latents])
 			max_angles = 20
 			#pick a random initial transformation
-			tp_init, fp_init = el.random_transform(opt['mb_size'], opt['im_size'])
+			tp_in, fp_in = el.random_transform(opt['mb_size'], opt['im_size'])
+			fv = np.linspace(0., np.pi, num=max_angles)
 			for j in xrange(max_angles):
 				sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
+				r0 = np.random.rand() > 0.5
+				r1 = np.random.rand() > 0.5
+				r2 = np.random.rand() > 0.5
+				fv_ = np.vstack([2.*r0*fv, r1*fv, r2*fv]).T
 				for i in xrange(max_angles):
-					theta = 2.*np.pi*i/(1.*max_angles)
-					tp, fp = el.random_transform_theta(1, opt['im_size'], theta)
+					tp, fp = random_rss(1, opt['im_size'], fv_[np.newaxis,i,:])
 					ops = recon_test
 					feed_dict = {xs: sample,
 									 f_params_val: fp,
 									 t_params_val: tp,
-									 t_params_in: tp_init}
+									 t_params_in: tp_in}
 					Recon.append(sess.run(ops, feed_dict=feed_dict))
 			
 			samples_ = np.reshape(Recon, (-1,28,28))
@@ -292,9 +321,9 @@ def main(_):
 	xs = tf.placeholder(tf.float32, [1,28,28,1], name='xs')
 	t_params_in = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params_in')
 	t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
-	f_params = tf.placeholder(tf.float32, [opt['mb_size'],2,2], name='f_params')
+	f_params = tf.placeholder(tf.float32, [opt['mb_size'],6,6], name='f_params')
 	t_params_val = tf.placeholder(tf.float32, [1,6], name='t_params_val') 
-	f_params_val = tf.placeholder(tf.float32, [1,2,2], name='f_params_val') 
+	f_params_val = tf.placeholder(tf.float32, [1,6,6], name='f_params_val') 
 	global_step = tf.Variable(0, name='global_step', trainable=False)
 	lr = tf.placeholder(tf.float32, [], name='lr')
 	
