@@ -60,6 +60,10 @@ def read_my_file_format(filename_queue, im_size, opt):
 		split_params = tf.string_split([paired_params], delimiter=',')
 		
 		geometry, lighting = string2params([az,el,az_light,el_light],split_params)
+	
+	if opt['color'] == 1:
+		img1 = tf.image.rgb_to_grayscale(img1)
+		img2 = tf.image.rgb_to_grayscale(img2)
 			
 	return img1, img2, geometry, lighting
 
