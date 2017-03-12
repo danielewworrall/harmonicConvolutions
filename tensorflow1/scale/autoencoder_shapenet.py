@@ -5,21 +5,69 @@ import sys
 import time
 import glob
 sys.path.append('../')
-
-#import cv2
-#import input_data
 import numpy as np
-import skimage.io as skio
 import tensorflow as tf
 
+### local files ######
 import equivariant_loss as el
-import mnist_loader
-import models
-
+import shapenet_loader
+from spatial_transformer import AffineVolumeTransformer
+# TODO
 from spatial_transformer import transformer
 
-import matplotlib.pyplot as plt
+### local files end ###
 
+
+###   TMP   ###
+
+pad_size = 12
+vol = np.pad(vol, pad_width=[[pad_size,pad_size], [pad_size,pad_size], [pad_size,pad_size]], mode='constant')
+outsize = (int(vol.shape[0]), int(vol.shape[1]), int(vol.shape[2]))
+stl = AffineVolumeTransformer(outsize)
+
+# x-axis-rot, y-axis-rot, z-axis-rot
+def transmat(phi, theta, psi, shiftmat=None):
+    if shiftmat is None:
+        shiftmat = np.zeros([3,1])
+
+    rotmat = np.zeros([3,3])
+    rotmat[0,0] = np.cos(theta)*np.cos(psi)
+    rotmat[0,1] = np.cos(phi)*np.sin(psi) + np.sin(phi)*np.sin(theta)*np.cos(psi)
+    rotmat[0,2] = np.sin(phi)*np.sin(psi) - np.cos(phi)*np.sin(theta)*np.cos(psi)
+    rotmat[1,0] = -np.cos(theta)*np.sin(psi)
+    rotmat[1,1] = np.cos(phi)*np.cos(psi) - np.sin(phi)*np.sin(theta)*np.sin(psi)
+    rotmat[1,2] = np.sin(phi)*np.cos(psi) + np.cos(phi)*np.sin(theta)*np.sin(psi)
+    rotmat[2,0] = np.sin(theta)
+    rotmat[2,1] = -np.sin(phi)*np.cos(theta)
+    rotmat[2,2] = np.cos(phi)*np.cos(theta)
+
+    if shiftmat.ndim==1:
+        shiftmat = np.expand_dims(shiftmat, axis=1)
+    transmat = np.concatenate([rotmat, shiftmat],1)
+    return transmat.flatten().astype(np.float32)
+
+def get_rot_diff(transmat_src, transmat_trg):
+    transmat_src = np.reshape(transmat_src, [3,4])
+    transmat_trg = np.reshape(transmat_trg, [3,4])
+    R_src = transmat_src[:,0:3]
+    t_src = transmat_src[:,3:4]
+    R_trg = transmat_trg[:,0:3]
+    t_trg = transmat_trg[:,3:4]
+    R_res = np.dot(R_src.T, R_trg)
+    t_res = -t_src + t_trg
+    result = np.concatenate([R_res, t_res], 1)
+    return result.flatten()
+
+theta_random = np.zeros([batch_size, stl.param_dim], dtype=np.float32)
+random_angles = 2*np.pi*(2*(np.random.rand(batch_size,3)-0.5))
+for i in xrange(batch_size):
+    cur_theta = transmat(random_angles[i,0], random_angles[i,1], random_angles[i,2])
+    theta_random[i,:] = cur_theta
+
+transformed = stl.transform(x, theta)
+x_canonical = np.transpose(x_canonical, [0,3,2,1,4])
+
+### TMP END ### 
 ################ DATA #################
 
 #-----------ARGS----------
@@ -33,18 +81,20 @@ flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on late
 flags.DEFINE_integer('save_step', 50, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
+flags.DEFINE_boolean('Daniyar', True, 'Dopey execution environment')
 ##---------------------
 
 ################ DATA #################
 def load_data():
-	mnist = mnist_loader.read_data_sets("/tmp/data/", one_hot=True)
+    # TODO shapenet_loader
+	shapenet = shapenet_loader.read_data_sets("/tmp/data/", one_hot=True)
 	data = {}
-	data['X'] = {'train': np.reshape(mnist.train._images, (-1,28,28,1)),
-					 'valid': np.reshape(mnist.validation._images, (-1,28,28,1)),
-					 'test': np.reshape(mnist.test._images, (-1,28,28,1))}
-	data['Y'] = {'train': mnist.train._labels,
-					 'valid': mnist.validation._labels,
-					 'test': mnist.test._labels}
+	data['X'] = {'train': shapenet.train._images,
+					 'valid': shapenet.validation._images,
+					 'test': shapenet.test._images}
+	data['Y'] = {'train': shapenet.train._labels,
+					 'valid': shapenet.validation._labels,
+					 'test': shapenet.test._labels}
 	return data
 
 
@@ -80,20 +130,13 @@ def removeAllFilesInDirectory(directory, extension):
 
 ############## MODEL ####################
 def transformer_layer(x, t_params, imsh):
+    # TODO make 3D
 	"""Spatial transformer wtih shapes sets"""
 	xsh = x.get_shape()
 	x_in = transformer(x, t_params, imsh)
 	x_in.set_shape(xsh)
 	return x_in
 	
-
-def flatten(input):
-	s = input.get_shape().as_list()
-	num_params = 1
-	for i in range(1, len(s)): #ignore batch size
-		num_params *= s[i]
-	return tf.reshape(input, [s[0], num_params])
-
 
 def linear(x, shape, name='0', bias_init=0.01):
 	"""Basic linear matmul layer"""
@@ -110,13 +153,14 @@ def bias_add(x, nc, bias_init=0.01, name='0'):
 
 
 def autoencoder(x, f_params, is_training, reuse=False):
+    # TODO make 3D
 	"""Build a model to rotate features"""
 	xsh = x.get_shape().as_list()
 	with tf.variable_scope('mainModel', reuse=reuse) as scope:
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("encoder", reuse=reuse) as scope:
 			mu, sigma = encoder(x, is_training, reuse=reuse)
-			z = sampler(mu, sigma, sample=False) #(not reuse))
+			z = sampler(mu, sigma, sample=(not reuse))
 		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
 			matrix_shape = [xsh[0], z.get_shape()[1]]
 			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
@@ -134,6 +178,7 @@ def sampler(mu, sigma, sample=True):
 
 
 def encoder(x, is_training, reuse=False):
+    # TODO make 3D
 	"""Encoder MLP"""
 	l1 = linear(x, [784,512], name='e0')
 	l1 = bn2d(l1, is_training, reuse=reuse, name='b1')
@@ -146,6 +191,7 @@ def encoder(x, is_training, reuse=False):
 
 
 def decoder(z, is_training, reuse=False):
+    # TODO make 3D
 	"""Encoder MLP"""
 	l2 = linear(z, [z.get_shape()[1], 512], name='d2')
 	l2 = bn2d(l2, is_training, reuse=reuse, name='b2')
@@ -167,6 +213,7 @@ def gaussian_kl(mu, sigma):
 	
 
 def random_rss(mb_size, imsh, fv=None):
+    # TODO make 3D
 	"""Random rotation, scalex and scaley"""
 	t_params = []
 	f_params = []
@@ -182,7 +229,7 @@ def random_rss(mb_size, imsh, fv=None):
 		# Anisotropically scaled and rotated
 		rot = np.array([[np.cos(fv[i,0]), -np.sin(fv[i,0])],
 							[np.sin(fv[i,0]), np.cos(fv[i,0])]])
-		scale = np.array([[scale_(fv[i,1],0.8,1.8),0.],[0., scale_(fv[i,2],0.8,1.8)]])
+		scale = np.array([[scale_(fv[i,1],0.8,1.2),0.],[0., scale_(fv[i,2],0.8,1.2)]])
 		transform = np.dot(scale, rot)
 		# Compute transformer matrices
 		t_params.append(el.get_t_transform_n(transform, (imsh[0],imsh[1])))
@@ -235,6 +282,9 @@ def bn2d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 ############################################
 def train(inputs, outputs, ops, opt, data):
+    # TODO make 3D
+    # inputs, opt
+
 	"""Training loop"""
 	# Unpack inputs, outputs and ops
 	x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val, is_training = inputs
@@ -269,8 +319,7 @@ def train(inputs, outputs, ops, opt, data):
 		mb_list = random_sampler(n_train, opt)
 		for i, mb in enumerate(mb_list):
 			#initial random transform
-			tp_in, fp_in = el.random_transform(opt['mb_size'], opt['im_size'])
-			#tp, fp = el.random_transform(opt['mb_size'], opt['im_size'])
+			tp_in, _ = el.random_transform(opt['mb_size'], opt['im_size'])
 			tp, fp = random_rss(opt['mb_size'], opt['im_size'])
 			ops = [global_step, loss, merged, train_op]
 			feed_dict = {x: data['X']['train'][mb,...],
@@ -296,7 +345,7 @@ def train(inputs, outputs, ops, opt, data):
 			Recon = []
 			max_angles = 20
 			#pick a random initial transformation
-			tp_in, fp_in = el.random_transform(opt['mb_size'], opt['im_size'])
+			tp_in, _ = el.random_transform(opt['mb_size'], opt['im_size'])
 			fv = np.linspace(0., np.pi, num=max_angles)
 			for j in xrange(max_angles):
 				sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
@@ -327,7 +376,8 @@ def train(inputs, outputs, ops, opt, data):
 				n = sh*(j%(ns+1))
 				tile_image[m:m+sh,n:n+sh] = 1.-samples_[j,...]
 			save_name = './samples/vae/image_%04d.png' % epoch
-			skio.imsave(save_name, tile_image)
+            # TODO save binvox
+			#skio.imsave(save_name, tile_image)
 
 
 def main(_):
@@ -342,15 +392,22 @@ def main(_):
 		print('Hello dworrall!')
 		opt['root'] = '/home/dworrall'
 		dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
+	elif FLAGS.Dopey:
+		print('Hello Daniyar!')
+		opt['root'] = '/home/daniyar'
+		dir_ = opt['root'] + '/deep_learning/harmonicConvolutions/tensorflow1/scale'
 	else:
 		opt['root'] = '/home/sgarbin'
 		dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
+
 	opt['mb_size'] = 128
 	opt['n_channels'] = 10
 	opt['n_epochs'] = 2000
 	opt['lr_schedule'] = [50, 75]
 	opt['lr'] = 1e-3
 	opt['im_size'] = (28,28)
+	opt['color_chn'] = 1
+    opt['stl_param_dim'] = 12 # TODO stl.param_dim
 	opt['train_size'] = 55000
 	opt['equivariant_weight'] = 1 
 	flag = 'vae'
@@ -369,18 +426,24 @@ def main(_):
 	data['Y']['train'] = data['Y']['train'][:opt['train_size'],:]
 
 	# Placeholders
-	x = tf.placeholder(tf.float32, [opt['mb_size'],28,28,1], name='x')
-	xs = tf.placeholder(tf.float32, [1,28,28,1], name='xs')
-	t_params_in = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params_in')
-	t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
-	f_params = tf.placeholder(tf.float32, [opt['mb_size'],6,6], name='f_params')
-	t_params_val = tf.placeholder(tf.float32, [1,6], name='t_params_val') 
-	f_params_val = tf.placeholder(tf.float32, [1,6,6], name='f_params_val') 
+    # depth, height, width, in_channels
+    #x = tf.placeholder(tf.float32, [batch_size, vol.shape[0], vol.shape[1], vol.shape[2], 1])
+
+	x = tf.placeholder(tf.float32, [opt['mb_size'],opt['im_size'][0],opt['im_size'][1],opt['color_chn']], name='x')
+	xs = tf.placeholder(tf.float32, [1,opt['im_size'][0],opt['im_size'][1],opt['color_chn']], name='xs')
+    # TODO check these placholders
+	t_params_in = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_param_dim']], name='t_params_in')
+	t_params = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_param_dim']], name='t_params')
+	f_params = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_param_dim'],opt['stl_param_dim']], name='f_params')
+	t_params_val = tf.placeholder(tf.float32, [1,opt['stl_param_dim']], name='t_params_val') 
+	f_params_val = tf.placeholder(tf.float32, [1,opt['stl_param_dim'],opt['stl_param_dim']], name='f_params_val') 
+
 	global_step = tf.Variable(0, name='global_step', trainable=False)
 	lr = tf.placeholder(tf.float32, [], name='lr')
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
 	
 	# Build the training model
+    # TODO make 3D
 	x_in = transformer_layer(x, t_params_in, opt['im_size'])
 	target = transformer_layer(x_in, t_params, opt['im_size'])
 	recon, latents, mu, sigma = autoencoder(x_in, f_params, is_training)
@@ -393,8 +456,8 @@ def main(_):
 	# KL-divergence of posterior from prior
 	kl_loss = gaussian_kl(mu, sigma)
 	# Negative log-likelihood
-	nll = bernoulli_xentropy(tf.to_float(target > 0.5), recon)
-	loss = nll #+ kl_loss
+	nll = bernoulli_xentropy(target, recon)
+	loss = nll + kl_loss
 	
 	# Summaries
 	tf.summary.scalar('Loss', loss)
