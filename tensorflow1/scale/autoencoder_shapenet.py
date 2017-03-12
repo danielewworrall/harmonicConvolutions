@@ -17,52 +17,16 @@ from spatial_transformer import transformer
 
 ### local files end ###
 
-
-###   TMP   ###
-
-# x-axis-rot, y-axis-rot, z-axis-rot
-def transmat(phi, theta, psi, shiftmat=None):
-    batch_size = phi.shape[0]
-    assert batch_size==theta.shape[0] and batch_size==psi.shape[0], 'must have same number of angles for x,y and z axii'
-    assert phi.ndim==1 and theta.ndim==1 and psi.ndim==1, 'must be 1 dimensional array'
-
-    if shiftmat is None:
-        shiftmat = np.zeros([batch_size,3,1])
-
-    rotmat = np.zeros([batch_size, 3,3])
-    rotmat[:,0,0] = np.cos(theta)*np.cos(psi)
-    rotmat[:,0,1] = np.cos(phi)*np.sin(psi) + np.sin(phi)*np.sin(theta)*np.cos(psi)
-    rotmat[:,0,2] = np.sin(phi)*np.sin(psi) - np.cos(phi)*np.sin(theta)*np.cos(psi)
-    rotmat[:,1,0] = -np.cos(theta)*np.sin(psi)
-    rotmat[:,1,1] = np.cos(phi)*np.cos(psi) - np.sin(phi)*np.sin(theta)*np.sin(psi)
-    rotmat[:,1,2] = np.sin(phi)*np.cos(psi) + np.cos(phi)*np.sin(theta)*np.sin(psi)
-    rotmat[:,2,0] = np.sin(theta)
-    rotmat[:,2,1] = -np.sin(phi)*np.cos(theta)
-    rotmat[:,2,2] = np.cos(phi)*np.cos(theta)
-
-    transmat = np.concatenate([rotmat, shiftmat],2)
-    return np.reshape(transmat, [batch_size, -1]).astype(np.float32)
+###   TODO TMP   ###
 
 pad_size = 12
 vol = np.pad(vol, pad_width=[[pad_size,pad_size], [pad_size,pad_size], [pad_size,pad_size]], mode='constant')
 outsize = (int(vol.shape[0]), int(vol.shape[1]), int(vol.shape[2]))
 stl = AffineVolumeTransformer(outsize)
 
-def get_rot_diff(transmat_src, transmat_trg):
-    transmat_src = np.reshape(transmat_src, [3,4])
-    transmat_trg = np.reshape(transmat_trg, [3,4])
-    R_src = transmat_src[:,0:3]
-    t_src = transmat_src[:,3:4]
-    R_trg = transmat_trg[:,0:3]
-    t_trg = transmat_trg[:,3:4]
-    R_res = np.dot(R_src.T, R_trg)
-    t_res = -t_src + t_trg
-    result = np.concatenate([R_res, t_res], 1)
-    return result.flatten()
-
 transformed = stl.transform(x, theta)
 
-### TMP END ### 
+### TODO TMP END ### 
 ################ DATA #################
 
 #-----------ARGS----------
@@ -76,79 +40,78 @@ flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on late
 flags.DEFINE_integer('save_step', 50, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
-flags.DEFINE_boolean('Daniyar', True, 'Dopey execution environment')
+flags.DEFINE_boolean('Dopey', True, 'Dopey execution environment')
 ##---------------------
 
 ################ DATA #################
 def load_data():
-    # TODO shapenet_loader
-	shapenet = shapenet_loader.read_data_sets("/tmp/data/", one_hot=True)
-	data = {}
-	data['X'] = {'train': shapenet.train._images,
-					 'valid': shapenet.validation._images,
-					 'test': shapenet.test._images}
-	data['Y'] = {'train': shapenet.train._labels,
-					 'valid': shapenet.validation._labels,
-					 'test': shapenet.test._labels}
-	return data
+    shapenet = shapenet_loader.read_data_sets("/tmp/data/", one_hot=True)
+    data = {}
+    data['X'] = {'train': shapenet.train.volumes,
+                'valid': shapenet.validation.volumes,
+                'test': shapenet.test.volumes}
+    data['Y'] = {'train': shapenet.train.labels,
+                'valid': shapenet.validation.labels,
+                'test': shapenet.test.labels}
+    return data
 
 
 def random_sampler(n_data, opt, random=True):
-	"""Return minibatched data"""
-	if random:
-		indices = np.random.permutation(n_data)
-	else:
-		indices = np.arange(n_data)
-	mb_list = []
-	for i in xrange(int(float(n_data)/opt['mb_size'])):
-		mb_list.append(indices[opt['mb_size']*i:opt['mb_size']*(i+1)])
-	return mb_list
+    """Return minibatched data"""
+    if random:
+        indices = np.random.permutation(n_data)
+    else:
+        indices = np.arange(n_data)
+    mb_list = []
+    for i in xrange(int(float(n_data)/opt['mb_size'])):
+        mb_list.append(indices[opt['mb_size']*i:opt['mb_size']*(i+1)])
+    return mb_list
 
 
 def checkFolder(dir):
-	"""Checks if a folder exists and creates it if not.
-	dir: directory
-	Returns nothing
-	"""
-	if not os.path.exists(dir):
-		os.makedirs(dir)
+    """Checks if a folder exists and creates it if not.
+    dir: directory
+    Returns nothing
+    """
+    if not os.path.exists(dir):
+        os.makedirs(dir)
 
 
 def removeAllFilesInDirectory(directory, extension):
-	cwd = os.getcwd()
-	os.chdir(directory)
-	filelist = glob.glob('*' + extension)
-	for f in filelist:
-		os.remove(f)
-	os.chdir(cwd)
+    cwd = os.getcwd()
+    os.chdir(directory)
+    filelist = glob.glob('*' + extension)
+    for f in filelist:
+        os.remove(f)
+    os.chdir(cwd)
 
 
 ############## MODEL ####################
 def transformer_layer(x, t_params, imsh):
     # TODO make 3D
-	"""Spatial transformer wtih shapes sets"""
-	xsh = x.get_shape()
-	x_in = transformer(x, t_params, imsh)
-	x_in.set_shape(xsh)
-	return x_in
+    """Spatial transformer wtih shapes sets"""
+    xsh = x.get_shape()
+    x_in = transformer(x, t_params, imsh)
+    x_in.set_shape(xsh)
+    return x_in
 	
 
 def linear(x, shape, name='0', bias_init=0.01):
-	"""Basic linear matmul layer"""
-	He_initializer = tf.contrib.layers.variance_scaling_initializer()
-	W = tf.get_variable(name+'_W', shape=shape, initializer=He_initializer)
-	z = tf.matmul(x, W, name='mul'+str(name))
-	return bias_add(z, shape[1], bias_init=bias_init, name=name)
+    """Basic linear matmul layer"""
+    He_initializer = tf.contrib.layers.variance_scaling_initializer()
+    W = tf.get_variable(name+'_W', shape=shape, initializer=He_initializer)
+    z = tf.matmul(x, W, name='mul'+str(name))
+    return bias_add(z, shape[1], bias_init=bias_init, name=name)
 
 
 def bias_add(x, nc, bias_init=0.01, name='0'):
-	const_initializer = tf.constant_initializer(value=bias_init)
-	b = tf.get_variable(name+'_b', shape=nc, initializer=const_initializer)
-	return tf.nn.bias_add(x, b)
+    const_initializer = tf.constant_initializer(value=bias_init)
+    b = tf.get_variable(name+'_b', shape=nc, initializer=const_initializer)
+    return tf.nn.bias_add(x, b)
 
 
 def autoencoder(x, f_params, is_training, reuse=False):
-    # TODO make 3D
+	# TODO make 3D
 	"""Build a model to rotate features"""
 	xsh = x.get_shape().as_list()
 	with tf.variable_scope('mainModel', reuse=reuse) as scope:
@@ -173,7 +136,7 @@ def sampler(mu, sigma, sample=True):
 
 
 def encoder(x, is_training, reuse=False):
-    # TODO make 3D
+	# TODO make 3D
 	"""Encoder MLP"""
 	l1 = linear(x, [784,512], name='e0')
 	l1 = bn2d(l1, is_training, reuse=reuse, name='b1')
@@ -186,7 +149,7 @@ def encoder(x, is_training, reuse=False):
 
 
 def decoder(z, is_training, reuse=False):
-    # TODO make 3D
+	# TODO make 3D
 	"""Encoder MLP"""
 	l2 = linear(z, [z.get_shape()[1], 512], name='d2')
 	l2 = bn2d(l2, is_training, reuse=reuse, name='b2')
@@ -208,7 +171,7 @@ def gaussian_kl(mu, sigma):
 	
 
 def random_rss(mb_size, imsh, fv=None):
-    # TODO make 3D
+	# TODO make 3D
 	"""Random rotation, scalex and scaley"""
 	t_params = []
 	f_params = []
@@ -277,8 +240,8 @@ def bn2d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 ############################################
 def train(inputs, outputs, ops, opt, data):
-    # TODO make 3D
-    # inputs, opt
+	# TODO make 3D
+	# inputs, opt
 
 	"""Training loop"""
 	# Unpack inputs, outputs and ops
@@ -402,7 +365,7 @@ def main(_):
 	opt['lr'] = 1e-3
 	opt['im_size'] = (28,28)
 	opt['color_chn'] = 1
-    opt['stl_param_dim'] = 12 # TODO stl.param_dim
+	opt['stl_param_dim'] = 12 # TODO stl.param_dim
 	opt['train_size'] = 55000
 	opt['equivariant_weight'] = 1 
 	flag = 'vae'
@@ -421,12 +384,9 @@ def main(_):
 	data['Y']['train'] = data['Y']['train'][:opt['train_size'],:]
 
 	# Placeholders
-    # depth, height, width, in_channels
-    #x = tf.placeholder(tf.float32, [batch_size, vol.shape[0], vol.shape[1], vol.shape[2], 1])
-
-	x = tf.placeholder(tf.float32, [opt['mb_size'],opt['im_size'][0],opt['im_size'][1],opt['color_chn']], name='x')
+	# batch_size, depth, height, width, in_channels
+	x = tf.placeholder(tf.float32, [opt['mb_size'],opt['im_size'][0],opt['im_size'][1],opt['im_size'][2], opt['color_chn']], name='x')
 	xs = tf.placeholder(tf.float32, [1,opt['im_size'][0],opt['im_size'][1],opt['color_chn']], name='xs')
-    # TODO check these placholders
 	t_params_in = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_param_dim']], name='t_params_in')
 	t_params = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_param_dim']], name='t_params')
 	f_params = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_param_dim'],opt['stl_param_dim']], name='f_params')
@@ -438,7 +398,7 @@ def main(_):
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
 	
 	# Build the training model
-    # TODO make 3D
+	# TODO make 3D
 	x_in = transformer_layer(x, t_params_in, opt['im_size'])
 	target = transformer_layer(x_in, t_params, opt['im_size'])
 	recon, latents, mu, sigma = autoencoder(x_in, f_params, is_training)
