@@ -1,24 +1,35 @@
 """Functions for downloading and reading MNIST data."""
 from __future__ import print_function
 import os
-import numpy
+import numpy as np
 import binvox_rw
+import glob
+import multiprocessing
 
 # save our result
-def save_binvox(x_canonical, i, name):
-    cur_vol = x_canonical[i,:,:,:,0]>0.5 # binary
-    with open('data/model.binvox', 'rb') as f:
-        model = binvox_rw.read_as_3d_array(f)
-
+def save_binvox(inp, prefix='model_'):
+  for i in range(inp.shape[0]):
+    cur_vol = inp[i,:,:,:,0]
+    cur_vol = np.transpose(cur_vol, [2,1,0])
+    cur_vol = cur_vol>0.5 # binary
+    #with open('data/model.binvox', 'rb') as f:
+    #  model = binvox_rw.read_as_3d_array(f)
     cur_model = binvox_rw.Voxels(
             data=cur_vol, 
-            dims=cur_vol.shape.tolist(), 
-            translate=model.translate, 
-            scale=model.scale, 
-            axis_order=model.axis_order)
-    with open(name + '.binvox', 'wb') as f:
-        cur_model.write(f)
+            dims=list(cur_vol.shape), 
+            translate=[0,0,0], 
+            scale=1.0, 
+            axis_order='xyz')
+    with open(prefix + str(i) + '.binvox', 'wb') as f:
+      cur_model.write(f)
 
+def read_binbox(path):
+  with open(path, 'rb') as f:
+    model = binvox_rw.read_as_3d_array(f)
+    result = model.data.copy().astype(np.int8)
+    result = np.transpose(result, [2,1,0])
+    return result
+  return None
  
 def dense_to_one_hot(labels_dense, num_classes=10):
   """Convert class labels from scalars to one-hot vectors."""
@@ -28,47 +39,39 @@ def dense_to_one_hot(labels_dense, num_classes=10):
   labels_one_hot.flat[index_offset + labels_dense.ravel()] = 1
   return labels_one_hot
 
-def extract_labels(filename, one_hot=False):
-  """Extract the labels into a 1D uint8 numpy array [index]."""
-  print('Extracting', filename)
-  with gzip.open(filename) as bytestream:
-    magic = _read32(bytestream)
-    if magic != 2049:
-      raise ValueError(
-          'Invalid magic number %d in MNIST label file: %s' %
-          (magic, filename))
-    num_items = _read32(bytestream)
-    buf = bytestream.read(num_items[0])
-    labels = numpy.frombuffer(buf, dtype=numpy.uint8)
-    if one_hot:
-      return dense_to_one_hot(labels)
-    return labels
-  
+
 class DataSet(object):
-  def __init__(self, images, labels, fake_data=False):
-    if fake_data:
-      self._num_examples = 10000
-    else:
-      assert images.shape[0] == labels.shape[0], (
-          "images.shape: %s labels.shape: %s" % (images.shape,
-                                                 labels.shape))
-      self._num_examples = images.shape[0]
-      # Convert shape from [num examples, rows, columns, depth]
-      # to [num examples, rows*columns] (assuming depth == 1)
-      assert images.shape[3] == 1
-      images = images.reshape(images.shape[0],
-                              images.shape[1] * images.shape[2])
-      # Convert from [0, 255] -> [0.0, 1.0].
-      images = images.astype(numpy.float32)
-      images = numpy.multiply(images, 1.0 / 255.0)
-    self._images = images
-    self._labels = labels
+  def __init__(self, file_list, label_list, one_hot):
+    assert len(file_list) == len(label_list), (
+        "files: %s labels: %s" % (len(file_list), len(label_list)))
+    self._num_examples = len(file_list)
+    # read first file to get width, height, depth
+    def get_dims(fname):
+        vol = read_binbox(fname)
+        return vol.shape[0], vol.shape[1], vol.shape[2]
+    
+    width, height, depth = get_dims(file_list[0])
+
+    self._volumes = np.empty([self._num_examples, depth, height, width, 1], dtype=np.int8)
+
+    p = multiprocessing.Pool(processes=4)
+    for i in range(self._num_examples):
+        fname = file_list[i]
+        cur_vol = p.apply_async(read_binbox, [fname])
+        self._volumes[i,:,:,:,0] = cur_vol.get()
+        #cur_vol = read_binbox(fname)
+        #self._volumes[i,:,:,:,0] = cur_vol
+    p.close()
+    p.join()
+
+    self.perm = np.arange(self._num_examples, dtype=np.int64)
+    self._labels = np.reshape(np.array(label_list), [-1])
     self._epochs_completed = 0
     self._index_in_epoch = 0
     
   @property
-  def images(self):
-    return self._images
+  def volumes(self):
+    return self._volumes
   
   @property
   def labels(self):
@@ -82,57 +85,104 @@ class DataSet(object):
   def epochs_completed(self):
     return self._epochs_completed
   
-  def next_batch(self, batch_size, fake_data=False):
-    """Return the next `batch_size` examples from this data set."""
-    if fake_data:
-      fake_image = [1.0 for _ in xrange(784)]
-      fake_label = 0
-      return [fake_image for _ in xrange(batch_size)], [
-          fake_label for _ in xrange(batch_size)]
-    start = self._index_in_epoch
-    self._index_in_epoch += batch_size
-    if self._index_in_epoch > self._num_examples:
-      # Finished epoch
-      self._epochs_completed += 1
-      # Shuffle the data
-      perm = numpy.arange(self._num_examples)
-      numpy.random.shuffle(perm)
-      self._images = self._images[perm]
-      self._labels = self._labels[perm]
-      # Start next epoch
-      start = 0
-      self._index_in_epoch = batch_size
-      assert batch_size <= self._num_examples
-    end = self._index_in_epoch
-    return self._images[start:end], self._labels[start:end]
+  def shuffle(self):
+      np.random.shuffle(self.perm)
+
+  def next_batch(self, batch_size, doperm=True):
+      if doperm and self._index_in_epoch==0:
+	self.shuffle()
+
+      """Return the next `batch_size` examples from this data set."""
+      start = self._index_in_epoch
+      self._index_in_epoch += batch_size
+      if self._index_in_epoch > self._num_examples:
+        # Shuffle the data
+        self.shuffle()
+
+        # Start next epoch
+        start = 0
+        self._index_in_epoch = batch_size
+        assert batch_size <= self.num_img
+      end = self._index_in_epoch
+
+      inds = np.arange(start, end, dtype=np.int64)
+      if doperm:
+          inds = self.perm[inds]
+      volumes = self._volumes[self.perm[start:end], :,:,:,:]
+      labels = self._labels[self.perm[start:end]]
+      return volumes, labels
+
   
-def read_data_sets(train_dir, fake_data=False, one_hot=False):
+def read_data_sets(path, one_hot=False):
   class DataSets(object):
     pass
   data_sets = DataSets()
-  if fake_data:
-    data_sets.train = DataSet([], [], fake_data=True)
-    data_sets.validation = DataSet([], [], fake_data=True)
-    data_sets.test = DataSet([], [], fake_data=True)
-    return data_sets
-  TRAIN_IMAGES = 'train-images-idx3-ubyte.gz'
-  TRAIN_LABELS = 'train-labels-idx1-ubyte.gz'
-  TEST_IMAGES = 't10k-images-idx3-ubyte.gz'
-  TEST_LABELS = 't10k-labels-idx1-ubyte.gz'
-  VALIDATION_SIZE = 5000
-  local_file = maybe_download(TRAIN_IMAGES, train_dir)
-  train_images = extract_images(local_file)
-  local_file = maybe_download(TRAIN_LABELS, train_dir)
-  train_labels = extract_labels(local_file, one_hot=one_hot)
-  local_file = maybe_download(TEST_IMAGES, train_dir)
-  test_images = extract_images(local_file)
-  local_file = maybe_download(TEST_LABELS, train_dir)
-  test_labels = extract_labels(local_file, one_hot=one_hot)
-  validation_images = train_images[:VALIDATION_SIZE]
-  validation_labels = train_labels[:VALIDATION_SIZE]
-  train_images = train_images[VALIDATION_SIZE:]
-  train_labels = train_labels[VALIDATION_SIZE:]
-  data_sets.train = DataSet(train_images, train_labels)
-  data_sets.validation = DataSet(validation_images, validation_labels)
-  data_sets.test = DataSet(test_images, test_labels)
+  #print(path)
+  #print(os.path.expanduser(path))
+  #print(os.path.realpath(os.path.expanduser(path)))
+  path = os.path.realpath(os.path.expanduser(path))
+  print('Reading', path)
+
+  train_split = 0.8
+  validation_split = 0.1
+  test_split = 0.1
+
+  class_folders = sorted(glob.glob(os.path.join(path, '*')))
+  #print(class_folders)
+  classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]
+  #print(classes)
+  train_file_list = []
+  validation_file_list = []
+  test_file_list = []
+  train_labels = []
+  validation_labels = []
+  test_labels = []
+
+  all_file_count = 0
+  for i in range(len(class_folders)):
+    file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
+    all_file_count += len(file_list)
+
+    train_split_size = np.floor(len(file_list)*train_split).astype(np.int)
+    validation_split_size = np.floor(len(file_list)*validation_split).astype(np.int)
+    test_split_size = np.floor(len(file_list)*test_split).astype(np.int)
+    # TODO
+    #test_split_size = len(file_list) - train_split_size - validation_split_size
+
+    cur_train_file_list = file_list[0:train_split_size]
+    cur_validation_file_list = file_list[train_split_size: (train_split_size + validation_split_size)]
+    cur_test_file_list = file_list[(train_split_size + validation_split_size):(train_split_size + validation_split_size + test_split_size)]
+
+    cur_train_labels = [i]*train_split_size # DANGER BEWARE do not change values in this list
+    cur_validation_labels = [i]*validation_split_size # DANGER BEWARE do not change values in this list
+    cur_test_labels = [i]*test_split_size # DANGER BEWARE do not change values in this list
+
+    #print(os.path.basename(os.path.normpath(os.path.dirname(file_list[0]))))
+
+    train_file_list.extend(cur_train_file_list)
+    validation_file_list.extend(cur_validation_file_list)
+    test_file_list.extend(cur_test_file_list)
+    train_labels.extend(cur_train_labels)
+    validation_labels.extend(cur_validation_labels)
+    test_labels.extend(cur_test_labels)
+
+  print('Files to read:', all_file_count)
+
+  data_sets.train = DataSet(train_file_list, train_labels, one_hot)
+  data_sets.validation = DataSet(validation_file_list, validation_labels, one_hot)
+  data_sets.test = DataSet(test_file_list, test_labels, one_hot)
   return data_sets
+
+
+def test():
+  dataset = read_data_sets('~/scratch/Datasets/ShapeNetVox32')
+  tmp1, tmp2 = dataset.train.next_batch(2)
+  print(dataset.train.volumes.shape)
+  print(tmp1.shape)
+  print(tmp2)
+
+def main(argv=None):  # pylint: disable=unused-argument
+  test()
+
+if __name__ == '__main__':
+  main() 
