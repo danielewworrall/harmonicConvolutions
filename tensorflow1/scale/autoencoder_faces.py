@@ -126,58 +126,75 @@ def bias_add(x, nc, bias_init=0.01, name='0'):
 		return tf.nn.bias_add(x, b)
 
 
-def autoencoder(x, f_params, is_training, reuse=False):
+def autoencoder(x, f_params, is_training, opt, reuse=False):
 	"""Build a model to rotate features"""
 	xsh = x.get_shape().as_list()
 	with tf.variable_scope('mainModel', reuse=reuse) as scope:
 		with tf.variable_scope("encoder", reuse=reuse) as scope:
-			z = encoder(x, is_training, reuse=reuse)
+			z = encoder(x, is_training, opt, reuse=reuse)
 		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
 			matrix_shape = [xsh[0], z.get_shape()[1]]
 			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
 		with tf.variable_scope("decoder", reuse=reuse) as scope:
-			r = decoder(z, is_training, reuse=reuse)
+			r = decoder(z, is_training, opt, reuse=reuse)
 	return r
 
 
-def encoder(x, is_training, reuse=False):
+def encoder(x, is_training, opt, reuse=False):
 	"""Encoder MLP"""
 	with tf.variable_scope('encoder_1') as scope:
-		l1 = conv(x, [5,5,3,96], name='e0', padding='VALID')
-		l1 = tf.nn.max_pool(l1, (1,2,2,1), (1,2,2,1), padding='VALID')
+		l1 = conv(x, [3,3,opt['color'],96], name='e0', padding='SAME')
+		#l1 = tf.nn.max_pool(l1, (1,2,2,1), (1,2,2,1), padding='VALID')
 		l1 = bn4d(l1, is_training, reuse=reuse, name='bn1')
 	
 	with tf.variable_scope('encoder_2') as scope:
-		l2 = conv(tf.nn.relu(l1), [5,5,96,64], name='e1', padding='VALID')
-		l2 = tf.nn.max_pool(l2, (1,2,2,1), (1,2,2,1), padding='VALID')
+		l2 = conv(tf.nn.relu(l1), [3,3,96,96], stride=2, name='e1', padding='VALID')
+		#l2 = tf.nn.max_pool(l2, (1,2,2,1), (1,2,2,1), padding='VALID')
 		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
 	
 	with tf.variable_scope('encoder_3') as scope:
-		l3 = conv(tf.nn.relu(l2), [5,5,64,32], name='e2', padding='VALID')
-		l3 = tf.nn.max_pool(l3, (1,2,2,1), (1,2,2,1), padding='VALID')
+		l3 = conv(tf.nn.relu(l2), [3,3,96,64], stride=2, name='e2', padding='VALID')
+		#l3 = tf.nn.max_pool(l3, (1,2,2,1), (1,2,2,1), padding='VALID')
 		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
-		l3 = tf.reshape(l3, shape=(-1,15*15*32))
 	
 	with tf.variable_scope('encoder_4') as scope:
-		return linear(tf.nn.relu(l3), [7200,720], name='e_out')
+		l4 = conv(tf.nn.relu(l3), [3,3,64,32], stride=2, name='e3', padding='VALID')
+		#l4 = tf.nn.max_pool(l4, (1,2,2,1), (1,2,2,1), padding='VALID')
+		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
+		l4 = tf.reshape(l4, shape=(-1,17*17*32))
+	
+	with tf.variable_scope('encoder_5') as scope:
+		l5 = linear(tf.nn.relu(l4), [17*17*32,204], name='e5')
+		l5 = bn2d(l5, is_training, reuse=reuse, name='bn5')
+	
+	with tf.variable_scope('encoder_6') as scope:
+		return linear(tf.nn.relu(l5), [204,204], name='e_out')
 
 
-def decoder(z, is_training, reuse=False):
+def decoder(z, is_training, opt, reuse=False):
 	"""Encoder MLP"""
+	with tf.variable_scope('decoder_6') as scope:
+		l_in = linear(z, [204, 204], name='d_in')
+		l_in = bn2d(l_in, is_training, reuse=reuse, name='bn6')
+	
+	with tf.variable_scope('decoder_5') as scope:
+		l5 = linear(tf.nn.relu(l_in), [204,17*17*32], name='d5')
+		l5 = tf.reshape(l5, shape=(-1,17,17,32))
+	
 	with tf.variable_scope('decoder_4') as scope:
-		l_in = linear(z, [720, 7200], name='d_in')
-		l_in = tf.reshape(l_in, shape=(-1,15,15,32))
+		l4 = deconv(tf.nn.relu(l5), [3,3,32,46], [26,26], name='d4')
+		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
 	
 	with tf.variable_scope('decoder_3') as scope:
-		l3 = deconv(tf.nn.relu(l_in), [7,7,32,64], [34,34], name='d3')
+		l3 = deconv(tf.nn.relu(l4), [3,3,46,66], [47,47], name='d3')
 		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
 	
 	with tf.variable_scope('decoder_2') as scope:
-		l2 = deconv(tf.nn.relu(l3), [7,7,64,96], [73,73], name='d2')
+		l2 = deconv(tf.nn.relu(l3), [3,3,66,96], [84,84], name='d2')
 		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
 	
 	with tf.variable_scope('decoder_1') as scope:
-		return deconv(tf.nn.relu(l2), [7,7,96,3], [150,150], name='d1')
+		return deconv(tf.nn.relu(l2), [3,3,96,opt['color']], [150,150], name='d1')
 
 
 def bernoulli_xentropy(x, recon):
@@ -186,9 +203,13 @@ def bernoulli_xentropy(x, recon):
 	return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2)))
 
 
-def gaussian_nll(x, recon):
+def gaussian_nll(target, recon, mean=False):
 	"""L2 loss"""
-	return tf.reduce_mean(tf.reduce_sum(tf.square(x - recon), axis=(1,2,3)))
+	if mean:
+		loss = tf.reduce_mean(tf.square(target - recon))
+	else:
+		loss = tf.reduce_mean(tf.reduce_sum(tf.square(target - recon), axis=(1,2,3)))
+	return loss
 
 
 ##### SPECIAL FUNCTIONS #####
@@ -303,7 +324,7 @@ def train(inputs, outputs, ops, opt):
 			while not coord.should_stop():
 				# Learning rate
 				exponent = sum([gs > i for i in opt['lr_schedule']])
-				current_lr = opt['lr']*np.power(0.1, exponent)	
+				current_lr = opt['lr']*np.power(0.1, exponent)
 				
 				# Train
 				ops = [global_step, loss, merged, train_op]
@@ -345,17 +366,17 @@ def main(_):
 	else:
 		opt['root'] = '/home/sgarbin'
 		dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
-	opt['mb_size'] = 128
-	opt['n_channels'] = 10
-	opt['n_iterations'] = 100000
+	opt['mb_size'] = 32
+	opt['n_iterations'] = 10000000
 	opt['lr_schedule'] = [50000, 75000]
-	opt['lr'] = 1e-2
+	opt['lr'] = 1e-4
 	opt['im_size'] = (150,150)
 	opt['train_size'] = 240000
-	opt['equivariant_weight'] = 1 
+	opt['equivariant_weight'] = 1
+	opt['color'] = 3
 	flag = 'vae'
-	opt['summary_path'] = '{:s}/summaries/facetrain_{:s}'.format(dir_, flag)
-	opt['save_path'] = '{:s}/checkpoints/facetrain_{:s}/model.ckpt'.format(dir_, flag)
+	opt['summary_path'] = '{:s}/summaries/facetrain_6D_{:s}'.format(dir_, flag)
+	opt['save_path'] = '{:s}/checkpoints/facetrain_6D_{:s}/model.ckpt'.format(dir_, flag)
 
 	#check and clear directories
 	checkFolder(opt['summary_path'])
@@ -366,6 +387,8 @@ def main(_):
 	# Load data
 	train_files = face_loader.get_files(opt['data_folder'])
 	x, target, geometry, lighting = face_loader.get_batches(train_files, True, opt)
+	x /= 255.
+	target /= 255.
 
 	# Placeholders
 	global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -373,10 +396,16 @@ def main(_):
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
 	
 	# Build the training model
-	recon = autoencoder(x, geometry, is_training)
+	zeros = tf.zeros_like(geometry)
+	f_params1 = tf.concat([geometry,zeros], 1)
+	f_params2 = tf.concat([zeros,lighting], 1)
+	f_params = tf.concat([f_params1, f_params2], 2)
+	
+	recon = autoencoder(x, f_params, is_training, opt)
 
 	# LOSS
-	loss = gaussian_nll(target, recon)
+	loss = gaussian_nll(target, recon, mean=True)
+	#loss = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=target, logits=recon), axis=(1,2,3)))
 	
 	# Summaries
 	tf.summary.scalar('Loss', loss)
