@@ -25,27 +25,6 @@ vol = np.pad(vol, pad_width=[[pad_size,pad_size], [pad_size,pad_size], [pad_size
 outsize = (int(vol.shape[0]), int(vol.shape[1]), int(vol.shape[2]))
 stl = AffineVolumeTransformer(outsize)
 
-# x-axis-rot, y-axis-rot, z-axis-rot
-def transmat(phi, theta, psi, shiftmat=None):
-    if shiftmat is None:
-        shiftmat = np.zeros([3,1])
-
-    rotmat = np.zeros([3,3])
-    rotmat[0,0] = np.cos(theta)*np.cos(psi)
-    rotmat[0,1] = np.cos(phi)*np.sin(psi) + np.sin(phi)*np.sin(theta)*np.cos(psi)
-    rotmat[0,2] = np.sin(phi)*np.sin(psi) - np.cos(phi)*np.sin(theta)*np.cos(psi)
-    rotmat[1,0] = -np.cos(theta)*np.sin(psi)
-    rotmat[1,1] = np.cos(phi)*np.cos(psi) - np.sin(phi)*np.sin(theta)*np.sin(psi)
-    rotmat[1,2] = np.sin(phi)*np.cos(psi) + np.cos(phi)*np.sin(theta)*np.sin(psi)
-    rotmat[2,0] = np.sin(theta)
-    rotmat[2,1] = -np.sin(phi)*np.cos(theta)
-    rotmat[2,2] = np.cos(phi)*np.cos(theta)
-
-    if shiftmat.ndim==1:
-        shiftmat = np.expand_dims(shiftmat, axis=1)
-    transmat = np.concatenate([rotmat, shiftmat],1)
-    return transmat.flatten().astype(np.float32)
-
 def get_rot_diff(transmat_src, transmat_trg):
     transmat_src = np.reshape(transmat_src, [3,4])
     transmat_trg = np.reshape(transmat_trg, [3,4])
@@ -58,14 +37,7 @@ def get_rot_diff(transmat_src, transmat_trg):
     result = np.concatenate([R_res, t_res], 1)
     return result.flatten()
 
-theta_random = np.zeros([batch_size, stl.param_dim], dtype=np.float32)
-random_angles = 2*np.pi*(2*(np.random.rand(batch_size,3)-0.5))
-for i in xrange(batch_size):
-    cur_theta = transmat(random_angles[i,0], random_angles[i,1], random_angles[i,2])
-    theta_random[i,:] = cur_theta
-
 transformed = stl.transform(x, theta)
-x_canonical = np.transpose(x_canonical, [0,3,2,1,4])
 
 ### TMP END ### 
 ################ DATA #################
