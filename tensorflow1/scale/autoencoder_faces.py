@@ -29,7 +29,7 @@ flags.DEFINE_boolean('ANALYSE', False, 'runs model analysis')
 flags.DEFINE_integer('eq_dim', -1, 'number of latent units to rotate')
 flags.DEFINE_integer('num_latents', 30, 'Dimension of the latent variables')
 flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on latents')
-flags.DEFINE_integer('save_step', 50, 'Interval (epoch) for which to save')
+flags.DEFINE_integer('save_step', 500, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 ##---------------------
@@ -84,7 +84,23 @@ def transformer_layer(x, t_params, imsh):
 	x_in = transformer(x, t_params, imsh)
 	x_in.set_shape(xsh)
 	return x_in
-	
+
+
+def conv(x, shape, stride=1, name='0', bias_init=0.01, padding='SAME'):
+	with tf.variable_scope('conv') as scope:
+		He_initializer = tf.contrib.layers.variance_scaling_initializer()
+		W = tf.get_variable(name+'_W', shape=shape, initializer=He_initializer)
+		z = tf.nn.conv2d(x, W, [1, stride, stride, 1], padding, name=name+'conv')
+		return bias_add(z, shape[3], bias_init=bias_init, name=name)
+
+
+def deconv(x, W_shape, out_shape, stride=1, name='0', bias_init=0.01, padding='SAME'):
+	with tf.variable_scope('deconv') as scope:
+		# Resize convolution a la Google Brain
+		y = tf.image.resize_images(x, out_shape, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+		# Perform convolution, zero padding implicit
+		return conv(y, W_shape, stride=stride, name=name, bias_init=bias_init)
+
 
 def flatten(input):
 	s = input.get_shape().as_list()
@@ -96,97 +112,83 @@ def flatten(input):
 
 def linear(x, shape, name='0', bias_init=0.01):
 	"""Basic linear matmul layer"""
-	He_initializer = tf.contrib.layers.variance_scaling_initializer()
-	W = tf.get_variable(name+'_W', shape=shape, initializer=He_initializer)
-	z = tf.matmul(x, W, name='mul'+str(name))
-	return bias_add(z, shape[1], bias_init=bias_init, name=name)
+	with tf.variable_scope('linear') as scope:
+		He_initializer = tf.contrib.layers.variance_scaling_initializer()
+		W = tf.get_variable(name+'_W', shape=shape, initializer=He_initializer)
+		z = tf.matmul(x, W, name='mul'+str(name))
+		return bias_add(z, shape[1], bias_init=bias_init, name=name)
 
 
 def bias_add(x, nc, bias_init=0.01, name='0'):
-	const_initializer = tf.constant_initializer(value=bias_init)
-	b = tf.get_variable(name+'_b', shape=nc, initializer=const_initializer)
-	return tf.nn.bias_add(x, b)
+	with tf.variable_scope('bias') as scope:
+		const_initializer = tf.constant_initializer(value=bias_init)
+		b = tf.get_variable(name+'_b', shape=nc, initializer=const_initializer)
+		return tf.nn.bias_add(x, b)
 
 
 def autoencoder(x, f_params, is_training, reuse=False):
 	"""Build a model to rotate features"""
 	xsh = x.get_shape().as_list()
 	with tf.variable_scope('mainModel', reuse=reuse) as scope:
-		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("encoder", reuse=reuse) as scope:
-			mu, sigma = encoder(x, is_training, reuse=reuse)
-			z = sampler(mu, sigma, sample=(not reuse))
+			z = encoder(x, is_training, reuse=reuse)
 		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
 			matrix_shape = [xsh[0], z.get_shape()[1]]
 			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
 		with tf.variable_scope("decoder", reuse=reuse) as scope:
 			r = decoder(z, is_training, reuse=reuse)
-	return r, z, mu, sigma
-
-
-def sampler(mu, sigma, sample=True):
-	if sample:
-		z = mu + sigma*tf.random_normal(mu.get_shape())
-	else:
-		z = mu
-	return z
+	return r
 
 
 def encoder(x, is_training, reuse=False):
 	"""Encoder MLP"""
-	l1 = linear(x, [784,512], name='e0')
-	l1 = bn2d(l1, is_training, reuse=reuse, name='b1')
-	l2 = linear(tf.nn.elu(l1), [512,512], name='e1')
-	l2 = bn2d(l2, is_training, reuse=reuse, name='b2')
-	mu = linear(tf.nn.elu(l2), [512,FLAGS.num_latents], name='mu')
-	rho = linear(tf.nn.elu(l2), [512,FLAGS.num_latents], name='rho')
-	sigma = tf.nn.softplus(rho)
-	return mu, sigma
+	with tf.variable_scope('encoder_1') as scope:
+		l1 = conv(x, [5,5,3,96], name='e0', padding='VALID')
+		l1 = tf.nn.max_pool(l1, (1,2,2,1), (1,2,2,1), padding='VALID')
+		l1 = bn4d(l1, is_training, reuse=reuse, name='bn1')
+	
+	with tf.variable_scope('encoder_2') as scope:
+		l2 = conv(tf.nn.relu(l1), [5,5,96,64], name='e1', padding='VALID')
+		l2 = tf.nn.max_pool(l2, (1,2,2,1), (1,2,2,1), padding='VALID')
+		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
+	
+	with tf.variable_scope('encoder_3') as scope:
+		l3 = conv(tf.nn.relu(l2), [5,5,64,32], name='e2', padding='VALID')
+		l3 = tf.nn.max_pool(l3, (1,2,2,1), (1,2,2,1), padding='VALID')
+		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
+		l3 = tf.reshape(l3, shape=(-1,15*15*32))
+	
+	with tf.variable_scope('encoder_4') as scope:
+		return linear(tf.nn.relu(l3), [7200,720], name='e_out')
 
 
 def decoder(z, is_training, reuse=False):
 	"""Encoder MLP"""
-	l2 = linear(z, [z.get_shape()[1], 512], name='d2')
-	l2 = bn2d(l2, is_training, reuse=reuse, name='b2')
-	l1 = linear(tf.nn.elu(l2), [512,512], name='d1')
-	l1 = bn2d(l1, is_training, reuse=reuse, name='b1')
-	return linear(tf.nn.elu(l1), [512,784], name='d0')
+	with tf.variable_scope('decoder_4') as scope:
+		l_in = linear(z, [720, 7200], name='d_in')
+		l_in = tf.reshape(l_in, shape=(-1,15,15,32))
+	
+	with tf.variable_scope('decoder_3') as scope:
+		l3 = deconv(tf.nn.relu(l_in), [7,7,32,64], [34,34], name='d3')
+		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
+	
+	with tf.variable_scope('decoder_2') as scope:
+		l2 = deconv(tf.nn.relu(l3), [7,7,64,96], [73,73], name='d2')
+		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
+	
+	with tf.variable_scope('decoder_1') as scope:
+		return deconv(tf.nn.relu(l2), [7,7,96,3], [150,150], name='d1')
 
 
-def bernoulli_xentropy(x, recon_test):
+def bernoulli_xentropy(x, recon):
 	"""Cross-entropy for Bernoulli variables"""
-	x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=recon_test)
+	x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=recon)
 	return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2)))
 
 
-def gaussian_kl(mu, sigma):
-	"""Reverse KL-divergence from Gaussian variational to unit Gaussian prior"""
-	per_neuron_kl = 1. + 2.*tf.log(sigma) - tf.square(mu) - tf.square(sigma)
-	return -0.5*tf.reduce_mean(tf.reduce_sum(per_neuron_kl, axis=1))
-	
-
-def random_rss(mb_size, imsh, fv=None):
-	"""Random rotation, scalex and scaley"""
-	t_params = []
-	f_params = []
-	def scale_(t, a, b):
-		t_ = t / np.pi
-		return (b-a)*t_ + a
-	
-	if fv is None:
-		fv = np.pi*np.random.rand(mb_size, 3)
-		fv[:,0] = 2.*fv[:,0]
-
-	for i in xrange(mb_size):
-		# Anisotropically scaled and rotated
-		rot = np.array([[np.cos(fv[i,0]), -np.sin(fv[i,0])],
-							[np.sin(fv[i,0]), np.cos(fv[i,0])]])
-		scale = np.array([[scale_(fv[i,1],0.8,1.2),0.],[0., scale_(fv[i,2],0.8,1.2)]])
-		transform = np.dot(scale, rot)
-		# Compute transformer matrices
-		t_params.append(el.get_t_transform_n(transform, (imsh[0],imsh[1])))
-		f_params.append(el.get_f_transform_n(fv[i,:]))
-	return np.vstack(t_params), np.stack(f_params, axis=0)
+def gaussian_nll(x, recon):
+	"""L2 loss"""
+	return tf.reduce_mean(tf.reduce_sum(tf.square(x - recon), axis=(1,2,3)))
 
 
 ##### SPECIAL FUNCTIONS #####
@@ -232,102 +234,100 @@ def bn2d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 	return tf.nn.batch_normalization(X, mean, var, beta, gamma, 1e-3)
 
 
+def bn4d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
+	"""Batch normalization module.
+	
+	X: tf tensor
+	train_phase: boolean flag True: training mode, False: test mode
+	decay: decay rate: 0 is memory-less, 1 no updates (default 0.99)
+	name: (default batchNorm)
+	
+	Source: bgshi @ http://stackoverflow.com/questions/33949786/how-could-i-use-
+	batch-normalization-in-tensorflow"""
+	with tf.variable_scope(name, reuse=reuse) as scope:
+		n_out = X.get_shape().as_list()[3]
+		
+		beta = tf.get_variable('beta', dtype=tf.float32, shape=n_out,
+									  initializer=tf.constant_initializer(0.0))
+		gamma = tf.get_variable('gamma', dtype=tf.float32, shape=n_out,
+										initializer=tf.constant_initializer(1.0))
+		pop_mean = tf.get_variable('pop_mean', dtype=tf.float32,
+											shape=n_out, trainable=False)
+		pop_var = tf.get_variable('pop_var', dtype=tf.float32,
+										  shape=n_out, trainable=False)
+		batch_mean, batch_var = tf.nn.moments(X, [0,1,2], name='moments_'+name)
+		
+		if not reuse:
+			ema = tf.train.ExponentialMovingAverage(decay=decay)
+	
+			def mean_var_with_update():
+				ema_apply_op = ema.apply([batch_mean, batch_var])
+				pop_mean_op = tf.assign(pop_mean, ema.average(batch_mean))
+				pop_var_op = tf.assign(pop_var, ema.average(batch_var))
+		
+				with tf.control_dependencies([ema_apply_op, pop_mean_op, pop_var_op]):
+					return tf.identity(batch_mean), tf.identity(batch_var)
+			
+			mean, var = tf.cond(train_phase, mean_var_with_update,
+						lambda: (pop_mean, pop_var))
+		else:
+			mean, var = tf.cond(train_phase, lambda: (batch_mean, batch_var),
+					lambda: (pop_mean, pop_var))
+			
+		return tf.nn.batch_normalization(X, mean, var, beta, gamma, 1e-3)
+
+
 ############################################
-def train(inputs, outputs, ops, opt, data):
+def train(inputs, outputs, ops, opt):
 	"""Training loop"""
 	# Unpack inputs, outputs and ops
-	x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val, is_training = inputs
-	loss, merged, recon_test = outputs
-	train_op = ops
+	lr, is_training = inputs
+	loss, merged, recon_summary = outputs
+	train_op, global_step = ops
 	
 	# For checkpoints
 	gs = 0
 	start = time.time()
-	n_train = data['X']['train'].shape[0]
-	n_valid = data['X']['valid'].shape[0]
-	n_test = data['X']['test'].shape[0]
-	
 	saver = tf.train.Saver()
-	sess = tf.Session()
-
-	# Initialize variables
-	init = tf.global_variables_initializer()
-	sess.run(init)
 	
-	train_writer = tf.summary.FileWriter(opt['summary_path'], sess.graph)
-	# Training loop
-	for epoch in xrange(opt['n_epochs']):
-		# Learning rate
-		exponent = sum([epoch > i for i in opt['lr_schedule']])
-		current_lr = opt['lr']*np.power(0.1, exponent)	
-		
-		# Train
-		train_loss = 0.
-		train_acc = 0.
-		# Run training steps
-		mb_list = random_sampler(n_train, opt)
-		for i, mb in enumerate(mb_list):
-			#initial random transform
-			tp_in, fp_in = el.random_transform(opt['mb_size'], opt['im_size'])
-			#tp, fp = el.random_transform(opt['mb_size'], opt['im_size'])
-			tp, fp = random_rss(opt['mb_size'], opt['im_size'])
-			ops = [global_step, loss, merged, train_op]
-			feed_dict = {x: data['X']['train'][mb,...],
-								t_params: tp,
-								f_params: fp,
-								t_params_in: tp_in,
-								lr: current_lr,
-								is_training: True}
-			gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
-			train_loss += l
-			# Summary writers
-			train_writer.add_summary(summary, gs)
-		train_loss /= (i+1.)
-		print('[{:03d}]: {:03f}'.format(epoch, train_loss))
-		
-		# Save model
-		if epoch % FLAGS.save_step == 0:
-			path = saver.save(sess, opt['save_path'], epoch)
-			print('Saved model to ' + path)
-		
-		# Validation
-		if epoch % 10 == 0:
-			Recon = []
-			max_angles = 20
-			#pick a random initial transformation
-			tp_in, fp_in = el.random_transform(opt['mb_size'], opt['im_size'])
-			fv = np.linspace(0., np.pi, num=max_angles)
-			for j in xrange(max_angles):
-				sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
-				r0 = np.random.rand() > 0.5
-				r1 = np.random.rand() > 0.5
-				r2 = np.random.rand() > 0.5
-				fv_ = np.vstack([2.*r0*fv, r1*fv, r2*fv]).T
+	with tf.Session() as sess:
+		# Initialize variables
+		init = tf.global_variables_initializer()
+		sess.run(init)
+		# Threading and queueing
+		coord = tf.train.Coordinator()
+		threads = tf.train.start_queue_runners(coord=coord)
+		train_writer = tf.summary.FileWriter(opt['summary_path'], sess.graph)
+		# Training loop
+		try:
+			while not coord.should_stop():
+				# Learning rate
+				exponent = sum([gs > i for i in opt['lr_schedule']])
+				current_lr = opt['lr']*np.power(0.1, exponent)	
 				
-				Recon.append(np.reshape(sample, (1,784)))
-				for i in xrange(max_angles):
-					tp, fp = random_rss(1, opt['im_size'], fv_[np.newaxis,i,:])
-					ops = recon_test
-					feed_dict = {xs: sample,
-									 f_params_val: fp,
-									 t_params_val: tp,
-									 t_params_in: tp_in,
-									 is_training: False}
-					y= sess.run(ops, feed_dict=feed_dict)
-					Recon.append(sess.run(ops, feed_dict=feed_dict))
+				# Train
+				ops = [global_step, loss, merged, train_op]
+				feed_dict = {lr: current_lr, is_training: True}
+				gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
+				# Summary writers
+				train_writer.add_summary(summary, gs)
+				print('[{:06d} s | {:03d}]: {:01f}'.format(int(time.time()-start), gs, l))
+				
+				if gs % 100 == 0:
+					rs = sess.run(recon_summary, feed_dict={is_training: False})
+					train_writer.add_summary(rs, gs)
+				
+				# Save model
+				if gs % FLAGS.save_step == 0:
+					path = saver.save(sess, opt['save_path'], gs)
+					print('Saved model to ' + path)
+		except tf.errors.OutOfRangeError:
+			pass
+		finally:
+			# When done, ask the threads to stop.
+			coord.request_stop()
+			coord.join(threads)
 			
-			samples_ = np.reshape(Recon, (-1,28,28))
-			
-			ns = max_angles
-			sh = 28
-			tile_image = np.zeros((ns*sh,(ns+1)*sh))
-			for j in xrange((ns+1)*ns):
-				m = sh*(j/(ns+1)) 
-				n = sh*(j%(ns+1))
-				tile_image[m:m+sh,n:n+sh] = 1.-samples_[j,...]
-			save_name = './samples/vae/image_%04d.png' % epoch
-			skio.imsave(save_name, tile_image)
-
 
 def main(_):
 	opt = {}
@@ -347,15 +347,15 @@ def main(_):
 		dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
 	opt['mb_size'] = 128
 	opt['n_channels'] = 10
-	opt['n_epochs'] = 2000
-	opt['lr_schedule'] = [50, 75]
-	opt['lr'] = 1e-3
+	opt['n_iterations'] = 100000
+	opt['lr_schedule'] = [50000, 75000]
+	opt['lr'] = 1e-2
 	opt['im_size'] = (150,150)
-	opt['train_size'] = 55000
+	opt['train_size'] = 240000
 	opt['equivariant_weight'] = 1 
 	flag = 'vae'
-	opt['summary_path'] = '{:s}/summaries/autotrain_{:s}'.format(dir_, flag)
-	opt['save_path'] = '{:s}/checkpoints/autotrain_{:s}/model.ckpt'.format(dir_, flag)
+	opt['summary_path'] = '{:s}/summaries/facetrain_{:s}'.format(dir_, flag)
+	opt['save_path'] = '{:s}/checkpoints/facetrain_{:s}/model.ckpt'.format(dir_, flag)
 
 	#check and clear directories
 	checkFolder(opt['summary_path'])
@@ -365,54 +365,62 @@ def main(_):
 	
 	# Load data
 	train_files = face_loader.get_files(opt['data_folder'])
-	x, y, geometry, lighting = face_loader.get_batches(train_files, True, opt)
+	x, target, geometry, lighting = face_loader.get_batches(train_files, True, opt)
 
 	# Placeholders
-	#x = tf.placeholder(tf.float32, [opt['mb_size'],150,150,1], name='x')
-	xs = tf.placeholder(tf.float32, [1,28,28,1], name='xs')
-	t_params_in = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params_in')
-	t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
-	f_params = tf.placeholder(tf.float32, [opt['mb_size'],6,6], name='f_params')
-	t_params_val = tf.placeholder(tf.float32, [1,6], name='t_params_val') 
-	f_params_val = tf.placeholder(tf.float32, [1,6,6], name='f_params_val') 
 	global_step = tf.Variable(0, name='global_step', trainable=False)
 	lr = tf.placeholder(tf.float32, [], name='lr')
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
 	
 	# Build the training model
-	x_in = transformer_layer(x, t_params_in, opt['im_size'])
-	target = transformer_layer(x_in, t_params, opt['im_size'])
-	recon, latents, mu, sigma = autoencoder(x_in, f_params, is_training)
-	recon = tf.reshape(recon, x.get_shape())
-	# Test model
-	recon_test_, __, __, __ = autoencoder(xs, f_params_val, is_training, reuse=True)
-	recon_test = tf.nn.sigmoid(recon_test_)
-	
+	recon = autoencoder(x, geometry, is_training)
+
 	# LOSS
-	# KL-divergence of posterior from prior
-	kl_loss = gaussian_kl(mu, sigma)
-	# Negative log-likelihood
-	nll = bernoulli_xentropy(target, recon)
-	loss = nll + kl_loss
+	loss = gaussian_nll(target, recon)
 	
 	# Summaries
 	tf.summary.scalar('Loss', loss)
-	tf.summary.scalar('Loss_KL', kl_loss)
-	tf.summary.scalar('Loss_Img', nll)
 	tf.summary.scalar('LearningRate', lr)
 	merged = tf.summary.merge_all()
+	recon_summary = tf.summary.image('Reconstruction', recon, max_outputs=10)
 	
 	# Build optimizer
 	optim = tf.train.AdamOptimizer(lr)
 	train_op = optim.minimize(loss, global_step=global_step)
 	
 	# Set inputs, outputs, and training ops
-	inputs = [x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val, is_training]
-	outputs = [loss, merged, recon_test]
-	ops = [train_op]
+	inputs = [lr, is_training]
+	outputs = [loss, merged, recon_summary]
+	ops = [train_op, global_step]
 	
 	# Train
-	return train(inputs, outputs, ops, opt, data)
+	return train(inputs, outputs, ops, opt)
 
 if __name__ == '__main__':
 	tf.app.run()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

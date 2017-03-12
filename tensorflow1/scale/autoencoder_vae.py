@@ -393,7 +393,7 @@ def main(_):
 	# KL-divergence of posterior from prior
 	kl_loss = gaussian_kl(mu, sigma)
 	# Negative log-likelihood
-	nll = bernoulli_xentropy(target, recon)
+	nll = bernoulli_xentropy(tf.to_float(target > 0.5), recon)
 	loss = nll #+ kl_loss
 	
 	# Summaries

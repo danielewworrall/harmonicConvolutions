@@ -26,7 +26,7 @@ def string2params(string1, string2):
 			  rot3d_a2b(params1[2], params1[3], params2[2], params2[3]))
 
 
-def read_my_file_format(filename_queue, im_size):
+def read_my_file_format(filename_queue, im_size, opt):
 	with tf.name_scope('Read_files'):
 		# Text file reader
 		reader = tf.TextLineReader()
@@ -36,7 +36,7 @@ def read_my_file_format(filename_queue, im_size):
 		# Get random paired image
 		split_address = tf.string_split([address], delimiter='/')
 		# Generate random pairing
-		paired_id = tf.as_string(tf.to_int32(tf.random_uniform([]) * 249), width=3, fill="0")
+		paired_id = tf.as_string(tf.to_int32(tf.random_uniform([]) * 240), width=3, fill="0")
 		# Stitch new address together
 		paired_address = '/' + tf.reduce_join(split_address.values[0:6], 0, separator='/')
 		paired_address = paired_address + '/face_' + paired_id+ '.png'
@@ -47,12 +47,14 @@ def read_my_file_format(filename_queue, im_size):
 	with tf.name_scope('Load_data'):
 		# Load primary image
 		file_contents1 = tf.read_file(address)
-		img1 = tf.image.decode_jpeg(file_contents1, channels=3)
+		img1 = tf.image.decode_png(file_contents1, channels=3)
 		img1 = tf.to_float(img1)
+		img1.set_shape([opt['im_size'][0],opt['im_size'][1],3])
 		# Load transformed pair
 		file_contents2 = tf.read_file(paired_address)
-		img2 = tf.image.decode_jpeg(file_contents2, channels=3)
+		img2 = tf.image.decode_png(file_contents2, channels=3)
 		img2 = tf.to_float(img2)
+		img2.set_shape([opt['im_size'][0],opt['im_size'][1],3])
 		# Load paired params
 		paired_params = tf.read_file(paired_params_address)
 		split_params = tf.string_split([paired_params], delimiter=',')
@@ -69,7 +71,7 @@ def get_batches(files, shuffle, opt, min_after_dequeue=1000, num_epochs=None):
 	with tf.name_scope('Queue_runners'):
 		filename_queue = tf.train.string_input_producer(files, shuffle=shuffle,
 																		num_epochs=num_epochs)
-		img1, img2, geometry, lighting = read_my_file_format(filename_queue, im_size)
+		img1, img2, geometry, lighting = read_my_file_format(filename_queue, im_size, opt)
 		
 		num_threads = 4
 		capacity = min_after_dequeue + (num_threads+1)*batch_size
