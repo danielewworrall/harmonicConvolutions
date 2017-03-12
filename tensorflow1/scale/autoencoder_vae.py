@@ -116,7 +116,7 @@ def autoencoder(x, f_params, is_training, reuse=False):
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("encoder", reuse=reuse) as scope:
 			mu, sigma = encoder(x, is_training, reuse=reuse)
-			z = sampler(mu, sigma, sample=(not reuse))
+			z = sampler(mu, sigma, sample=False) #(not reuse))
 		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
 			matrix_shape = [xsh[0], z.get_shape()[1]]
 			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
@@ -182,7 +182,7 @@ def random_rss(mb_size, imsh, fv=None):
 		# Anisotropically scaled and rotated
 		rot = np.array([[np.cos(fv[i,0]), -np.sin(fv[i,0])],
 							[np.sin(fv[i,0]), np.cos(fv[i,0])]])
-		scale = np.array([[scale_(fv[i,1],0.8,1.2),0.],[0., scale_(fv[i,2],0.8,1.2)]])
+		scale = np.array([[scale_(fv[i,1],0.8,1.8),0.],[0., scale_(fv[i,2],0.8,1.8)]])
 		transform = np.dot(scale, rot)
 		# Compute transformer matrices
 		t_params.append(el.get_t_transform_n(transform, (imsh[0],imsh[1])))

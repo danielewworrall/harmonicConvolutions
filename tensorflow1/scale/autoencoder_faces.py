@@ -13,12 +13,11 @@ import skimage.io as skio
 import tensorflow as tf
 
 import equivariant_loss as el
-import mnist_loader
+import face_loader
 import models
 
 from spatial_transformer import transformer
 
-import matplotlib.pyplot as plt
 
 ################ DATA #################
 
@@ -341,7 +340,8 @@ def main(_):
 	elif FLAGS.Sleepy:
 		print('Hello dworrall!')
 		opt['root'] = '/home/dworrall'
-		dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
+		dir_ = '{:s}/Code/harmonicConvolutions/tensorflow1/scale'.format(opt['root'])
+		opt['data_folder'] = '{:s}/Data/faces'.format(opt['root'])
 	else:
 		opt['root'] = '/home/sgarbin'
 		dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
@@ -350,12 +350,12 @@ def main(_):
 	opt['n_epochs'] = 2000
 	opt['lr_schedule'] = [50, 75]
 	opt['lr'] = 1e-3
-	opt['im_size'] = (28,28)
+	opt['im_size'] = (150,150)
 	opt['train_size'] = 55000
 	opt['equivariant_weight'] = 1 
 	flag = 'vae'
-	opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(flag)
-	opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/model.ckpt'.format(flag)
+	opt['summary_path'] = '{:s}/summaries/autotrain_{:s}'.format(dir_, flag)
+	opt['save_path'] = '{:s}/checkpoints/autotrain_{:s}/model.ckpt'.format(dir_, flag)
 
 	#check and clear directories
 	checkFolder(opt['summary_path'])
@@ -364,12 +364,11 @@ def main(_):
 	removeAllFilesInDirectory(opt['save_path'], '.*')
 	
 	# Load data
-	data = load_data()
-	data['X']['train'] = data['X']['train'][:opt['train_size'],:]
-	data['Y']['train'] = data['Y']['train'][:opt['train_size'],:]
+	train_files = face_loader.get_files(opt['data_folder'])
+	x, y, geometry, lighting = face_loader.get_batches(train_files, True, opt)
 
 	# Placeholders
-	x = tf.placeholder(tf.float32, [opt['mb_size'],28,28,1], name='x')
+	#x = tf.placeholder(tf.float32, [opt['mb_size'],150,150,1], name='x')
 	xs = tf.placeholder(tf.float32, [1,28,28,1], name='xs')
 	t_params_in = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params_in')
 	t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
