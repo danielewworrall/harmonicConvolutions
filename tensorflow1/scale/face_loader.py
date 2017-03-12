@@ -49,12 +49,10 @@ def read_my_file_format(filename_queue, im_size, opt):
 		file_contents1 = tf.read_file(address)
 		img1 = tf.image.decode_png(file_contents1, channels=3)
 		img1 = tf.to_float(img1)
-		img1.set_shape([opt['im_size'][0],opt['im_size'][1],3])
 		# Load transformed pair
 		file_contents2 = tf.read_file(paired_address)
 		img2 = tf.image.decode_png(file_contents2, channels=3)
 		img2 = tf.to_float(img2)
-		img2.set_shape([opt['im_size'][0],opt['im_size'][1],3])
 		# Load paired params
 		paired_params = tf.read_file(paired_params_address)
 		split_params = tf.string_split([paired_params], delimiter=',')
@@ -64,6 +62,11 @@ def read_my_file_format(filename_queue, im_size, opt):
 	if opt['color'] == 1:
 		img1 = tf.image.rgb_to_grayscale(img1)
 		img2 = tf.image.rgb_to_grayscale(img2)
+	
+	img1 = tf.image.resize_images(img1, opt['im_size'])
+	img2 = tf.image.resize_images(img2, opt['im_size'])
+	img1.set_shape([opt['im_size'][0],opt['im_size'][1],opt['color']])
+	img2.set_shape([opt['im_size'][0],opt['im_size'][1],opt['color']])
 			
 	return img1, img2, geometry, lighting
 

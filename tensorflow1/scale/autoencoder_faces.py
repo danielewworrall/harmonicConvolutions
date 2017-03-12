@@ -139,27 +139,23 @@ def autoencoder(x, f_params, is_training, opt, reuse=False):
 			r = decoder(z, is_training, opt, reuse=reuse)
 	return r
 
-
+'''
 def encoder(x, is_training, opt, reuse=False):
 	"""Encoder MLP"""
 	with tf.variable_scope('encoder_1') as scope:
 		l1 = conv(x, [3,3,opt['color'],96], name='e0', padding='SAME')
-		#l1 = tf.nn.max_pool(l1, (1,2,2,1), (1,2,2,1), padding='VALID')
 		l1 = bn4d(l1, is_training, reuse=reuse, name='bn1')
 	
 	with tf.variable_scope('encoder_2') as scope:
 		l2 = conv(tf.nn.relu(l1), [3,3,96,96], stride=2, name='e1', padding='VALID')
-		#l2 = tf.nn.max_pool(l2, (1,2,2,1), (1,2,2,1), padding='VALID')
 		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
 	
 	with tf.variable_scope('encoder_3') as scope:
 		l3 = conv(tf.nn.relu(l2), [3,3,96,64], stride=2, name='e2', padding='VALID')
-		#l3 = tf.nn.max_pool(l3, (1,2,2,1), (1,2,2,1), padding='VALID')
 		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
 	
 	with tf.variable_scope('encoder_4') as scope:
 		l4 = conv(tf.nn.relu(l3), [3,3,64,32], stride=2, name='e3', padding='VALID')
-		#l4 = tf.nn.max_pool(l4, (1,2,2,1), (1,2,2,1), padding='VALID')
 		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
 		l4 = tf.reshape(l4, shape=(-1,17*17*32))
 	
@@ -195,12 +191,59 @@ def decoder(z, is_training, opt, reuse=False):
 	
 	with tf.variable_scope('decoder_1') as scope:
 		return deconv(tf.nn.relu(l2), [3,3,96,opt['color']], [150,150], name='d1')
+'''
+def encoder(x, is_training, opt, reuse=False):
+	"""Encoder MLP"""
+	with tf.variable_scope('encoder_1') as scope:
+		l1 = conv(x, [3,3,opt['color'],32], name='e0', padding='SAME')
+		l1 = bn4d(l1, is_training, reuse=reuse, name='bn1')
+	
+	with tf.variable_scope('encoder_2') as scope:
+		l2 = conv(tf.nn.relu(l1), [3,3,32,64], stride=2, name='e1', padding='VALID')
+		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
+	
+	with tf.variable_scope('encoder_3') as scope:
+		l3 = conv(tf.nn.relu(l2), [3,3,64,128], stride=2, name='e2', padding='VALID')
+		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
+	
+	with tf.variable_scope('encoder_4') as scope:
+		l4 = conv(tf.nn.relu(l3), [3,3,128,128], stride=2, name='e3', padding='VALID')
+		l4 = tf.reshape(l4, shape=(-1,128*3*3))
+	
+	with tf.variable_scope('encoder_5') as scope:
+		return linear(tf.nn.relu(l4), [128*3*3,204], name='e_out')
 
 
-def bernoulli_xentropy(x, recon):
+def decoder(z, is_training, opt, reuse=False):
+	"""Encoder MLP"""
+	with tf.variable_scope('decoder_5') as scope:
+		l_in = linear(z, [204, 128*3*3], name='d_in')
+		l_in = bn2d(l_in, is_training, reuse=reuse, name='bn6')
+	
+	with tf.variable_scope('decoder_4') as scope:
+		l5 = linear(tf.nn.relu(l_in), [128*3*3,128*3*3], name='d5')
+		l5 = tf.reshape(l5, shape=(-1,3,3,128))
+	
+	with tf.variable_scope('decoder_3') as scope:
+		l3 = deconv(tf.nn.relu(l5), [3,3,128,64], [8,8], name='d3')
+		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
+	
+	with tf.variable_scope('decoder_2') as scope:
+		l2 = deconv(tf.nn.relu(l3), [3,3,64,32], [16,16], name='d2')
+		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
+	
+	with tf.variable_scope('decoder_1') as scope:
+		return deconv(tf.nn.relu(l2), [3,3,32,opt['color']], opt['im_size'], name='d1')
+
+
+def bernoulli_xentropy(target, recon, mean=False):
 	"""Cross-entropy for Bernoulli variables"""
-	x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=recon)
-	return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2)))
+	x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=target, logits=recon)
+	if mean:
+		loss = tf.reduce_mean(x_entropy)
+	else:
+		loss = tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2,3)))
+	return loss
 
 
 def gaussian_nll(target, recon, mean=False):
@@ -299,11 +342,12 @@ def bn4d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 
 ############################################
-def train(inputs, outputs, ops, opt):
+def train(inputs, outputs, ops, summaries, opt):
 	"""Training loop"""
 	# Unpack inputs, outputs and ops
 	lr, is_training = inputs
-	loss, merged, recon_summary = outputs
+	loss = outputs[0]
+	merged, recon_summary, target_summary, input_summary = summaries
 	train_op, global_step = ops
 	
 	# For checkpoints
@@ -334,9 +378,12 @@ def train(inputs, outputs, ops, opt):
 				train_writer.add_summary(summary, gs)
 				print('[{:06d} s | {:03d}]: {:01f}'.format(int(time.time()-start), gs, l))
 				
-				if gs % 100 == 0:
-					rs = sess.run(recon_summary, feed_dict={is_training: False})
+				if gs % 250 == 0:
+					ops = [recon_summary, target_summary, input_summary]
+					rs, ts, is_ = sess.run(ops, feed_dict={is_training: False})
 					train_writer.add_summary(rs, gs)
+					train_writer.add_summary(ts, gs)
+					train_writer.add_summary(is_, gs)
 				
 				# Save model
 				if gs % FLAGS.save_step == 0:
@@ -370,13 +417,12 @@ def main(_):
 	opt['n_iterations'] = 10000000
 	opt['lr_schedule'] = [50000, 75000]
 	opt['lr'] = 1e-4
-	opt['im_size'] = (150,150)
+	opt['im_size'] = (32,32)
 	opt['train_size'] = 240000
-	opt['equivariant_weight'] = 1
-	opt['color'] = 3
+	opt['color'] = 1
 	flag = 'vae'
-	opt['summary_path'] = '{:s}/summaries/facetrain_6D_{:s}'.format(dir_, flag)
-	opt['save_path'] = '{:s}/checkpoints/facetrain_6D_{:s}/model.ckpt'.format(dir_, flag)
+	opt['summary_path'] = '{:s}/summaries/facetrain_targets_{:s}'.format(dir_, flag)
+	opt['save_path'] = '{:s}/checkpoints/facetrain_targets_{:s}/model.ckpt'.format(dir_, flag)
 
 	#check and clear directories
 	checkFolder(opt['summary_path'])
@@ -404,14 +450,16 @@ def main(_):
 	recon = autoencoder(x, f_params, is_training, opt)
 
 	# LOSS
-	loss = gaussian_nll(target, recon, mean=True)
-	#loss = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=target, logits=recon), axis=(1,2,3)))
+	#loss = gaussian_nll(target, recon, mean=True)
+	loss = bernoulli_xentropy(target, recon, mean=True)
 	
 	# Summaries
 	tf.summary.scalar('Loss', loss)
 	tf.summary.scalar('LearningRate', lr)
 	merged = tf.summary.merge_all()
-	recon_summary = tf.summary.image('Reconstruction', recon, max_outputs=10)
+	input_summary = tf.summary.image('Inputs', x, max_outputs=10)
+	recon_summary = tf.summary.image('Reconstruction', tf.nn.sigmoid(recon), max_outputs=10)
+	target_summary = tf.summary.image('Targets', target, max_outputs=10)
 	
 	# Build optimizer
 	optim = tf.train.AdamOptimizer(lr)
@@ -419,11 +467,12 @@ def main(_):
 	
 	# Set inputs, outputs, and training ops
 	inputs = [lr, is_training]
-	outputs = [loss, merged, recon_summary]
+	outputs = [loss]
+	summaries = [merged, recon_summary, target_summary, input_summary]
 	ops = [train_op, global_step]
 	
 	# Train
-	return train(inputs, outputs, ops, opt)
+	return train(inputs, outputs, ops, summaries, opt)
 
 if __name__ == '__main__':
 	tf.app.run()
