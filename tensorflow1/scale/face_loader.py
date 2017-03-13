@@ -18,12 +18,24 @@ def get_files(folder):
 	return fnames
 
 
+def deg2rad(x):
+	"""Convert degrees to radians"""
+	return np.pi * x / 180.
+
+
 def string2params(string1, string2):
 	"""Convert the input string to 2 3D rotation matrices"""
-	params1 = tf.string_to_number(string1)
-	params2 = tf.string_to_number(string2.values)
+	params1 = deg2rad(tf.string_to_number(string1))
+	params2 = deg2rad(tf.string_to_number(string2.values))
 	return (rot3d_a2b(params1[0], params1[1], params2[0], params2[1]),
 			  rot3d_a2b(params1[2], params1[3], params2[2], params2[3]))
+
+
+def string2d_params(string1, string2):
+	"""Convert the input string to 2 differences in parameters"""
+	params1 = deg2rad(tf.string_to_number(string1))
+	params2 = deg2rad(tf.string_to_number(string2.values))
+	return params2 - params1
 
 
 def read_my_file_format(filename_queue, im_size, opt):
@@ -58,17 +70,18 @@ def read_my_file_format(filename_queue, im_size, opt):
 		split_params = tf.string_split([paired_params], delimiter=',')
 		
 		geometry, lighting = string2params([az,el,az_light,el_light],split_params)
+		d_params = string2d_params([az,el,az_light,el_light],split_params)
 	
 	if opt['color'] == 1:
 		img1 = tf.image.rgb_to_grayscale(img1)
 		img2 = tf.image.rgb_to_grayscale(img2)
 	
-	img1 = tf.image.resize_images(img1, opt['im_size'])
-	img2 = tf.image.resize_images(img2, opt['im_size'])
+	img1 = tf.image.resize_images(img1, opt['im_size'], method=tf.image.ResizeMethod.AREA)
+	img2 = tf.image.resize_images(img2, opt['im_size'], method=tf.image.ResizeMethod.AREA)
 	img1.set_shape([opt['im_size'][0],opt['im_size'][1],opt['color']])
 	img2.set_shape([opt['im_size'][0],opt['im_size'][1],opt['color']])
 			
-	return img1, img2, geometry, lighting
+	return img1, img2, geometry, lighting, d_params
 
 
 def get_batches(files, shuffle, opt, min_after_dequeue=1000, num_epochs=None):
@@ -110,10 +123,11 @@ def rot3d_a2b(phi1, theta1, phi2, theta2):
 
 if __name__ == '__main__':
 	opt = {}
+	opt['color'] = 3
 	opt['mb_size'] = 100
 	opt['im_size'] = (150,150)
 	
-	data_folder = '/home/dworrall/Data/faces'
+	data_folder = '/home/dworrall/Data/faces15'
 	train_files = get_files(data_folder)
 	img1, img2, geometry, lighting = get_batches(train_files, True, opt)
 	
@@ -123,8 +137,9 @@ if __name__ == '__main__':
 		threads = tf.train.start_queue_runners(coord=coord)
 		try:
 			while not coord.should_stop():
-				m1, m2 = sess.run([geometry, lighting])
-				print np.dot(m1, m2)
+				m1, m2 = sess.run([address, paired_address])
+				if m1.split('/')[6] != m2.split('/')[6]:
+					print m1.split('/')[6], m2.split('/')[6]
 		finally:
 			# When done, ask the threads to stop.
 			coord.request_stop()

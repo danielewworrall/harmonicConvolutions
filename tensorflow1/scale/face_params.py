@@ -7,11 +7,11 @@ import time
 
 
 def main():
-	#read_in_images('/home/dworrall/Data/faces')
-	#renumber_list('/home/dworrall/Data/faces')
-	#renumber_images('/home/dworrall/Data/faces')
-	#edit_file('/home/dworrall/Data/faces')
-	param_files('/home/dworrall/Data/faces')
+	#read_in_images('/home/dworrall/Data/faces15')
+	#renumber_list('/home/dworrall/Data/faces15')
+	#renumber_images('/home/dworrall/Data/faces15')
+	#edit_file('/home/dworrall/Data/faces15')
+	param_files('/home/dworrall/Data/faces15')
 
 
 def read_in_images(folder):
@@ -92,8 +92,9 @@ def param_files(folder):
 	print('Creating param files')
 	
 	# Read in images
-	with open('{:s}/new_face_list_params.txt'.format(folder), 'r') as fp:
+	with open('{:s}/face_list_params.txt'.format(folder), 'r') as fp:
 		lines = fp.readlines()
+	os.mkdir('{:s}/params'.format(folder))
 	
 	# Chunk up files
 	for line in lines:
@@ -104,7 +105,7 @@ def param_files(folder):
 		if not os.path.exists(dirname):
 			os.mkdir(dirname)
 		with open(sl[0], 'w') as fp:
-			fp.write('{:s},{:s},{:s},{:s}'.format(sl[1],sl[2],sl[3],sl[4]))
+			fp.write('{:s},{:s},{:s},{:s}'.format(sl[2],sl[3],sl[4],sl[5]))
 
 
 if __name__ == '__main__':
