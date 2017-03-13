@@ -91,16 +91,16 @@ def get_batches(files, shuffle, opt, min_after_dequeue=1000, num_epochs=None):
 	with tf.name_scope('Queue_runners'):
 		filename_queue = tf.train.string_input_producer(files, shuffle=shuffle,
 																		num_epochs=num_epochs)
-		img1, img2, geometry, lighting = read_my_file_format(filename_queue, im_size, opt)
+		img1, img2, geometry, lighting, d_params = read_my_file_format(filename_queue, im_size, opt)
 		
 		num_threads = 4
 		capacity = min_after_dequeue + (num_threads+1)*batch_size
 		
-		img1_batch, img2_batch, geometry_batch, lighting_batch = tf.train.shuffle_batch_join(
-			[[img1, img2, geometry, lighting]], batch_size=batch_size,
+		img1_batch, img2_batch, geometry_batch, lighting_batch, d_params_batch = tf.train.shuffle_batch_join(
+			[[img1, img2, geometry, lighting, d_params]], batch_size=batch_size,
 			capacity=capacity, min_after_dequeue=min_after_dequeue)
 		
-	return img1_batch, img2_batch, geometry_batch, lighting_batch
+	return img1_batch, img2_batch, geometry_batch, lighting_batch, d_params_batch
 
 
 def rot3d(phi, theta):
