@@ -224,74 +224,6 @@ def decoder(z, is_training, opt, reuse=False, n_in=1026):
 	with tf.variable_scope('decoder_1') as scope:
 		return deconv(nl(l2), [5,5,32,opt['color']], opt['im_size'], name='d1')
 
-############################## DC-IGN ##########################################
-def autoencoder_DCIGN(x, f_params, is_training, opt, reuse=False):
-	"""Build a model to rotate features"""
-	xsh = x.get_shape().as_list()
-	with tf.variable_scope('mainModel', reuse=reuse) as scope:
-		with tf.variable_scope("encoder", reuse=reuse) as scope:
-			z = encoder_DCIGN(x, is_training, opt, reuse=reuse)
-		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
-			matrix_shape = [xsh[0], z.get_shape()[1]]
-			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
-		with tf.variable_scope("decoder", reuse=reuse) as scope:
-			r = decoder_DCIGN(z, is_training, opt, reuse=reuse)
-	return r
-
-
-def encoder_DCIGN(x, is_training, opt, reuse=False):
-	"""Encoder MLP"""
-	nl = tf.nn.relu #opt['nonlinearity']
-	
-	with tf.variable_scope('encoder_1') as scope:
-		l1 = conv(x, [5,5,opt['color'],96], stride=2, name='e1', padding='VALID')
-		l1 = tf.nn.max_pool(l1, (1,2,2,1), (1,2,2,1), 'VALID')
-		l1 = bn4d(l1, is_training, reuse=reuse, name='bn1')
-		print l1
-	
-	with tf.variable_scope('encoder_2') as scope:
-		l2 = conv(nl(l1), [5,5,96,64], stride=2, name='e2', padding='VALID')
-		l2 = tf.nn.max_pool(l2, (1,2,2,1), (1,2,2,1), 'VALID')
-		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
-		print l2
-	
-	with tf.variable_scope('encoder_3') as scope:
-		l3 = conv(nl(l2), [5,5,64,32], stride=2, name='e3', padding='VALID')
-		l3 = tf.nn.max_pool(l3, (1,2,2,1), (1,2,2,1), 'VALID')
-		print l3
-		l3 = tf.reshape(l3, shape=(-1,32*15*15))
-		print l3
-
-	with tf.variable_scope('encoder_mid') as scope:
-		return linear(nl(l3), [32*15*15,204], name='e_out')
-
-
-def decoder_DCIGN(z, is_training, opt, reuse=False):
-	"""Encoder MLP"""
-	nl = opt['nonlinearity']
-	
-	with tf.variable_scope('decoder_mid') as scope:
-		l_in = linear(z, [204,32*15*15], name='d_in')
-		l_in = tf.reshape(l_in, shape=(-1,15,15,32))
-	
-	with tf.variable_scope('decoder_4') as scope:
-		l4 = deconv(nl(l_in), [7,7,32,64], [30,30], name='d4', padding='VALID')
-		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
-	
-	with tf.variable_scope('decoder_3') as scope:
-		l3 = deconv(nl(l4), [7,7,64,96], [48,48], name='d3', padding='VALID')
-		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
-	
-	with tf.variable_scope('decoder_2') as scope:
-		l2 = deconv(nl(l3), [7,7,96,96], [84,84], name='d2', padding='VALID')
-		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
-	
-	with tf.variable_scope('decoder_1') as scope:
-		return deconv(nl(l2), [7,7,96,opt['color']], [156,156], name='d1', padding='VALID')
-
-
-###############################################################################
-
 
 def bernoulli_xentropy(target, recon, mean=False):
 	"""Cross-entropy for Bernoulli variables"""
@@ -497,13 +429,11 @@ def main(_):
 	opt['lr'] = 1e-4
 	opt['im_size'] = (150,150)
 	opt['train_size'] = 240000
-	opt['loss_type'] = 'SSIM_L1'
+	opt['loss_type'] = 'learned'
 	opt['loss_weights'] = (0.85,0.15)
 	opt['nonlinearity'] = leaky_relu
 	opt['color'] = 3
-	opt['method'] = 'kulkarni'
-	if opt['method'] == 'kulkarni':
-		opt['color'] = 1
+	opt['method'] = 'worrall'
 	if opt['loss_type'] == 'SSIM_L1':
 		lw = '_' + '_'.join([str(l) for l in opt['loss_weights']])
 	else:
@@ -537,9 +467,7 @@ def main(_):
 	if opt['method'] == 'efros':
 		recon = autoencoder_efros(x, d_params, is_training, opt)	
 	elif opt['method'] == 'worrall':
-		recon = autoencoder(x, f_params, is_training, opt)
-	elif opt['method'] == 'kulkarni':
-		recon = autoencoder_DCIGN(x, f_params, is_training, opt)	
+		recon = autoencoder(x, f_params, is_training, opt)	
 
 	# LOSS
 	if opt['loss_type'] == 'xentropy':
@@ -551,6 +479,10 @@ def main(_):
 	elif opt['loss_type'] == 'SSIM_L1':
 		loss = opt['loss_weights'][0]*SSIM(target, tf.nn.sigmoid(recon), mean=True)
 		loss += opt['loss_weights'][1]*mean_loss(tf.abs(target - tf.nn.sigmoid(recon)), mean=True)
+	elif opt['loss_type'] == 'learned':
+		loss_target = conv(target, [3,3,3,16], stride=1, name='loss_target')
+		loss_recon = conv(tf.nn.sigmoid(target), [3,3,3,16], stride=1, name='loss_recon')
+		loss = mean_loss(tf.abs(loss_target - loss_recon), mean=True)
 	
 	# Summaries
 	tf.summary.scalar('Loss', loss)
@@ -562,8 +494,22 @@ def main(_):
 	
 	# Build optimizer
 	optim = tf.train.AdamOptimizer(lr)
-	train_op = optim.minimize(loss, global_step=global_step)
-
+	if opt['loss_type'] != 'learned':
+		train_op = optim.minimize(loss, global_step=global_step)
+	else:
+		grads_and_vars = optim.compute_gradients(loss)
+		new_gvs = []
+		for g, v in grads_and_vars:
+			if 'loss_target_W' in v.name:
+				Wnew = tf.clip_by_norm(v, clip_norm=1.0, axes=[0,1,2])
+				g = v - Wnew
+				new_gvs.append((g, v))
+			if 'loss_recon_W' in v.name:
+				Wnew = tf.clip_by_norm(v, clip_norm=1.0, axes=[0,1,2])
+				g = v - Wnew
+				new_gvs.append((g, v))
+		train_op = optim.apply_gradients(new_gvs)
+	
 	# Set inputs, outputs, and training ops
 	inputs = [lr, is_training]
 	outputs = [loss]
