@@ -80,6 +80,9 @@ class DataSet(object):
   @property
   def num_examples(self):
     return self._num_examples
+
+  def num_steps(self, batch_size):
+    return int(self._num_examples/batch_size)
   
   @property
   def epochs_completed(self):
@@ -109,6 +112,7 @@ class DataSet(object):
       if doperm:
           inds = self.perm[inds]
       volumes = self._volumes[self.perm[start:end], :,:,:,:]
+      volumes = volumes.astype(np.float32)
       labels = self._labels[self.perm[start:end]]
       return volumes, labels
 
