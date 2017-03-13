@@ -6,6 +6,7 @@ sys.path.append('../')
 import numpy as np
 import tensorflow as tf
 import scipy.linalg as splin
+import skimage.io as skio
 
 ### local files ######
 
@@ -369,8 +370,6 @@ def train(inputs, outputs, ops, opt, data):
                     recons.append(y[0,:,:,:,:].copy())
             
             samples_ = np.stack(recons)
-            print('validation samples shape', samples_.shape)
-            print([max_angles*max_angles, opt['vol_size'][0], opt['vol_size'][1], opt['vol_size'][2], opt['color_chn']])
 
             tile_image = np.reshape(samples_, [max_angles*max_angles, opt['outsize'][0], opt['outsize'][1], opt['outsize'][2], opt['color_chn']])
             tile_image = np.sum(tile_image, axis=4)
@@ -394,7 +393,7 @@ def train(inputs, outputs, ops, opt, data):
             tile_image_h = 1.0 - tile_batch(tile_image_h, max_angles, max_angles)
             tile_image_w = 1.0 - tile_batch(tile_image_w, max_angles, max_angles)
 
-            save_name = './samples/vae/image_%04d' % epoch
+            save_name = './samples/' + opt['flag'] + '/image_%04d' % epoch
             skio.imsave(save_name + '_d.png', tile_image_d) 
             skio.imsave(save_name + '_h.png', tile_image_h) 
             skio.imsave(save_name + '_w.png', tile_image_w) 
@@ -438,9 +437,9 @@ def main(_):
     opt['f_params_dim'] = 3 + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
 
 
-    flag = 'vae'
-    opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(flag)
-    opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/model.ckpt'.format(flag)
+    opt['flag'] = 'shapenet'
+    opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
+    opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/model.ckpt'.format(opt['flag'])
     
     #check and clear directories
     checkFolder(opt['summary_path'])
