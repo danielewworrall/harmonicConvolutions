@@ -62,10 +62,8 @@ def get_t_transform(theta, imsh, scale_x=1., scale_y=1.):
 	mat = mat.flatten()
 	return mat
 
-
 def get_f_transform(theta):
-	Rot = np.array([[np.cos(theta), -np.sin(theta)],
-						[np.sin(theta), np.cos(theta)]])	
+	Rot = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])	
 	return Rot
 
 
