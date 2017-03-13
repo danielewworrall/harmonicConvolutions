@@ -219,9 +219,6 @@ def bn2d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 ############################################
 def train(inputs, outputs, ops, opt, data):
-	# TODO make 3D
-	# inputs, opt
-
 	"""Training loop"""
 	# Unpack inputs, outputs and ops
 	x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val, is_training = inputs
@@ -256,12 +253,11 @@ def train(inputs, outputs, ops, opt, data):
 		mb_list = random_sampler(n_train, opt)
 		for i, mb in enumerate(mb_list):
 			#initial random transform
-			tp_in, _ = el.random_transform(opt['mb_size'], opt['vol_size']) # TODO
-			tp, fp = random_rss(opt['mb_size'], opt['vol_size']) # TODO
+			tp_in, _ = el.random_transform(opt['mb_size'], opt['vol_size'])
+			tp, fp = random_rss(opt['mb_size'], opt['vol_size'])
 			ops = [global_step, loss, merged, train_op]
 
             # TODO
-            #vol = np.pad(vol, pad_width=[[pad_size,pad_size], [pad_size,pad_size], [pad_size,pad_size]], mode='constant')
 			feed_dict = {x: data['X']['train'][mb,...],
 								t_params: tp,
 								f_params: fp,
@@ -285,10 +281,9 @@ def train(inputs, outputs, ops, opt, data):
 			Recon = []
 			max_angles = 20
 			#pick a random initial transformation
-			tp_in, _ = el.random_transform(opt['mb_size'], opt['vol_size']) # TODO
+			tp_in, _ = el.random_transform(opt['mb_size'], opt['vol_size'])
 			fv = np.linspace(0., np.pi, num=max_angles)
 			for j in xrange(max_angles):
-                # TODO padding
 				sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
 				r0 = np.random.rand() > 0.5
 				r1 = np.random.rand() > 0.5
@@ -297,7 +292,7 @@ def train(inputs, outputs, ops, opt, data):
 				
 				Recon.append(np.reshape(sample, (1,784)))
 				for i in xrange(max_angles):
-					tp, fp = random_rss(1, opt['vol_size'], fv_[np.newaxis,i,:]) # TODO
+					tp, fp = random_rss(1, opt['vol_size'], fv_[np.newaxis,i,:])
 					ops = recon_test
 					feed_dict = {xs: sample,
 									 f_params_val: fp,
@@ -384,11 +379,16 @@ def main(_):
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
 	
 	# Build the training model
+    # TODO pad x
+    # vol = np.pad(vol, pad_width=[[pad_size,pad_size], [pad_size,pad_size], [pad_size,pad_size]], mode='constant')
     x_in = stl.transform(x, t_params_in)
     target = stl.transform(x_in, t_params)
 	recon, latents, mu, sigma = autoencoder(x_in, f_params, is_training)
 	recon = tf.reshape(recon, x.get_shape())
+
 	# Test model
+    # TODO pad xs
+    # vol = np.pad(vol, pad_width=[[pad_size,pad_size], [pad_size,pad_size], [pad_size,pad_size]], mode='constant')
 	recon_test_, __, __, __ = autoencoder(xs, f_params_val, is_training, reuse=True)
 	recon_test = tf.nn.sigmoid(recon_test_)
 	
