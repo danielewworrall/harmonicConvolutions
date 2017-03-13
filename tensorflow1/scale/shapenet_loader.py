@@ -123,9 +123,10 @@ def read_data_sets(path, one_hot=False):
   path = os.path.realpath(os.path.expanduser(path))
   print('Reading', path)
 
-  train_split = 0.8
-  validation_split = 0.1
-  test_split = 0.1
+  # TODO
+  train_split = 0.01#8
+  validation_split = 0.01
+  test_split = 0.01
 
   class_folders = sorted(glob.glob(os.path.join(path, '*')))
   #print(class_folders)
@@ -143,11 +144,12 @@ def read_data_sets(path, one_hot=False):
     file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
     all_file_count += len(file_list)
 
-    train_split_size = np.floor(len(file_list)*train_split).astype(np.int)
-    validation_split_size = np.floor(len(file_list)*validation_split).astype(np.int)
-    test_split_size = np.floor(len(file_list)*test_split).astype(np.int)
-    # TODO
-    #test_split_size = len(file_list) - train_split_size - validation_split_size
+    rem_file_size = len(file_list)
+    train_split_size = np.min([rem_file_size, np.ceil(len(file_list)*train_split).astype(np.int)])
+    rem_file_size = np.max([0, len(file_list) - train_split_size])
+    validation_split_size = np.ceil(len(file_list)*validation_split).astype(np.int)
+    rem_file_size = np.max([0, len(file_list) - train_split_size - validation_split_size])
+    test_split_size = np.min([rem_file_size, np.ceil(len(file_list)*test_split).astype(np.int)])
 
     cur_train_file_list = file_list[0:train_split_size]
     cur_validation_file_list = file_list[train_split_size: (train_split_size + validation_split_size)]
