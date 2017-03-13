@@ -12,21 +12,8 @@ import tensorflow as tf
 import equivariant_loss as el
 import shapenet_loader
 from spatial_transformer import AffineVolumeTransformer
-# TODO
-from spatial_transformer import transformer
-
 ### local files end ###
 
-###   TODO TMP   ###
-
-pad_size = 12
-vol = np.pad(vol, pad_width=[[pad_size,pad_size], [pad_size,pad_size], [pad_size,pad_size]], mode='constant')
-outsize = (int(vol.shape[0]), int(vol.shape[1]), int(vol.shape[2]))
-stl = AffineVolumeTransformer(outsize)
-
-transformed = stl.transform(x, theta)
-
-### TODO TMP END ### 
 ################ DATA #################
 
 #-----------ARGS----------
@@ -87,14 +74,6 @@ def removeAllFilesInDirectory(directory, extension):
 
 
 ############## MODEL ####################
-def transformer_layer(x, t_params, imsh):
-    # TODO make 3D
-    """Spatial transformer wtih shapes sets"""
-    xsh = x.get_shape()
-    x_in = transformer(x, t_params, imsh)
-    x_in.set_shape(xsh)
-    return x_in
-	
 
 def linear(x, shape, name='0', bias_init=0.01):
     """Basic linear matmul layer"""
@@ -277,9 +256,12 @@ def train(inputs, outputs, ops, opt, data):
 		mb_list = random_sampler(n_train, opt)
 		for i, mb in enumerate(mb_list):
 			#initial random transform
-			tp_in, _ = el.random_transform(opt['mb_size'], opt['im_size'])
-			tp, fp = random_rss(opt['mb_size'], opt['im_size'])
+			tp_in, _ = el.random_transform(opt['mb_size'], opt['vol_size']) # TODO
+			tp, fp = random_rss(opt['mb_size'], opt['vol_size']) # TODO
 			ops = [global_step, loss, merged, train_op]
+
+            # TODO
+            #vol = np.pad(vol, pad_width=[[pad_size,pad_size], [pad_size,pad_size], [pad_size,pad_size]], mode='constant')
 			feed_dict = {x: data['X']['train'][mb,...],
 								t_params: tp,
 								f_params: fp,
@@ -303,9 +285,10 @@ def train(inputs, outputs, ops, opt, data):
 			Recon = []
 			max_angles = 20
 			#pick a random initial transformation
-			tp_in, _ = el.random_transform(opt['mb_size'], opt['im_size'])
+			tp_in, _ = el.random_transform(opt['mb_size'], opt['vol_size']) # TODO
 			fv = np.linspace(0., np.pi, num=max_angles)
 			for j in xrange(max_angles):
+                # TODO padding
 				sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
 				r0 = np.random.rand() > 0.5
 				r1 = np.random.rand() > 0.5
@@ -314,7 +297,7 @@ def train(inputs, outputs, ops, opt, data):
 				
 				Recon.append(np.reshape(sample, (1,784)))
 				for i in xrange(max_angles):
-					tp, fp = random_rss(1, opt['im_size'], fv_[np.newaxis,i,:])
+					tp, fp = random_rss(1, opt['vol_size'], fv_[np.newaxis,i,:]) # TODO
 					ops = recon_test
 					feed_dict = {xs: sample,
 									 f_params_val: fp,
@@ -363,9 +346,12 @@ def main(_):
 	opt['n_epochs'] = 2000
 	opt['lr_schedule'] = [50, 75]
 	opt['lr'] = 1e-3
-	opt['im_size'] = (28,28)
+	opt['vol_size'] = (32,32,32)
+    pad_size = int(np.ceil(np.sqrt(3)*opt['vol_size']/2)-opt['vol_size']/2)
+    outsize = (opt['vol_size'] + pad_size)
+    stl = AffineVolumeTransformer(outsize)
 	opt['color_chn'] = 1
-	opt['stl_param_dim'] = 12 # TODO stl.param_dim
+	opt['stl_param_dim'] = stl.param_dim
 	opt['train_size'] = 55000
 	opt['equivariant_weight'] = 1 
 	flag = 'vae'
@@ -385,8 +371,8 @@ def main(_):
 
 	# Placeholders
 	# batch_size, depth, height, width, in_channels
-	x = tf.placeholder(tf.float32, [opt['mb_size'],opt['im_size'][0],opt['im_size'][1],opt['im_size'][2], opt['color_chn']], name='x')
-	xs = tf.placeholder(tf.float32, [1,opt['im_size'][0],opt['im_size'][1],opt['color_chn']], name='xs')
+	x = tf.placeholder(tf.float32, [opt['mb_size'],opt['vol_size'][0],opt['vol_size'][1],opt['vol_size'][2], opt['color_chn']], name='x')
+	xs = tf.placeholder(tf.float32, [1,opt['vol_size'][0],opt['vol_size'][1],opt['vol_size'][2],opt['color_chn']], name='xs')
 	t_params_in = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_param_dim']], name='t_params_in')
 	t_params = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_param_dim']], name='t_params')
 	f_params = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_param_dim'],opt['stl_param_dim']], name='f_params')
@@ -398,9 +384,8 @@ def main(_):
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
 	
 	# Build the training model
-	# TODO make 3D
-	x_in = transformer_layer(x, t_params_in, opt['im_size'])
-	target = transformer_layer(x_in, t_params, opt['im_size'])
+    x_in = stl.transform(x, t_params_in)
+    target = stl.transform(x_in, t_params)
 	recon, latents, mu, sigma = autoencoder(x_in, f_params, is_training)
 	recon = tf.reshape(recon, x.get_shape())
 	# Test model
