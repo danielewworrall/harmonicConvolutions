@@ -133,9 +133,9 @@ def read_data_sets(path, one_hot=False):
   #train_split = 0.8
   #validation_split = 0.1
   #test_split = 0.1
-  train_split = 0.5
-  validation_split = 0.01
-  test_split = 0.01
+  train_split = 0.8
+  validation_split = 0.1
+  test_split = 0.1
 
   class_folders = sorted(glob.glob(os.path.join(path, '*')))
   classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]

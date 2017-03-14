@@ -155,7 +155,7 @@ def encoder(x, num_latents, is_training, reuse=False):
             if reuse:
                 scope.reuse_variables()
             kernel = variable(scopename + '_kernel', [ksize, ksize, ksize, inpdim, outdim])
-            bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.1))
+            bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
             linout = tf.nn.conv3d(inp, kernel, strides=strides, padding=padding)
             linout = tf.nn.bias_add(linout, bias)
             if dobn:
@@ -191,7 +191,7 @@ def decoder(codes, is_training, reuse=False):
             if reuse:
                 scope.reuse_variables()
             kernel = variable(scopename + '_kernel', [ksize, ksize, ksize, outdim, inpdim])
-            bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.1))
+            bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
             linout = bias + tf.nn.conv3d_transpose(inp, kernel, output_shape, strides=strides, padding='SAME')
             bnout = bn5d(linout, is_training, reuse=reuse)
             out = nonlin(bnout, name=scopename + 'nonlin')
@@ -210,10 +210,10 @@ def decoder(codes, is_training, reuse=False):
     return recons
 
 
-#def bernoulli_xentropy(x, test_recon):
-#    """Cross-entropy for Bernoulli variables"""
-#    x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=test_recon)
-#    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2)))
+def bernoulli_xentropy(x, test_recon):
+    """Cross-entropy for Bernoulli variables"""
+    x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=test_recon)
+    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2)))
 
 
 def spatial_transform(stl, x, transmat, paddings):
@@ -223,6 +223,8 @@ def spatial_transform(stl, x, transmat, paddings):
     transmat_full = tf.concat([transmat, shiftmat], axis=2)
     transmat_full = tf.reshape(transmat_full, [batch_size, -1])
     x_in = stl.transform(x_padded, transmat_full)
+    # thresholding
+    x_in = tf.floor(0.5 + x_in)
     return x_in
 
 def get_3drotmat(xyzrot):
@@ -275,7 +277,7 @@ def random_transmats(batch_size):
     min_scale = 1.0
     max_scale = 1.0
 
-    if True:
+    if False:
         params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
         params_inp_rot[:,[0]] = 0.0
         params_inp_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
@@ -304,7 +306,8 @@ def random_transmats(batch_size):
     
     f_params_inp = np.zeros([batch_size, 3, 3])
     # TODO was like this:
-    cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
+    #cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
+    cur_rotmat = np.matmul(trg_3drotmat.transpose([0,2,1]), inp_3drotmat)
     f_params_inp = set_f_params_rot(f_params_inp, cur_rotmat)
     #print(f_params_inp[0,:,:])
 
@@ -409,7 +412,7 @@ def train(inputs, outputs, ops, opt, data):
     for epoch in xrange(opt['n_epochs']):
         # Learning rate
         exponent = sum([epoch > i for i in opt['lr_schedule']])
-        current_lr = opt['lr']*np.power(0.1, exponent)
+        current_lr = opt['lr']*np.power(0.2, exponent)
         
         # Train
         train_loss = 0.
@@ -521,7 +524,7 @@ def main(_):
     
     opt['mb_size'] = 32
     opt['n_epochs'] = 200
-    opt['lr_schedule'] = [100, 180]
+    opt['lr_schedule'] = [30, 60, 100, 150, 190]
     opt['lr'] = 1e-1
 
     opt['vol_size'] = [32,32,32]
@@ -532,7 +535,7 @@ def main(_):
     opt['stl_size'] = 3 # no translation
     # TODO
     opt['f_params_dim'] = 3# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
-    opt['num_latents'] = opt['f_params_dim']*64
+    opt['num_latents'] = opt['f_params_dim']*128
 
 
     opt['flag'] = 'shapenet'
@@ -574,8 +577,8 @@ def main(_):
     test_recon, __ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
     
     # LOSS
-    #loss = bernoulli_xentropy(x_trg, recons)
-    loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_trg-recons), axis=[1,2,3,4]))
+    loss = bernoulli_xentropy(x_trg, recons)
+    #loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_trg-recons), axis=[1,2,3,4]))
     
     # Summaries
     tf_vol_summary('recons', recons) 
