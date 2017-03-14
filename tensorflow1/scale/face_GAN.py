@@ -1,4 +1,4 @@
-'''Autoencoder'''
+'''Conditional GAN model'''
 
 import os
 import sys
@@ -286,8 +286,41 @@ def decoder_DCIGN(z, is_training, opt, reuse=False):
 		return deconv(nl(l2), [7,7,96,opt['color']], [156,156], name='d1', padding='VALID')
 
 
-###############################################################################
+############################## GAN stuff ######################################
+def discriminator(x, is_training, opt, reuse=False):
+	"""Discriminator network a la Isola et al. 2016...may need an extra layer"""
+	nl = (lambda arg: leaky_relu(arg, leak=0.2))
+	
+	with tf.variable_scope('discriminator_1', reuse=reuse) as scope:
+		l1 = conv(x, [4,4,opt['color'],64], stride=2, name='dc1')
+	
+	with tf.variable_scope('discriminator_2', reuse=reuse) as scope:
+		l2 = conv(nl(l1), [4,4,64,128], stride=2, name='dc2')
+		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
+	
+	with tf.variable_scope('discriminator_3', reuse=reuse) as scope:
+		l3 = conv(nl(l2), [4,4,128,256], stride=2, name='dc3')
+		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
+	
+	with tf.variable_scope('discriminator_4', reuse=reuse) as scope:
+		l4 = conv(nl(l3), [4,4,256,512], stride=2, name='dc4')
+		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
 
+	with tf.variable_scope('discriminator_out', reuse=reuse) as scope:
+		l5 = conv(nl(l4), [4,4,512,1], stride=2, name='dc5')
+		return tf.reduce_mean(tf.nn.sigmoid(l5), axis=(1,2,3))
+
+
+def GAN_loss(target, recon, is_training, opt):
+	"""The Generative Adversarial Loss"""
+	with tf.variable_scope('GAN') as scope:
+		flip = tf.random_uniform([]) > 0.5
+		loss_data = tf.log(discriminator(target, is_training, opt))
+		loss_gen = -tf.log(discriminator(recon, is_training, opt, reuse=True))
+		return tf.cond(flip, lambda: loss_data, lambda: loss_gen)
+	
+
+###############################################################################
 
 def bernoulli_xentropy(target, recon, mean=False):
 	"""Cross-entropy for Bernoulli variables"""
@@ -422,7 +455,7 @@ def train(inputs, outputs, ops, summaries, opt):
 	lr, is_training = inputs
 	loss = outputs[0]
 	merged, recon_summary, target_summary, input_summary = summaries
-	train_op, global_step = ops
+	train_op_dis, train_op_gen, global_step = ops
 	
 	# For checkpoints
 	gs = 0
@@ -445,12 +478,18 @@ def train(inputs, outputs, ops, summaries, opt):
 				current_lr = opt['lr']*np.power(0.1, exponent)
 				
 				# Train
-				ops = [global_step, loss, merged, train_op]
+				ops = [global_step, loss, merged, train_op_dis]
 				feed_dict = {lr: current_lr, is_training: True}
 				gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
 				# Summary writers
 				train_writer.add_summary(summary, gs)
-				print('[{:06d} s | {:03d}]: {:01f}'.format(int(time.time()-start), gs, l))
+				
+				ops = [global_step, loss, merged, train_op_gen]
+				feed_dict = {lr: current_lr, is_training: True}
+				gs, k, summary, __ = sess.run(ops, feed_dict=feed_dict)
+				# Summary writers
+				train_writer.add_summary(summary, gs)
+				print('[{:06d} s | {:03d}]: {:01f}'.format(int(time.time()-start), gs, l+k))
 				
 				if gs % 250 == 0:
 					ops = [recon_summary, target_summary, input_summary]
@@ -493,7 +532,7 @@ def main(_):
 	opt['lr'] = 1e-4
 	opt['im_size'] = (150,150)
 	opt['train_size'] = 240000
-	opt['loss_type'] = 'SSIM_L1'
+	opt['loss_type'] = 'L1'
 	opt['loss_weights'] = (0.85,0.15)
 	opt['nonlinearity'] = leaky_relu
 	opt['color'] = 3
@@ -504,8 +543,8 @@ def main(_):
 		lw = '_' + '_'.join([str(l) for l in opt['loss_weights']])
 	else:
 		lw = ''
-	opt['summary_path'] = '{:s}/summaries/face15train_{:s}_{:s}{:s}'.format(dir_, opt['loss_type'], opt['method'], lw)
-	opt['save_path'] = '{:s}/checkpoints/face15train_{:s}_{:s}{:s}/model.ckpt'.format(dir_, opt['loss_type'], opt['method'], lw)
+	opt['summary_path'] = '{:s}/summaries/face15GAN_{:s}_{:s}{:s}'.format(dir_, opt['loss_type'], opt['method'], lw)
+	opt['save_path'] = '{:s}/checkpoints/face15GAN_{:s}_{:s}{:s}/model.ckpt'.format(dir_, opt['loss_type'], opt['method'], lw)
 
 	#check and clear directories
 	checkFolder(opt['summary_path'])
@@ -547,7 +586,22 @@ def main(_):
 	elif opt['loss_type'] == 'SSIM_L1':
 		loss = opt['loss_weights'][0]*SSIM(target, tf.nn.sigmoid(recon), mean=True)
 		loss += opt['loss_weights'][1]*mean_loss(tf.abs(target - tf.nn.sigmoid(recon)), mean=True)
+	elif opt['loss_type'] == 'L1':
+		loss = mean_loss(tf.abs(target - tf.nn.sigmoid(recon)), mean=True)
+	# Add the PatchGAN loss
+	#loss += tf.reduce_mean(GAN_loss(target, recon, is_training, opt))
+	dis_real = discriminator(target, is_training, opt)
+	dis_fake = discriminator(recon, is_training, opt, reuse=True)
 	
+	d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(dis_real), logits=dis_real))
+	d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(dis_fake), logits=dis_fake))
+	g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(dis_fake), logits=dis_fake)) + loss
+	d_loss = d_loss_real + d_loss_fake
+	
+	all_var = tf.get_collection(tf.GraphKeys.VARIABLES)
+	d_vars = [var for var in all_var if 'discriminator' in var.name]
+	g_vars = [var for var in all_var if 'mainModel' in var.name]
+
 	# Summaries
 	tf.summary.scalar('Loss', loss)
 	tf.summary.scalar('LearningRate', lr)
@@ -557,14 +611,30 @@ def main(_):
 	recon_summary = tf.summary.image('Reconstruction', tf.nn.sigmoid(recon), max_outputs=3)
 	
 	# Build optimizer
-	optim = tf.train.AdamOptimizer(lr)
-	train_op = optim.minimize(loss, global_step=global_step)
+	optim_d = tf.train.AdamOptimizer(lr, beta1=0.5)
+	optim_g = tf.train.AdamOptimizer(lr, beta1=0.5)
+	
+	train_op_dis = optim_d.minimize(d_loss, var_list=d_vars, global_step=global_step)
+	train_op_gen = optim_g.minimize(g_loss, var_list=g_vars, global_step=global_step)
+	'''
+	gvs = optim.compute_gradients(loss)
+	gv_gen = []
+	gv_dis = []
+	for g, v in gvs:
+		if 'discriminator' in v.name:
+			gv_dis.append((-g,v))
+		else:
+			gv_gen.append((g,v))
+	train_op_dis = optim.apply_gradients(gv_dis, global_step=global_step)
+	train_op_gen = optim.apply_gradients(gv_gen, global_step=global_step)
+	'''
 
+	
 	# Set inputs, outputs, and training ops
 	inputs = [lr, is_training]
 	outputs = [loss]
 	summaries = [merged, recon_summary, target_summary, input_summary]
-	ops = [train_op, global_step]
+	ops = [train_op_dis, train_op_gen, global_step]
 	
 	# Train
 	return train(inputs, outputs, ops, summaries, opt)
