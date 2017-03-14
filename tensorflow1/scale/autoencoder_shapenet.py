@@ -6,11 +6,13 @@ sys.path.append('../')
 import numpy as np
 import tensorflow as tf
 import scipy.linalg as splin
-import skimage.io as skio
+#import skimage.io as skio
+import scipy.misc
 
 ### local files ######
 
 import shapenet_loader
+import equivariant_loss as el
 from spatial_transformer_3d import AffineVolumeTransformer
 
 ### local files end ###
@@ -30,7 +32,57 @@ flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', True, 'Dopey execution environment')
 ##---------------------
 
+################ UTIL #################
+def tf_im_summary(prefix, images):
+    for j in xrange(min(10, images.get_shape().as_list()[0])):
+        desc_str = '%d'%(j) + '_' + prefix
+        tf.summary.image(desc_str, images[j:(j+1), :, :, :], max_outputs=1)
+
+def tf_vol_summary(prefix, vols):
+    vols_d = tf.reduce_sum(vols, axis=1)
+    vols_h = tf.reduce_sum(vols, axis=2)
+    vols_w = tf.reduce_sum(vols, axis=3)
+
+    vols_d = vols_d / tf.reduce_sum(vols_d, axis=[1,2,3], keep_dims=True)
+    vols_h = vols_h / tf.reduce_sum(vols_h, axis=[1,2,3], keep_dims=True)
+    vols_w = vols_w / tf.reduce_sum(vols_w, axis=[1,2,3], keep_dims=True)
+
+    tf_im_summary(prefix + '_d', vols_d)
+    tf_im_summary(prefix + '_h', vols_h)
+    tf_im_summary(prefix + '_w', vols_w)
+
+
+def imsave(path, img):
+    if img.shape[-1]==1:
+        img = np.squeeze(img)
+    scipy.misc.toimage(img, cmin=0.0, cmax=1.0).save(path)
+
+def get_imgs_from_vol(tile_image, tile_h, tile_w):
+    tile_image = np.sum(tile_image, axis=4)
+    tile_image_d = np.sum(tile_image, axis=1)
+    tile_image_h = np.sum(tile_image, axis=2)
+    tile_image_w = np.sum(tile_image, axis=3)
+
+    tile_image_d /= np.sum(tile_image_d)
+    tile_image_h /= np.sum(tile_image_h)
+    tile_image_w /= np.sum(tile_image_w)
+
+    def tile_batch(batch, tile_w=1, tile_h=1):
+        assert tile_w * tile_h == batch.shape[0], 'tile dimensions inconsistent'
+        batch = np.split(batch, tile_w*tile_h, axis=0)
+        batch = [np.concatenate(batch[i*tile_w:(i+1)*tile_w], 2) for i in range(tile_h)]
+        batch = np.concatenate(batch, 1)
+        batch = batch[0,:,:]
+        return batch
+
+    tile_image_d = 1.0 - tile_batch(tile_image_d, tile_h, tile_w)
+    tile_image_h = 1.0 - tile_batch(tile_image_h, tile_h, tile_w)
+    tile_image_w = 1.0 - tile_batch(tile_image_w, tile_h, tile_w)
+
+    return tile_image_d, tile_image_h, tile_image_w
+
 ################ DATA #################
+
 def load_data():
     shapenet = shapenet_loader.read_data_sets('~/scratch/Datasets/ShapeNetVox32', one_hot=True)
     return shapenet
@@ -60,19 +112,16 @@ def autoencoder(x, num_latents, f_params, is_training, reuse=False):
     """Build a model to rotate features"""
     with tf.variable_scope('mainModel', reuse=reuse) as scope:
         with tf.variable_scope("encoder", reuse=reuse) as scope:
-            code = encoder(x, num_latents, is_training, reuse=reuse)
+            codes = encoder(x, num_latents, is_training, reuse=reuse)
         with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
-            code_shape = code.get_shape()
+            code_shape = codes.get_shape()
             batch_size = code_shape.as_list()[0]
-            code = tf.reshape(code, [batch_size, -1])
-            matrix_shape = [batch_size, code.get_shape().as_list()[1]]
-            # TODO
-            #code_transformed = el.feature_transform_matrix_n(code, matrix_shape, f_params)
-            code_transformed = code
-            code_transformed = tf.reshape(code_transformed, code_shape)
+            codes = tf.reshape(codes, [batch_size, -1])
+            codes_transformed = el.feature_transform_matrix_n(codes, codes.get_shape(), f_params)
+            codes_transformed = tf.reshape(codes_transformed, code_shape)
         with tf.variable_scope("decoder", reuse=reuse) as scope:
-            recon = decoder(code_transformed, is_training, reuse=reuse)
-    return recon, code
+            recons = decoder(codes_transformed, is_training, reuse=reuse)
+    return recons, codes
 
 
 def variable(name, shape=None, initializer=tf.contrib.layers.xavier_initializer_conv2d(uniform=False), trainable=True):
@@ -81,7 +130,6 @@ def variable(name, shape=None, initializer=tf.contrib.layers.xavier_initializer_
     with tf.device('/gpu:0'):
         var = tf.get_variable(name, shape, initializer=initializer, trainable=trainable)
     return var
-
 
 def encoder(x, num_latents, is_training, reuse=False):
     """Encoder with conv3d"""
@@ -102,20 +150,20 @@ def encoder(x, num_latents, is_training, reuse=False):
         #print(' out:', out)
         return out
 
-    l1 = convlayer(1, x, 3, 1, 16, 2, reuse) # 56
-    l2 = convlayer(2, l1, 3, 16, 32, 2, reuse) # 28
-    l3 = convlayer(3, l2, 3, 32, 32, 2, reuse) # 14
-    l4 = convlayer(4, l3, 3, 32, 64, 2, reuse) # 7
-    l5 = convlayer(5, l4, 3, 64, 64, 2, reuse) # 4
-    l6 = convlayer(6, l5, 3, 64, 128, 2, reuse) # 2
-    codes = convlayer(7, l6, 2, 128, num_latents, 2, reuse) # 1
+    l1 = convlayer(1, x, 3, 1, 32, 2, reuse) # 56
+    l2 = convlayer(2, l1, 3, 32, 64, 2, reuse) # 28
+    l3 = convlayer(3, l2, 3, 64, 64, 2, reuse) # 14
+    l4 = convlayer(4, l3, 3, 64, 128, 2, reuse) # 7
+    l5 = convlayer(5, l4, 3, 128, 128, 2, reuse) # 4
+    l6 = convlayer(6, l5, 3, 128, 256, 2, reuse) # 2
+    codes = convlayer(7, l6, 2, 256, num_latents, 2, reuse) # 1
     return codes
 
 
-def decoder(code, is_training, reuse=False):
-    num_latents = code.get_shape()[-1]
+def decoder(codes, is_training, reuse=False):
+    num_latents = codes.get_shape()[-1]
 
-    def upconvlayer(i, inp, ksize, inpdim, outdim, outshape, stride, reuse):
+    def upconvlayer(i, inp, ksize, inpdim, outdim, outshape, stride, reuse, nonlin=tf.nn.elu):
         scopename = 'upconv_layer' + str(i)
         #print(scopename)
         #print(' input:', inp)
@@ -128,17 +176,17 @@ def decoder(code, is_training, reuse=False):
             bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
             linout = bias + tf.nn.conv3d_transpose(inp, kernel, output_shape, strides=strides, padding='SAME')
             bnout = bn5d(linout, is_training, reuse=reuse)
-            out = tf.nn.elu(bnout, name=scopename + 'elu')
+            out = nonlin(bnout, name=scopename + 'nonlin')
         #print(' out:', out)
         return out
 
-    l1 = upconvlayer(1, code, 2, num_latents, 128, 2, 2, reuse)
-    l2 = upconvlayer(2, l1, 3, 128, 64, 4, 2, reuse)
-    l3 = upconvlayer(3, l2, 3, 64, 64, 7, 2, reuse)
-    l4 = upconvlayer(4, l3, 3, 64, 32, 14, 2, reuse)
-    l5 = upconvlayer(5, l4, 3, 32, 32, 28, 2, reuse)
-    l6 = upconvlayer(6, l5, 3, 32, 16, 56, 2, reuse)
-    recons = upconvlayer(7, l6, 3, 16, 1, 56, 1, reuse)
+    l1 = upconvlayer(1, codes, 2, num_latents, 256, 2, 2, reuse)
+    l2 = upconvlayer(2, l1, 3, 256, 128, 4, 2, reuse)
+    l3 = upconvlayer(3, l2, 3, 128, 128, 7, 2, reuse)
+    l4 = upconvlayer(4, l3, 3, 128, 64, 14, 2, reuse)
+    l5 = upconvlayer(5, l4, 3, 64, 64, 28, 2, reuse)
+    l6 = upconvlayer(6, l5, 3, 64, 32, 56, 2, reuse)
+    recons = upconvlayer(7, l6, 3, 32, 1, 56, 1, reuse, nonlin=tf.nn.sigmoid)
     return recons
 
 
@@ -286,7 +334,7 @@ def train(inputs, outputs, ops, opt, data):
     """Training loop"""
     # Unpack inputs, outputs and ops
     x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training = inputs
-    loss, merged, test_recon = outputs
+    loss, merged, test_recon, recons = outputs
     train_op = ops
     
     # For checkpoints
@@ -334,14 +382,14 @@ def train(inputs, outputs, ops, opt, data):
             train_writer.add_summary(summary, gs)
         train_loss /= num_steps
         print('[{:03d}]: {:03f}'.format(epoch, train_loss))
-        
+
         # Save model
         if epoch % FLAGS.save_step == 0:
             path = saver.save(sess, opt['save_path'], epoch)
             print('Saved model to ' + path)
         
         # Validation
-        if epoch % 1 == 0:
+        if epoch % 10 == 0:
             recons = []
             max_angles = 20
             #pick a random initial transformation
@@ -372,31 +420,13 @@ def train(inputs, outputs, ops, opt, data):
             samples_ = np.stack(recons)
 
             tile_image = np.reshape(samples_, [max_angles*max_angles, opt['outsize'][0], opt['outsize'][1], opt['outsize'][2], opt['color_chn']])
-            tile_image = np.sum(tile_image, axis=4)
-            tile_image_d = np.sum(tile_image, axis=1)
-            tile_image_h = np.sum(tile_image, axis=2)
-            tile_image_w = np.sum(tile_image, axis=3)
 
-            tile_image_d /= np.sum(tile_image_d)
-            tile_image_h /= np.sum(tile_image_h)
-            tile_image_w /= np.sum(tile_image_w)
-
-            def tile_batch(batch, tile_w=1, tile_h=1):
-                assert tile_w * tile_h == batch.shape[0], 'tile dimensions inconsistent'
-                batch = np.split(batch, tile_w*tile_h, axis=0)
-                batch = [np.concatenate(batch[i*tile_w:(i+1)*tile_w], 2) for i in range(tile_h)]
-                batch = np.concatenate(batch, 1)
-                batch = batch[0,:,:]
-                return batch
-
-            tile_image_d = 1.0 - tile_batch(tile_image_d, max_angles, max_angles)
-            tile_image_h = 1.0 - tile_batch(tile_image_h, max_angles, max_angles)
-            tile_image_w = 1.0 - tile_batch(tile_image_w, max_angles, max_angles)
+            tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(tile_image, max_angles, max_angles)
 
             save_name = './samples/' + opt['flag'] + '/image_%04d' % epoch
-            skio.imsave(save_name + '_d.png', tile_image_d) 
-            skio.imsave(save_name + '_h.png', tile_image_h) 
-            skio.imsave(save_name + '_w.png', tile_image_w) 
+            imsave(save_name + '_d.png', tile_image_d) 
+            imsave(save_name + '_h.png', tile_image_h) 
+            imsave(save_name + '_w.png', tile_image_w) 
 
             # TODO save binvox
 
@@ -432,9 +462,9 @@ def main(_):
     opt['outsize'] = [i + 2*pad_size for i in opt['vol_size']]
     stl = AffineVolumeTransformer(opt['outsize'])
     opt['color_chn'] = 1
-    opt['num_latents'] = 64
     opt['stl_size'] = 3 # no translation
     opt['f_params_dim'] = 3 + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
+    opt['num_latents'] = opt['f_params_dim']*64
 
 
     opt['flag'] = 'shapenet'
@@ -469,16 +499,20 @@ def main(_):
     # Build the training model
     x_in = spatial_transform(stl, x, stl_params_in, paddings)
     x_trg = spatial_transform(stl, x, stl_params_trg, paddings)
-    recon, codes = autoencoder(x_in, opt['num_latents'], f_params, is_training)
+    recons, codes = autoencoder(x_in, opt['num_latents'], f_params, is_training)
     
     # Test model
     test_x_in = spatial_transform(stl, test_x, test_stl_params_in, paddings)
     test_recon, __ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
     
     # LOSS
-    loss = bernoulli_xentropy(x_trg, recon)
+    #loss = bernoulli_xentropy(x_trg, recons)
+    loss = tf.reduce_mean(tf.square(x_trg-recons))
     
     # Summaries
+    tf_vol_summary('recons', recons) 
+    tf_vol_summary('inputs', x_in) 
+    tf_vol_summary('targets', x_trg) 
     tf.summary.scalar('Loss', loss)
     tf.summary.scalar('LearningRate', lr)
     merged = tf.summary.merge_all()
@@ -489,7 +523,7 @@ def main(_):
     
     # Set inputs, outputs, and training ops
     inputs = [x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training]
-    outputs = [loss, merged, test_recon]
+    outputs = [loss, merged, test_recon, recons]
     ops = [train_op]
     
     # Train
