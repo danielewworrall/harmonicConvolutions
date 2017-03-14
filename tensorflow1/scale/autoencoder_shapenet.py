@@ -26,7 +26,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_boolean('ANALYSE', False, 'runs model analysis')
 flags.DEFINE_integer('eq_dim', -1, 'number of latent units to rotate')
 flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on latents')
-flags.DEFINE_integer('save_step', 2, 'Interval (epoch) for which to save')
+flags.DEFINE_integer('save_step', 10, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', True, 'Dopey execution environment')
@@ -39,13 +39,16 @@ def tf_im_summary(prefix, images):
         tf.summary.image(desc_str, images[j:(j+1), :, :, :], max_outputs=1)
 
 def tf_vol_summary(prefix, vols):
+    # need to keep 4-dim tensor for tf_im_summary
+    #vols = tf.reduce_sum(vols, axis=4)
+
     vols_d = tf.reduce_sum(vols, axis=1)
     vols_h = tf.reduce_sum(vols, axis=2)
     vols_w = tf.reduce_sum(vols, axis=3)
 
-    vols_d = vols_d / tf.reduce_sum(vols_d, axis=[1,2,3], keep_dims=True)
-    vols_h = vols_h / tf.reduce_sum(vols_h, axis=[1,2,3], keep_dims=True)
-    vols_w = vols_w / tf.reduce_sum(vols_w, axis=[1,2,3], keep_dims=True)
+    vols_d = vols_d / tf.reduce_max(vols_d, axis=[1,2,3], keep_dims=True)
+    vols_h = vols_h / tf.reduce_max(vols_h, axis=[1,2,3], keep_dims=True)
+    vols_w = vols_w / tf.reduce_max(vols_w, axis=[1,2,3], keep_dims=True)
 
     tf_im_summary(prefix + '_d', vols_d)
     tf_im_summary(prefix + '_h', vols_h)
@@ -67,10 +70,14 @@ def get_imgs_from_vol(tile_image, tile_h, tile_w):
     d_sum = np.sum(np.sum(tile_image_d, axis=2, keepdims=True), axis=1, keepdims=True)
     h_sum = np.sum(np.sum(tile_image_h, axis=2, keepdims=True), axis=1, keepdims=True)
     w_sum = np.sum(np.sum(tile_image_w, axis=2, keepdims=True), axis=1, keepdims=True)
+
+    d_max = tile_image_d.max(axis=2, keepdims=True).max(axis=1, keepdims=True)
+    h_max = tile_image_h.max(axis=2, keepdims=True).max(axis=1, keepdims=True)
+    w_max = tile_image_w.max(axis=2, keepdims=True).max(axis=1, keepdims=True)
     
-    tile_image_d = tile_image_d / d_sum
-    tile_image_h = tile_image_h / h_sum
-    tile_image_w = tile_image_w / w_sum
+    tile_image_d = tile_image_d / d_max
+    tile_image_h = tile_image_h / h_max
+    tile_image_w = tile_image_w / w_max
 
     def tile_batch(batch, tile_w=1, tile_h=1):
         assert tile_w * tile_h == batch.shape[0], 'tile dimensions inconsistent'
@@ -149,16 +156,19 @@ def encoder(x, num_latents, is_training, reuse=False):
                 scope.reuse_variables()
             kernel = variable(scopename + '_kernel', [ksize, ksize, ksize, inpdim, outdim])
             bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
-            linout = bias + tf.nn.conv3d(inp, kernel, strides=strides, padding='SAME')
+            linout = tf.nn.conv3d(inp, kernel, strides=strides, padding='SAME')
+            linout = tf.nn.bias_add(linout, bias)
             if dobn:
                 bnout = bn5d(linout, is_training, reuse=reuse)
             else:
                 bnout = linout
-            out = nonlin(bnout, name=scopename + 'elu')
+            out = nonlin(bnout, name=scopename + '_nonlin')
         #print(' out:', out)
         return out
 
-    l1 = convlayer(1, x, 3, 1, 32, 2, reuse) # 56
+    # TODO increase ksize
+    l0 = convlayer(0, x,  3, 1, 32, 1, reuse) # 56
+    l1 = convlayer(1, l0, 3, 32, 32, 2, reuse) # 56
     l2 = convlayer(2, l1, 3, 32, 64, 2, reuse) # 28
     l3 = convlayer(3, l2, 3, 64, 64, 2, reuse) # 14
     l4 = convlayer(4, l3, 3, 64, 128, 2, reuse) # 7
@@ -189,20 +199,22 @@ def decoder(codes, is_training, reuse=False):
         #print(' out:', out)
         return out
 
-    l1 = upconvlayer(1, codes, 2, num_latents, 256, 2, 2, reuse)
-    l2 = upconvlayer(2, l1, 3, 256, 128, 4, 2, reuse)
-    l3 = upconvlayer(3, l2, 3, 128, 128, 7, 2, reuse)
-    l4 = upconvlayer(4, l3, 3, 128, 64, 14, 2, reuse)
-    l5 = upconvlayer(5, l4, 3, 64, 64, 28, 2, reuse)
-    l6 = upconvlayer(6, l5, 3, 64, 32, 56, 2, reuse)
-    recons = upconvlayer(7, l6, 3, 32, 1, 56, 1, reuse, nonlin=tf.identity)
+    # TODO increase ksize
+    l0 = upconvlayer(0,     codes, 1, num_latents, 512, 1, 1, reuse)
+    l1 = upconvlayer(1,     l0,    2, 512, 256, 2, 2, reuse)
+    l2 = upconvlayer(2,     l1,    3, 256, 128, 4, 2, reuse)
+    l3 = upconvlayer(3,     l2,    3, 128, 128, 7, 2, reuse)
+    l4 = upconvlayer(4,     l3,    3, 128, 64, 14, 2, reuse)
+    l5 = upconvlayer(5,     l4,    3, 64, 64, 28, 2, reuse)
+    l6 = upconvlayer(6,     l5,    3, 64, 32, 56, 2, reuse)
+    recons = upconvlayer(7, l6,    3, 32, 1, 56, 1, reuse, nonlin=tf.nn.sigmoid)
     return recons
 
 
-def bernoulli_xentropy(x, test_recon):
-    """Cross-entropy for Bernoulli variables"""
-    x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=test_recon)
-    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2)))
+#def bernoulli_xentropy(x, test_recon):
+#    """Cross-entropy for Bernoulli variables"""
+#    x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=test_recon)
+#    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2)))
 
 
 def spatial_transform(stl, x, transmat, paddings):
@@ -244,9 +256,14 @@ def get_3dscalemat(xyzfactor):
     scalemat[:,2,2] = xyzfactor[:,2]
     return scalemat
 
-def get_2drotmat(theta):
+def get_2drotscalemat(theta, min_scale, max_scale):
     batch_size = theta.shape[0]
-    Rot = np.empty([batch_size, 2, 2])
+    Rot = np.zeros([batch_size, 2, 2])
+
+    if max_scale>min_scale + 1e-6:
+        theta = theta-min_scale
+        theta = theta/(max_scale-min_scale)
+    theta = np.pi*theta
     Rot[:,0,0] = np.cos(theta)
     Rot[:,0,1] = -np.sin(theta)
     Rot[:,1,0] = np.sin(theta)
@@ -256,10 +273,14 @@ def get_2drotmat(theta):
 def random_transmats(batch_size):
     """ Random rotations in 3D
     """
-    params_inp_rot = 2*np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-    params_inp_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
-    params_trg_rot = 2*np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-    params_trg_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
+    min_scale = 1.0
+    max_scale = 1.0
+    params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+    params_inp_rot[:,1] = params_inp_rot[:,1]/2
+    params_inp_scale = min_scale + (max_scale-min_scale)*np.random.rand(batch_size, 3)
+    params_trg_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+    params_trg_rot[:,1] = params_trg_rot[:,1]/2
+    params_trg_scale = min_scale + (max_scale-min_scale)*np.random.rand(batch_size, 3)
 
     inp_3drotmat = get_3drotmat(params_inp_rot)
     inp_3dscalemat = get_3dscalemat(params_inp_scale)
@@ -275,8 +296,8 @@ def random_transmats(batch_size):
     cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
     f_params_inp = set_f_params_rot(f_params_inp, cur_rotmat)
     for i in xrange(3):
-        inp_f_2dscalemat = get_2drotmat(params_inp_scale[:, i])
-        trg_f_2dscalemat = get_2drotmat(params_trg_scale[:, i])
+        inp_f_2dscalemat = get_2drotscalemat(params_inp_scale[:, i], min_scale, max_scale)
+        trg_f_2dscalemat = get_2drotscalemat(params_trg_scale[:, i], min_scale, max_scale)
         cur_f_scalemat = np.matmul(trg_f_2dscalemat, inp_f_2dscalemat.transpose([0,2,1]))
         f_params_inp = set_f_params_scale(f_params_inp, i, cur_f_scalemat)
 
@@ -309,7 +330,8 @@ def update_f_params(f_params, rot_or_scale, ax, theta):
         # do 2x2 scale rotation
         angles = np.zeros([1,1])
         angles[:,0] = theta
-        inp_f_2dscalemat = get_2drotmat(angles)
+        # TODO min_scale, max_scale
+        inp_f_2dscalemat = get_2drotscalemat(angles, 1.0, 1.0)
         f_params = set_f_params_scale(f_params, ax, inp_f_2dscalemat)
     return f_params
 
@@ -401,7 +423,6 @@ def train(inputs, outputs, ops, opt, data):
             train_writer.add_summary(summary, gs)
 
         if epoch % FLAGS.save_step == 0:
-            print(recons)
             cur_recons = sess.run(recons, feed_dict=feed_dict)
             tile_size = int(np.floor(np.sqrt(cur_recons.shape[0])))
             cur_recons = cur_recons[0:tile_size*tile_size, :,:,:,:]
@@ -426,17 +447,18 @@ def train(inputs, outputs, ops, opt, data):
             #pick a random initial transformation
             cur_stl_params_in, _, cur_f_params = random_transmats(1)
             cur_x, _ = data.validation.next_batch(1)
-            fparams = np.linspace(0., np.pi, num=max_angles)
+            fangles = np.linspace(0., np.pi, num=max_angles)
+            fscales = np.linspace(0.8, 1.0, num=max_angles)
 
             for j in xrange(max_angles):
                 ax = np.random.randint(0, 3)
-                cur_f_params_j = update_f_params(cur_f_params, 0, ax, fparams[j])
+                cur_f_params_j = update_f_params(cur_f_params, 0, ax, fangles[j])
                 do_scale_ax = np.random.rand(3)>0.5
                 for i in xrange(max_angles):
                     cur_f_params_ji = cur_f_params_j
                     for ax in xrange(3):
                         if do_scale_ax[ax]:
-                            cur_f_params_ji = update_f_params(cur_f_params_ji, 1, ax, fparams[i])
+                            cur_f_params_ji = update_f_params(cur_f_params_ji, 1, ax, fscales[i])
 
                     feed_dict = {
                                 test_x : cur_x,
@@ -486,7 +508,7 @@ def main(_):
     opt['n_channels'] = 10
     opt['n_epochs'] = 2000
     opt['lr_schedule'] = [50, 75]
-    opt['lr'] = 1e-3
+    opt['lr'] = 1e-4
 
     opt['vol_size'] = [32,32,32]
     pad_size = int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
