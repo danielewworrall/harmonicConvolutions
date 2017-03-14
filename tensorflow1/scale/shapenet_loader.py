@@ -128,9 +128,12 @@ def read_data_sets(path, one_hot=False):
   print('Reading', path)
 
   # TODO
-  train_split = 0.01#8
-  validation_split = 0.01
-  test_split = 0.01
+  train_split = 0.8
+  validation_split = 0.1
+  test_split = 0.1
+  #train_split = 0.01
+  #validation_split = 0.01
+  #test_split = 0.01
 
   class_folders = sorted(glob.glob(os.path.join(path, '*')))
   #print(class_folders)

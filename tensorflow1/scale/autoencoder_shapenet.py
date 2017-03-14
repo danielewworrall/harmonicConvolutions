@@ -26,7 +26,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_boolean('ANALYSE', False, 'runs model analysis')
 flags.DEFINE_integer('eq_dim', -1, 'number of latent units to rotate')
 flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on latents')
-flags.DEFINE_integer('save_step', 50, 'Interval (epoch) for which to save')
+flags.DEFINE_integer('save_step', 2, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', True, 'Dopey execution environment')
@@ -257,9 +257,9 @@ def random_transmats(batch_size):
     trg_3drotmat = get_3drotmat(params_trg_rot)
     trg_3dscalemat = get_3dscalemat(params_trg_scale)
 
-    stl_transmat_inp = np.matmul(inp_3drotmat, inp_3dscalemat)
-    stl_transmat_trg = np.matmul(trg_3drotmat, trg_3dscalemat)
-
+    # TODO scale and rot because inverse warp in stl
+    stl_transmat_inp = np.matmul(inp_3dscalemat, inp_3drotmat)
+    stl_transmat_trg = np.matmul(trg_3dscalemat, trg_3drotmat)
     
     f_params_inp = np.zeros([batch_size, 9, 9])
     cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
@@ -389,7 +389,7 @@ def train(inputs, outputs, ops, opt, data):
             print('Saved model to ' + path)
         
         # Validation
-        if epoch % 10 == 0:
+        if epoch % 2 == 0:
             recons = []
             max_angles = 20
             #pick a random initial transformation
