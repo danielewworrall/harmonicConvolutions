@@ -525,7 +525,7 @@ def main(_):
     opt['mb_size'] = 32
     opt['n_epochs'] = 200
     opt['lr_schedule'] = [30, 60, 100, 150, 190]
-    opt['lr'] = 1e-1
+    opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
     pad_size = int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
