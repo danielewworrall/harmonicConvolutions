@@ -148,14 +148,14 @@ def encoder(x, num_latents, is_training, reuse=False):
     
     def convlayer(i, inp, ksize, inpdim, outdim, stride, reuse, nonlin=tf.nn.elu, dobn=True):
         scopename = 'conv_layer' + str(i)
-        #print(scopename)
-        #print(' input:', inp)
+        print(scopename)
+        print(' input:', inp)
         strides = [1, stride, stride, stride, 1]
         with tf.variable_scope(scopename) as scope:
             if reuse:
                 scope.reuse_variables()
             kernel = variable(scopename + '_kernel', [ksize, ksize, ksize, inpdim, outdim])
-            bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
+            bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.1))
             linout = tf.nn.conv3d(inp, kernel, strides=strides, padding='SAME')
             linout = tf.nn.bias_add(linout, bias)
             if dobn:
@@ -163,19 +163,18 @@ def encoder(x, num_latents, is_training, reuse=False):
             else:
                 bnout = linout
             out = nonlin(bnout, name=scopename + '_nonlin')
-        #print(' out:', out)
+        print(' out:', out)
         return out
 
     # TODO increase ksize
-    l0 = convlayer(0, x,  3, 1, 32, 1, reuse) # 56
-    l1 = convlayer(1, l0, 3, 32, 32, 2, reuse) # 56
-    l2 = convlayer(2, l1, 3, 32, 64, 2, reuse) # 28
-    l3 = convlayer(3, l2, 3, 64, 64, 2, reuse) # 14
-    l4 = convlayer(4, l3, 3, 64, 128, 2, reuse) # 7
-    l5 = convlayer(5, l4, 3, 128, 128, 2, reuse) # 4
-    l6 = convlayer(6, l5, 3, 128, 256, 2, reuse) # 2
-    l7 = convlayer(7, l6, 2, 256, 512, 2, reuse) # 1
-    codes = convlayer(8, l7, 1, 512, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1
+    l0 = convlayer(0, x,  4, 1,   32,  1, reuse)    # 56 -> 56
+    l1 = convlayer(1, l0, 4, 32,  32,  2, reuse)    # 56 -> 28
+    l2 = convlayer(2, l1, 4, 32,  64,  2, reuse)    # 28 -> 14
+    l3 = convlayer(3, l2, 4, 64,  64,  2, reuse)    # 14 -> 7
+    l4 = convlayer(4, l3, 4, 64,  128, 2, reuse)    # 7  -> 4
+    l5 = convlayer(5, l4, 3, 128, 256, 2, reuse)    # 4  -> 2
+    l6 = convlayer(6, l5, 3, 256, 512, 2, reuse)    # 2  -> 1
+    codes = convlayer(7, l6, 1, 512, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
     return codes
 
 
@@ -184,30 +183,30 @@ def decoder(codes, is_training, reuse=False):
 
     def upconvlayer(i, inp, ksize, inpdim, outdim, outshape, stride, reuse, nonlin=tf.nn.elu):
         scopename = 'upconv_layer' + str(i)
-        #print(scopename)
-        #print(' input:', inp)
+        print(scopename)
+        print(' input:', inp)
         output_shape = [inp.get_shape().as_list()[0], outshape, outshape, outshape, outdim]
         strides = [1, stride, stride, stride, 1]
         with tf.variable_scope(scopename) as scope:
             if reuse:
                 scope.reuse_variables()
             kernel = variable(scopename + '_kernel', [ksize, ksize, ksize, outdim, inpdim])
-            bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
+            bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.1))
             linout = bias + tf.nn.conv3d_transpose(inp, kernel, output_shape, strides=strides, padding='SAME')
             bnout = bn5d(linout, is_training, reuse=reuse)
             out = nonlin(bnout, name=scopename + 'nonlin')
-        #print(' out:', out)
+        print(' out:', out)
         return out
 
     # TODO increase ksize
-    l0 = upconvlayer(0,     codes, 1, num_latents, 512, 1, 1, reuse)
-    l1 = upconvlayer(1,     l0,    2, 512, 256, 2, 2, reuse)
-    l2 = upconvlayer(2,     l1,    3, 256, 128, 4, 2, reuse)
-    l3 = upconvlayer(3,     l2,    3, 128, 128, 7, 2, reuse)
-    l4 = upconvlayer(4,     l3,    3, 128, 64, 14, 2, reuse)
-    l5 = upconvlayer(5,     l4,    3, 64, 64, 28, 2, reuse)
-    l6 = upconvlayer(6,     l5,    3, 64, 32, 56, 2, reuse)
-    recons = upconvlayer(7, l6,    3, 32, 1, 56, 1, reuse, nonlin=tf.nn.sigmoid)
+    #l0 = upconvlayer(0,     codes, 1, num_latents, 512, 1, 1, reuse)
+    l1 = upconvlayer(1,     codes, 2, num_latents, 512,  2, 2, reuse) #  1 -> 2
+    l2 = upconvlayer(2,     l1,    3, 512,         256,  4, 2, reuse) #  2 -> 4
+    l3 = upconvlayer(3,     l2,    4, 256,         128,  7, 2, reuse) #  4 -> 7
+    l4 = upconvlayer(4,     l3,    5, 128,         64,  14, 2, reuse) #  7 -> 14
+    l5 = upconvlayer(5,     l4,    5, 64,          64,  28, 2, reuse) # 14 -> 28
+    l6 = upconvlayer(6,     l5,    5, 64,          32,  56, 2, reuse) # 28 -> 56
+    recons = upconvlayer(7, l6,    5, 32,          1,   56, 1, reuse, nonlin=tf.nn.sigmoid)
     return recons
 
 
@@ -275,12 +274,23 @@ def random_transmats(batch_size):
     """
     min_scale = 1.0
     max_scale = 1.0
-    params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-    params_inp_rot[:,1] = params_inp_rot[:,1]/2
-    params_inp_scale = min_scale + (max_scale-min_scale)*np.random.rand(batch_size, 3)
-    params_trg_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-    params_trg_rot[:,1] = params_trg_rot[:,1]/2
-    params_trg_scale = min_scale + (max_scale-min_scale)*np.random.rand(batch_size, 3)
+
+    if True:
+        params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+        params_inp_rot[:,[0,2]] = 0.0
+        params_inp_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
+
+        params_trg_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+        params_trg_rot[:,[0,2]] = 0.0
+        params_trg_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
+    else:
+        params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+        params_inp_rot[:,1] = params_inp_rot[:,1]/2
+        params_inp_scale = min_scale + (max_scale-min_scale)*np.random.rand(batch_size, 3)
+
+        params_trg_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+        params_trg_rot[:,1] = params_trg_rot[:,1]/2
+        params_trg_scale = min_scale + (max_scale-min_scale)*np.random.rand(batch_size, 3)
 
     inp_3drotmat = get_3drotmat(params_inp_rot)
     inp_3dscalemat = get_3dscalemat(params_inp_scale)
@@ -292,14 +302,18 @@ def random_transmats(batch_size):
     stl_transmat_inp = np.matmul(inp_3dscalemat, inp_3drotmat)
     stl_transmat_trg = np.matmul(trg_3dscalemat, trg_3drotmat)
     
-    f_params_inp = np.zeros([batch_size, 9, 9])
+    f_params_inp = np.zeros([batch_size, 3, 3])
+    # TODO was like this:
     cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
     f_params_inp = set_f_params_rot(f_params_inp, cur_rotmat)
-    for i in xrange(3):
-        inp_f_2dscalemat = get_2drotscalemat(params_inp_scale[:, i], min_scale, max_scale)
-        trg_f_2dscalemat = get_2drotscalemat(params_trg_scale[:, i], min_scale, max_scale)
-        cur_f_scalemat = np.matmul(trg_f_2dscalemat, inp_f_2dscalemat.transpose([0,2,1]))
-        f_params_inp = set_f_params_scale(f_params_inp, i, cur_f_scalemat)
+    #print(f_params_inp[0,:,:])
+
+    # TODO
+    #for i in xrange(3):
+    #    inp_f_2dscalemat = get_2drotscalemat(params_inp_scale[:, i], min_scale, max_scale)
+    #    trg_f_2dscalemat = get_2drotscalemat(params_trg_scale[:, i], min_scale, max_scale)
+    #    cur_f_scalemat = np.matmul(trg_f_2dscalemat, inp_f_2dscalemat.transpose([0,2,1]))
+    #    f_params_inp = set_f_params_scale(f_params_inp, i, cur_f_scalemat)
 
     return stl_transmat_inp.astype(np.float32), stl_transmat_trg.astype(np.float32), f_params_inp.astype(np.float32)
 
@@ -450,15 +464,16 @@ def train(inputs, outputs, ops, opt, data):
             fangles = np.linspace(0., np.pi, num=max_angles)
             fscales = np.linspace(0.8, 1.0, num=max_angles)
 
+            rot_ax = 1#np.random.randint(0, 3)
             for j in xrange(max_angles):
-                ax = np.random.randint(0, 3)
-                cur_f_params_j = update_f_params(cur_f_params, 0, ax, fangles[j])
+                cur_f_params_j = update_f_params(cur_f_params, 0, rot_ax, fangles[j])
                 do_scale_ax = np.random.rand(3)>0.5
                 for i in xrange(max_angles):
                     cur_f_params_ji = cur_f_params_j
-                    for ax in xrange(3):
-                        if do_scale_ax[ax]:
-                            cur_f_params_ji = update_f_params(cur_f_params_ji, 1, ax, fscales[i])
+                    # TODO
+                    #for scale_ax in xrange(3):
+                    #    if do_scale_ax[scale_ax]:
+                    #        cur_f_params_ji = update_f_params(cur_f_params_ji, 1, scale_ax, fscales[i])
 
                     feed_dict = {
                                 test_x : cur_x,
@@ -504,11 +519,10 @@ def main(_):
         opt['root'] = '/home/sgarbin'
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
-    opt['mb_size'] = 16
-    opt['n_channels'] = 10
-    opt['n_epochs'] = 2000
-    opt['lr_schedule'] = [50, 75]
-    opt['lr'] = 1e-4
+    opt['mb_size'] = 32
+    opt['n_epochs'] = 200
+    opt['lr_schedule'] = [100, 180]
+    opt['lr'] = 1e-2
 
     opt['vol_size'] = [32,32,32]
     pad_size = int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
@@ -516,7 +530,8 @@ def main(_):
     stl = AffineVolumeTransformer(opt['outsize'])
     opt['color_chn'] = 1
     opt['stl_size'] = 3 # no translation
-    opt['f_params_dim'] = 3 + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
+    # TODO
+    opt['f_params_dim'] = 3# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
     opt['num_latents'] = opt['f_params_dim']*64
 
 
@@ -560,7 +575,7 @@ def main(_):
     
     # LOSS
     #loss = bernoulli_xentropy(x_trg, recons)
-    loss = tf.reduce_mean(tf.square(x_trg-recons))
+    loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_trg-recons), axis=[1,2,3,4]))
     
     # Summaries
     tf_vol_summary('recons', recons) 
