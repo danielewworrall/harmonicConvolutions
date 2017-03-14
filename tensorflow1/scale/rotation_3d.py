@@ -6,6 +6,7 @@ import time
 
 import numpy as np
 
+
 def transmat(xyzrot, xyzfactor=None, shiftmat=None):
     """ Compute the 3D transformation matrix with 
         rotations about x,y and z axii and scales about x, y and z axii.
@@ -14,40 +15,22 @@ def transmat(xyzrot, xyzfactor=None, shiftmat=None):
         xyzfactor = x,y,z-axis scale
         
     """
+    batch_size = xyzrot.shape[0]
 
-    assert xyzrot.ndim==2, 'xyzrot must be 2 dimensional array'
-    batch_size = xyz.shape[0]
-    assert xyzrot.shape[1]==3, 'must have rotation angles for x,y and z axii'
+    rotmat = get_3drotmat(xyzrot)
 
-    if xyzfactor=None:
+    if xyzfactor is None:
         xyzfactor = np.ones([batch_size, 3])
-    assert xyzfactor.ndim==2, 'xyzfactor must be a 2 dimensional array'
+
     assert xyzfactor.shape[0]==batch_size, 'xyzfactor must have scale factor for each datapoint in the minibatch'
-    assert xyzfactor.shape[1]==3, 'xyzfactor must have scale factor for each axis'
 
     if shiftmat is None:
         shiftmat = np.zeros([batch_size,3,1])
 
-    rotmat = np.zeros([batch_size, 3, 3])
-    rotmat[:,0,0] = np.cos(theta)*np.cos(psi)
-    rotmat[:,0,1] = np.cos(phi)*np.sin(psi) + np.sin(phi)*np.sin(theta)*np.cos(psi)
-    rotmat[:,0,2] = np.sin(phi)*np.sin(psi) - np.cos(phi)*np.sin(theta)*np.cos(psi)
-    rotmat[:,1,0] = -np.cos(theta)*np.sin(psi)
-    rotmat[:,1,1] = np.cos(phi)*np.cos(psi) - np.sin(phi)*np.sin(theta)*np.sin(psi)
-    rotmat[:,1,2] = np.sin(phi)*np.cos(psi) + np.cos(phi)*np.sin(theta)*np.sin(psi)
-    rotmat[:,2,0] = np.sin(theta)
-    rotmat[:,2,1] = -np.sin(phi)*np.cos(theta)
-    rotmat[:,2,2] = np.cos(phi)*np.cos(theta)
+    scalemat = get_3dscalemat(xyzfactor)
+    rotscalemat = np.matmul(rotmat, scalemat)
 
-    scalemat = np.zeros([batch_size, 3, 3])
-    scalemat[:,0,0] = xyzfactor[:,0]
-    scalemat[:,1,1] = xyzfactor[:,1]
-    scalemat[:,2,2] = xyzfactor[:,2]
-
-    rotscalemat = np.batch_matmul(rotmat, scalemat)
-
-    #TODO
-    assert rotscalemat.ndim==3 and rotscalemat.shape[0]==batch_size and rotscalemat.shape[1]==3 and rotscalemat.shape[2]==3, 'batch_matmul works'
+    assert rotscalemat.ndim==3 and rotscalemat.shape[0]==batch_size and rotscalemat.shape[1]==3 and rotscalemat.shape[2]==3, 'matmul works'
 
     transmat = np.concatenate([rotscalemat, shiftmat],2)
     return np.reshape(transmat, [batch_size, -1]).astype(np.float32)

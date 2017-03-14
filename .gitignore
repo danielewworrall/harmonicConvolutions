@@ -10,6 +10,7 @@ results/
 deepboundaries/
 bsd/
 *.pdf
+*.swp
 *.npz
 *.npy
 rotated_mnist/

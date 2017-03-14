@@ -105,7 +105,7 @@ class DataSet(object):
         # Start next epoch
         start = 0
         self._index_in_epoch = batch_size
-        assert batch_size <= self.num_img
+        assert batch_size <= self._num_examples
       end = self._index_in_epoch
 
       inds = np.arange(start, end, dtype=np.int64)
