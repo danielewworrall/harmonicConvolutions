@@ -146,7 +146,7 @@ def variable(name, shape=None, initializer=tf.contrib.layers.xavier_initializer_
 def encoder(x, num_latents, is_training, reuse=False):
     """Encoder with conv3d"""
     
-    def convlayer(i, inp, ksize, inpdim, outdim, stride, reuse, nonlin=tf.nn.elu, dobn=True):
+    def convlayer(i, inp, ksize, inpdim, outdim, stride, reuse, nonlin=tf.nn.elu, dobn=True, padding='SAME'):
         scopename = 'conv_layer' + str(i)
         print(scopename)
         print(' input:', inp)
@@ -156,7 +156,7 @@ def encoder(x, num_latents, is_training, reuse=False):
                 scope.reuse_variables()
             kernel = variable(scopename + '_kernel', [ksize, ksize, ksize, inpdim, outdim])
             bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.1))
-            linout = tf.nn.conv3d(inp, kernel, strides=strides, padding='SAME')
+            linout = tf.nn.conv3d(inp, kernel, strides=strides, padding=padding)
             linout = tf.nn.bias_add(linout, bias)
             if dobn:
                 bnout = bn5d(linout, is_training, reuse=reuse)
@@ -167,14 +167,14 @@ def encoder(x, num_latents, is_training, reuse=False):
         return out
 
     # TODO increase ksize
-    l0 = convlayer(0, x,  4, 1,   32,  1, reuse)    # 56 -> 56
-    l1 = convlayer(1, l0, 4, 32,  32,  2, reuse)    # 56 -> 28
-    l2 = convlayer(2, l1, 4, 32,  64,  2, reuse)    # 28 -> 14
-    l3 = convlayer(3, l2, 4, 64,  64,  2, reuse)    # 14 -> 7
-    l4 = convlayer(4, l3, 4, 64,  128, 2, reuse)    # 7  -> 4
-    l5 = convlayer(5, l4, 3, 128, 256, 2, reuse)    # 4  -> 2
-    l6 = convlayer(6, l5, 3, 256, 512, 2, reuse)    # 2  -> 1
-    codes = convlayer(7, l6, 1, 512, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
+    l0 = convlayer(0, x,  3, 1,     32,  1, reuse)                    # 56 -> 56
+    l1 = convlayer(1, l0, 4, 32,    64,  2, reuse)                    # 56 -> 28
+    l2 = convlayer(2, l1, 4, 64,   128,  2, reuse)                    # 28 -> 14
+    l3 = convlayer(3, l2, 4, 128,  256,  2, reuse)                    # 14 -> 7
+    l4 = convlayer(4, l3, 4, 256,  512,  2, reuse)                     # 7  -> 4
+    l5 = convlayer(5, l4, 4, 512, 2048,  1, reuse, padding='VALID')    # 4  -> 1
+    #l6 = convlayer(6, l5, 3, 256, 512,  2, reuse)                     # 2  -> 1
+    codes = convlayer(6, l5, 1, 2048, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
     return codes
 
 
@@ -200,13 +200,13 @@ def decoder(codes, is_training, reuse=False):
 
     # TODO increase ksize
     #l0 = upconvlayer(0,     codes, 1, num_latents, 512, 1, 1, reuse)
-    l1 = upconvlayer(1,     codes, 2, num_latents, 512,  2, 2, reuse) #  1 -> 2
-    l2 = upconvlayer(2,     l1,    3, 512,         256,  4, 2, reuse) #  2 -> 4
-    l3 = upconvlayer(3,     l2,    4, 256,         128,  7, 2, reuse) #  4 -> 7
-    l4 = upconvlayer(4,     l3,    5, 128,         64,  14, 2, reuse) #  7 -> 14
-    l5 = upconvlayer(5,     l4,    5, 64,          64,  28, 2, reuse) # 14 -> 28
+    l1 = upconvlayer(1,     codes, 1, num_latents, 2048, 1, 1, reuse) #  1 -> 2
+    l2 = upconvlayer(2,     l1,    4, 2048,        512,  4, 4, reuse) #  2 -> 4
+    l3 = upconvlayer(3,     l2,    4, 512,         256,  7, 2, reuse) #  4 -> 7
+    l4 = upconvlayer(4,     l3,    5, 256,         128, 14, 2, reuse) #  7 -> 14
+    l5 = upconvlayer(5,     l4,    5, 128,         64,  28, 2, reuse) # 14 -> 28
     l6 = upconvlayer(6,     l5,    5, 64,          32,  56, 2, reuse) # 28 -> 56
-    recons = upconvlayer(7, l6,    5, 32,          1,   56, 1, reuse, nonlin=tf.nn.sigmoid)
+    recons = upconvlayer(7, l6,    3, 32,          1,   56, 1, reuse, nonlin=tf.nn.sigmoid)
     return recons
 
 
@@ -277,11 +277,11 @@ def random_transmats(batch_size):
 
     if True:
         params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-        params_inp_rot[:,[0,2]] = 0.0
+        params_inp_rot[:,[0]] = 0.0
         params_inp_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
 
         params_trg_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-        params_trg_rot[:,[0,2]] = 0.0
+        params_trg_rot[:,[0]] = 0.0
         params_trg_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
     else:
         params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
@@ -522,7 +522,7 @@ def main(_):
     opt['mb_size'] = 32
     opt['n_epochs'] = 200
     opt['lr_schedule'] = [100, 180]
-    opt['lr'] = 1e-2
+    opt['lr'] = 1e-1
 
     opt['vol_size'] = [32,32,32]
     pad_size = int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
