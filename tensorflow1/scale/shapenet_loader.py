@@ -144,7 +144,7 @@ def read_data_sets(path, one_hot=False):
   classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]
   #print(classes)
   all_file_count = 0
-  class_folders = class_folders[3:4]
+  #class_folders = class_folders[3:4]
 
   print(class_folders)
 
@@ -180,8 +180,6 @@ def read_data_sets(path, one_hot=False):
     cur_train_labels = [i]*train_split_size # DANGER BEWARE do not change values in this list
     cur_validation_labels = [i]*validation_split_size # DANGER BEWARE do not change values in this list
     cur_test_labels = [i]*test_split_size # DANGER BEWARE do not change values in this list
-
-    #print(os.path.basename(os.path.normpath(os.path.dirname(file_list[0]))))
 
     train_file_list.extend(cur_train_file_list)
     validation_file_list.extend(cur_validation_file_list)
