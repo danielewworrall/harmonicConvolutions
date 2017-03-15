@@ -133,6 +133,11 @@ def read_data_sets(path, one_hot=False):
   test_split = 0.01
 
   class_folders = sorted(glob.glob(os.path.join(path, '*')))
+  import pickle
+  with open('class_folders.pkl', 'wb') as f:
+      pickle.dump(class_folders, f)
+  return
+
   #print(class_folders)
   classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]
   #print(classes)
