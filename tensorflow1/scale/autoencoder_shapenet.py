@@ -97,6 +97,8 @@ def get_imgs_from_vol(tile_image, tile_h, tile_w):
 ################ DATA #################
 
 def load_data():
+    # TODO
+    #shapenet = shapenet_loader.read_data_sets_splits('~/scratch/Datasets/ShapeNetVox32', one_hot=True)
     shapenet = shapenet_loader.read_data_sets('~/scratch/Datasets/ShapeNetVox32', one_hot=True)
     return shapenet
 
@@ -144,6 +146,9 @@ def variable(name, shape=None, initializer=tf.contrib.layers.xavier_initializer_
         var = tf.get_variable(name, shape, initializer=initializer, trainable=trainable)
     return var
 
+def tf_nn_lrelu(x, alpha=0.1, name='lrelu'):
+    return tf.nn.relu(x, name=name+'_a') + tf.nn.relu(-alpha*x, name=name+'_b')
+
 def encoder(x, num_latents, is_training, reuse=False):
     """Encoder with conv3d"""
     
@@ -167,14 +172,13 @@ def encoder(x, num_latents, is_training, reuse=False):
         print(' out:', out)
         return out
 
-    # TODO increase ksize
-    l0 = convlayer(0, x,  3, 1,     16,  1, reuse)                     
-    l1 = convlayer(1, l0, 3, 16,    32,  2, reuse)                     
-    l2 = convlayer(2, l1, 3, 32,    64,  2, reuse)                     
-    l3 = convlayer(3, l2, 3, 64,   128,  2, reuse)                     
-    l4 = convlayer(4, l3, 3, 128,  256,  2, reuse)                     
-    l5 = convlayer(5, l4, 4, 256,  2**11, 1, reuse, padding='VALID')   
-    codes = convlayer(6, l5, 1, 2**11, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
+    l0 = convlayer(0, x,  3, 1,     16,  1, reuse)
+    l1 = convlayer(1, l0, 3, 16,    32,  2, reuse)
+    l2 = convlayer(2, l1, 3, 32,    64,  2, reuse)
+    l3 = convlayer(3, l2, 3, 64,   128,  2, reuse)
+    l4 = convlayer(4, l3, 3, 128,  256,  2, reuse)
+    l5 = convlayer(5, l4, 4, 256,  2**10, 1, reuse, padding='VALID')   
+    codes = convlayer(6, l5, 1, 2**10, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
     return codes
 
 
@@ -195,25 +199,36 @@ def vol_resize_nearest(x, outshapes, align_corners=None):
 def decoder(codes, is_training, reuse=False):
     num_latents = codes.get_shape()[-1]
 
-    def upconvlayer(i, inp, ksize, inpdim, outdim, outshape, reuse, nonlin=tf.nn.elu, padding='SAME'):
+    def upconvlayer(i, inp, ksize, inpdim, outdim, outshape, reuse, nonlin=tf.nn.elu, dobn=True):
         scopename = 'upconv_layer' + str(i)
+        inpshape = inp.get_shape().as_list()[-2]
         print(scopename)
         print(' input:', inp)
-        output_shape = [inp.get_shape().as_list()[0], outshape, outshape, outshape, outdim]
+        #pad_size = int(ksize//2)
+        #paddings = [[0,0], [pad_size, pad_size], [pad_size, pad_size], [pad_size, pad_size], [0,0]]
+        output_shape = [outshape, outshape, outshape]
+        padding='SAME'
         with tf.variable_scope(scopename) as scope:
             if reuse:
                 scope.reuse_variables()
             kernel = variable(scopename + '_kernel', [ksize, ksize, ksize, inpdim, outdim])
             bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
-            inp_resized = vol_resize_nearest(inp, [outshape, outshape, outshape])
+            if outshape>inpshape:
+                inp_resized = vol_resize_nearest(inp, output_shape)
+            else:
+                inp_resized = inp
+            #inp_resized_padded = tf.pad(inp_resized, paddings, mode='SYMMETRIC')
             linout = tf.nn.conv3d(inp_resized, kernel, strides=[1, 1, 1, 1, 1], padding=padding)
             linout = tf.nn.bias_add(linout, bias)
-            bnout = bn5d(linout, is_training, reuse=reuse)
+            if dobn:
+                bnout = bn5d(linout, is_training, reuse=reuse)
+            else:
+                bnout = linout
             out = nonlin(bnout, name=scopename + 'nonlin')
         print(' out:', out)
         return out
 
-    def upconvlayer_tr(i, inp, ksize, inpdim, outdim, outshape, stride, reuse, nonlin=tf.nn.elu, padding='SAME'):
+    def upconvlayer_tr(i, inp, ksize, inpdim, outdim, outshape, stride, reuse, nonlin=tf.nn.elu, dobn=True, padding='SAME'):
         scopename = 'upconv_layer_tr_' + str(i)
         print(scopename)
         print(' input:', inp)
@@ -226,12 +241,14 @@ def decoder(codes, is_training, reuse=False):
             bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
             linout = tf.nn.conv3d_transpose(inp, kernel, output_shape, strides=strides, padding=padding)
             linout = tf.nn.bias_add(linout, bias)
-            bnout = bn5d(linout, is_training, reuse=reuse)
+            if dobn:
+                bnout = bn5d(linout, is_training, reuse=reuse)
+            else:
+                bnout = linout
             out = nonlin(bnout, name=scopename + 'nonlin')
         print(' out:', out)
         return out
 
-    # TODO increase ksize
     #l0 = upconvlayer(0,     codes, 1, num_latents, 512, 1, 1, reuse)
     #l1 = upconvlayer(1,     codes, 1, num_latents, 2048, 1, 1, reuse) #  1 -> 2
     #l2 = upconvlayer(2,     l1,    4, 2048,        512,  4, 4, reuse) #  2 -> 4
@@ -241,8 +258,8 @@ def decoder(codes, is_training, reuse=False):
     #l6 = upconvlayer(6,     l5,    5, 64,          32,  56, 2, reuse) # 28 -> 56
     #recons = upconvlayer(7, l6,    3, 32,          1,   56, 1, reuse, nonlin=tf.nn.sigmoid)
 
-    l1 = upconvlayer(1,     codes, 1, num_latents, 2**11, 1, reuse) 
-    l2 = upconvlayer_tr(2,  l1,    4, 2**11,       512,   4, 4, reuse)
+    l1 = upconvlayer(1,     codes, 1, num_latents, 2**10, 1, reuse) 
+    l2 = upconvlayer_tr(2,  l1,    4, 2**10,       512,   4, 4, reuse)
     l3 = upconvlayer(3,     l2,    3, 512,         256,   8, reuse)
     l4 = upconvlayer(4,     l3,    3, 256,         128,  16, reuse)
     l5 = upconvlayer(5,     l4,    3, 128,         64,   32, reuse)
@@ -255,7 +272,8 @@ def decoder(codes, is_training, reuse=False):
 def bernoulli_xentropy(x, test_recon):
     """Cross-entropy for Bernoulli variables"""
     x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=test_recon)
-    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2)))
+    print(x_entropy)
+    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2,3,4)))
 
 
 def spatial_transform(stl, x, transmat, paddings):
@@ -342,12 +360,12 @@ def random_transmats(batch_size):
     trg_3drotmat = get_3drotmat(params_trg_rot)
     trg_3dscalemat = get_3dscalemat(params_trg_scale)
 
-    # TODO scale and rot because inverse warp in stl
+    # scale and rot because inverse warp in stl
     stl_transmat_inp = np.matmul(inp_3dscalemat, inp_3drotmat)
     stl_transmat_trg = np.matmul(trg_3dscalemat, trg_3drotmat)
     
     f_params_inp = np.zeros([batch_size, 3, 3])
-    # TODO was like this:
+    # was like this:
     #cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
     cur_rotmat = np.matmul(trg_3drotmat.transpose([0,2,1]), inp_3drotmat)
     f_params_inp = set_f_params_rot(f_params_inp, cur_rotmat)
@@ -454,7 +472,7 @@ def train(inputs, outputs, ops, opt, data):
     for epoch in xrange(opt['n_epochs']):
         # Learning rate
         exponent = sum([epoch > i for i in opt['lr_schedule']])
-        current_lr = opt['lr']*np.power(0.2, exponent)
+        current_lr = opt['lr']*np.power(0.1, exponent)
         
         # Train
         train_loss = 0.
@@ -568,9 +586,9 @@ def main(_):
         opt['root'] = '/home/sgarbin'
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
-    opt['mb_size'] = 32
-    opt['n_epochs'] = 200
-    opt['lr_schedule'] = [30, 60, 100, 150, 190]
+    opt['mb_size'] = 16
+    opt['n_epochs'] = 100
+    opt['lr_schedule'] = [2, 15, 30, 70, 95, 100]
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
@@ -581,7 +599,7 @@ def main(_):
     opt['stl_size'] = 3 # no translation
     # TODO
     opt['f_params_dim'] = 3# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
-    opt['num_latents'] = opt['f_params_dim']*128
+    opt['num_latents'] = opt['f_params_dim']*256
 
 
     opt['flag'] = 'shapenet'

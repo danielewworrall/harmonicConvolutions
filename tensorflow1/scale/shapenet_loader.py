@@ -118,8 +118,76 @@ class DataSet(object):
       labels = self._labels[self.perm[start:end]]
       return volumes, labels
 
-  
 def read_data_sets(basedir, one_hot=False):
+  class DataSets(object):
+    pass
+  data_sets = DataSets()
+  basedir = os.path.realpath(os.path.expanduser(basedir))
+  print('Reading', basedir)
+
+  # TODO
+  train_split = 0.8
+  validation_split = 0.1
+  test_split = 0.1
+
+  class_folders = sorted(glob.glob(os.path.join(basedir, '*')))
+  classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]
+  all_file_count = 0
+  #class_folders = class_folders[3:4] # cars
+  class_folders = class_folders[4:5] # chairs
+  classes = classes[3:4]
+
+  train_file_list = []
+  validation_file_list = []
+  test_file_list = []
+  train_labels = []
+  validation_labels = []
+  test_labels = []
+  
+
+  all_file_count = 0
+  #all_files_list = []
+  for i in range(len(class_folders)):
+    file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
+    #all_files_list.append(file_list)
+    all_file_count += len(file_list)
+
+    rem_file_size = len(file_list)
+    train_split_size = np.min([rem_file_size, np.ceil(len(file_list)*train_split).astype(np.int)])
+    rem_file_size = np.max([0, len(file_list) - train_split_size])
+    validation_split_size = np.ceil(len(file_list)*validation_split).astype(np.int)
+    rem_file_size = np.max([0, len(file_list) - train_split_size - validation_split_size])
+    test_split_size = np.min([rem_file_size, np.ceil(len(file_list)*test_split).astype(np.int)])
+
+    cur_train_file_list = file_list[0:train_split_size]
+    cur_validation_file_list = file_list[train_split_size: (train_split_size + validation_split_size)]
+    cur_test_file_list = file_list[(train_split_size + validation_split_size):(train_split_size + validation_split_size + test_split_size)]
+
+    cur_train_labels = [i]*train_split_size # DANGER BEWARE do not change values in this list
+    cur_validation_labels = [i]*validation_split_size # DANGER BEWARE do not change values in this list
+    cur_test_labels = [i]*test_split_size # DANGER BEWARE do not change values in this list
+
+    #print(os.path.basename(os.path.normpath(os.path.dirname(file_list[0]))))
+
+    train_file_list.extend(cur_train_file_list)
+    validation_file_list.extend(cur_validation_file_list)
+    test_file_list.extend(cur_test_file_list)
+    train_labels.extend(cur_train_labels)
+    validation_labels.extend(cur_validation_labels)
+    test_labels.extend(cur_test_labels)
+
+  print('Files to read:', all_file_count)
+  #import pickle
+  #with open('class_folders.pkl', 'wb') as f:
+  #    pickle.dump(class_folders, f)
+  #    pickle.dump(all_files_list, f)
+
+  data_sets.train = DataSet(train_file_list, train_labels, one_hot)
+  data_sets.validation = DataSet(validation_file_list, validation_labels, one_hot)
+  data_sets.test = DataSet(test_file_list, test_labels, one_hot)
+  return data_sets
+  
+def read_data_sets_splits(basedir, one_hot=False):
   class DataSets(object):
     pass
   data_sets = DataSets()
