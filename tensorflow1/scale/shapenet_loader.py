@@ -141,9 +141,9 @@ def read_data_sets(basedir, one_hot=False):
   classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]
   #print(classes)
   all_file_count = 0
-  class_folders = class_folders[3:4]
-  classes = classes[3:4]
-
+  #class_folders = class_folders[3:4] # cars
+  #class_folders = class_folders[4:5] # chairs
+  #classes = classes[3:4]
   print(class_folders)
 
   train_file_list = []
@@ -176,10 +176,7 @@ def read_data_sets(basedir, one_hot=False):
       return filelist
 
   all_file_count = 0
-  #class_folders = class_folders[3:4] # cars
-  #class_folders = class_folders[4:5] # chairs
 
-  #print(class_folders)
   for i in range(len(class_folders)):
     file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
     all_file_count += len(file_list)
@@ -243,8 +240,8 @@ def read_data_sets(basedir, one_hot=False):
 
 
 def test():
-  #dataset = read_data_sets('~/scratch/Datasets/ShapeNetVox32')
-  dataset = read_data_sets('~/ShapeNet/shapenetvox/ShapeNetVox32')
+  dataset = read_data_sets('~/scratch/Datasets/ShapeNetVox32')
+  #dataset = read_data_sets('~/ShapeNet/shapenetvox/ShapeNetVox32')
   tmp1, tmp2 = dataset.train.next_batch(2)
   print(dataset.train.volumes.shape)
   print(tmp1.shape)

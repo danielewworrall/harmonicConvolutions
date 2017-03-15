@@ -29,7 +29,8 @@ flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on late
 flags.DEFINE_integer('save_step', 10, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
-flags.DEFINE_boolean('Dopey', True, 'Dopey execution environment')
+flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
+flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
 ##---------------------
 
 ################ UTIL #################
@@ -556,6 +557,10 @@ def main(_):
         opt['root'] = '/home/dworrall'
         dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
     elif FLAGS.Dopey:
+        print('Hello Daniyar!')
+        opt['root'] = '/home/daniyar'
+        dir_ = opt['root'] + '/deep_learning/harmonicConvolutions/tensorflow1/scale'
+    elif FLAGS.DaniyarSleepy:
         print('Hello Daniyar!')
         opt['root'] = '/home/daniyar'
         dir_ = opt['root'] + '/deep_learning/harmonicConvolutions/tensorflow1/scale'
