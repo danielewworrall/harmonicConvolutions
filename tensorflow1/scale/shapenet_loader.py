@@ -119,33 +119,30 @@ class DataSet(object):
       return volumes, labels
 
   
-def read_data_sets(path, one_hot=False):
+def read_data_sets(basedir, one_hot=False):
   class DataSets(object):
     pass
   data_sets = DataSets()
-  #print(path)
-  #print(os.path.expanduser(path))
-  #print(os.path.realpath(os.path.expanduser(path)))
-  path = os.path.realpath(os.path.expanduser(path))
-  print('Reading', path)
+  #print(basedir)
+  #print(os.path.expanduser(basedir))
+  #print(os.path.realpath(os.path.expanduser(basedir)))
+  basedir = os.path.realpath(os.path.expanduser(basedir))
+  print('Reading', basedir)
 
   # TODO
   #train_split = 0.8
   #validation_split = 0.1
   #test_split = 0.1
-  train_split = 0.8
-  validation_split = 0.1
-  test_split = 0.1
+  #train_split = 0.8
+  #validation_split = 0.1
+  #test_split = 0.1
 
-  class_folders = sorted(glob.glob(os.path.join(path, '*')))
-
-  #print(class_folders)
-
+  class_folders = sorted(glob.glob(os.path.join(basedir, '*')))
   classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]
   #print(classes)
   all_file_count = 0
   class_folders = class_folders[3:4]
-
+  classes = classes[3:4]
   print(class_folders)
 
   train_file_list = []
@@ -154,34 +151,40 @@ def read_data_sets(path, one_hot=False):
   train_labels = []
   validation_labels = []
   test_labels = []
+  
+  import pandas as pd
+  pdsplits = pd.read_csv('shapenet.csv', header=0, index_col=None, dtype=object)
 
-  def update_file_lists(train_file_list, validation_file_list, test_file_list,
-          train_labels, validation_labels, test_labels):
-      pass
+  def make_filelist(present_files, synsetId, split):
+      modelIds = pdsplits[(pdsplits['synsetId'] == synsetId) & (pdsplits['split']==split)]['modelId']
+      modelIds = modelIds.tolist()
+      def makepath(modelid):
+          path = os.path.join(basedir, synsetId)
+          path = os.path.join(path, modelid)
+          path = os.path.join(path, 'model.binvox')
+          return path
+          
+      filelist = [makepath(modelid) for modelid in modelIds]
+      toberemoved = []
+      for f in filelist:
+          if not f in present_files:
+              toberemoved.append(f)
+  
+      for f in toberemoved:
+          filelist.remove(f)
+      return filelist
 
-
-  all_files_list = []
   for i in range(len(class_folders)):
     file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
-    all_files_list.append(file_list)
     all_file_count += len(file_list)
 
-    rem_file_size = len(file_list)
-    train_split_size = np.min([rem_file_size, np.ceil(len(file_list)*train_split).astype(np.int)])
-    rem_file_size = np.max([0, len(file_list) - train_split_size])
-    validation_split_size = np.ceil(len(file_list)*validation_split).astype(np.int)
-    rem_file_size = np.max([0, len(file_list) - train_split_size - validation_split_size])
-    test_split_size = np.min([rem_file_size, np.ceil(len(file_list)*test_split).astype(np.int)])
+    cur_train_file_list = make_filelist(file_list, classes[i], 'train')
+    cur_validation_file_list = make_filelist(file_list, classes[i], 'val')
+    cur_test_file_list = make_filelist(file_list, classes[i], 'test')
 
-    cur_train_file_list = file_list[0:train_split_size]
-    cur_validation_file_list = file_list[train_split_size: (train_split_size + validation_split_size)]
-    cur_test_file_list = file_list[(train_split_size + validation_split_size):(train_split_size + validation_split_size + test_split_size)]
-
-    cur_train_labels = [i]*train_split_size # DANGER BEWARE do not change values in this list
-    cur_validation_labels = [i]*validation_split_size # DANGER BEWARE do not change values in this list
-    cur_test_labels = [i]*test_split_size # DANGER BEWARE do not change values in this list
-
-    #print(os.path.basename(os.path.normpath(os.path.dirname(file_list[0]))))
+    cur_train_labels = [i]*len(cur_train_file_list) # DANGER BEWARE do not change values in this list
+    cur_validation_labels = [i]*len(cur_validation_file_list) # DANGER BEWARE do not change values in this list
+    cur_test_labels = [i]*len(cur_test_file_list) # DANGER BEWARE do not change values in this list
 
     train_file_list.extend(cur_train_file_list)
     validation_file_list.extend(cur_validation_file_list)
@@ -190,12 +193,42 @@ def read_data_sets(path, one_hot=False):
     validation_labels.extend(cur_validation_labels)
     test_labels.extend(cur_test_labels)
 
-  print('Files to read:', all_file_count)
+  #all_files_list = []
+  #for i in range(len(class_folders)):
+  #  file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
+  #  #all_files_list.append(file_list)
+  #  all_file_count += len(file_list)
 
-  import pickle
-  with open('class_folders.pkl', 'wb') as f:
-      pickle.dump(class_folders, f)
-      pickle.dump(all_files_list, f)
+  #  rem_file_size = len(file_list)
+  #  train_split_size = np.min([rem_file_size, np.ceil(len(file_list)*train_split).astype(np.int)])
+  #  rem_file_size = np.max([0, len(file_list) - train_split_size])
+  #  validation_split_size = np.ceil(len(file_list)*validation_split).astype(np.int)
+  #  rem_file_size = np.max([0, len(file_list) - train_split_size - validation_split_size])
+  #  test_split_size = np.min([rem_file_size, np.ceil(len(file_list)*test_split).astype(np.int)])
+
+  #  cur_train_file_list = file_list[0:train_split_size]
+  #  cur_validation_file_list = file_list[train_split_size: (train_split_size + validation_split_size)]
+  #  cur_test_file_list = file_list[(train_split_size + validation_split_size):(train_split_size + validation_split_size + test_split_size)]
+
+  #  cur_train_labels = [i]*train_split_size # DANGER BEWARE do not change values in this list
+  #  cur_validation_labels = [i]*validation_split_size # DANGER BEWARE do not change values in this list
+  #  cur_test_labels = [i]*test_split_size # DANGER BEWARE do not change values in this list
+
+  #  #print(os.path.basename(os.path.normpath(os.path.dirname(file_list[0]))))
+
+  #  train_file_list.extend(cur_train_file_list)
+  #  validation_file_list.extend(cur_validation_file_list)
+  #  test_file_list.extend(cur_test_file_list)
+  #  train_labels.extend(cur_train_labels)
+  #  validation_labels.extend(cur_validation_labels)
+  #  test_labels.extend(cur_test_labels)
+
+  print('Files to read:', all_file_count)
+  #import pickle
+  #with open('class_folders.pkl', 'wb') as f:
+  #    pickle.dump(class_folders, f)
+  #    pickle.dump(all_files_list, f)
+
 
   data_sets.train = DataSet(train_file_list, train_labels, one_hot)
   data_sets.validation = DataSet(validation_file_list, validation_labels, one_hot)
