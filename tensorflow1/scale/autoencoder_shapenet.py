@@ -545,8 +545,9 @@ def main(_):
     #check and clear directories
     checkFolder(opt['summary_path'])
     checkFolder(opt['save_path'])
-    removeAllFilesInDirectory(opt['summary_path'], '.*')
-    removeAllFilesInDirectory(opt['save_path'], '.*')
+    checkFolder(dir_ + '/samples/' + opt['flag'])
+    #removeAllFilesInDirectory(opt['summary_path'], '.*')
+    #removeAllFilesInDirectory(opt['save_path'], '.*')
     
     # Load data
     data = load_data()

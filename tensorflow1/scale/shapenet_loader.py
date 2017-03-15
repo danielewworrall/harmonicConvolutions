@@ -148,7 +148,9 @@ def read_data_sets(path, one_hot=False):
   test_labels = []
 
   all_file_count = 0
-  class_folders = class_folders[3:4]
+  #class_folders = class_folders[3:4] # cars
+  class_folders = class_folders[4:5] # chairs
+
   print(class_folders)
   for i in range(len(class_folders)):
     file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
