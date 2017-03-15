@@ -143,6 +143,11 @@ def read_data_sets(path, one_hot=False):
 
   classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]
   #print(classes)
+  all_file_count = 0
+  class_folders = class_folders[3:4]
+
+  print(class_folders)
+
   train_file_list = []
   validation_file_list = []
   test_file_list = []
@@ -150,14 +155,15 @@ def read_data_sets(path, one_hot=False):
   validation_labels = []
   test_labels = []
 
-  all_file_count = 0
-  #all_files_list = []
-  class_folders = class_folders[3:4]
+  def update_file_lists(train_file_list, validation_file_list, test_file_list,
+          train_labels, validation_labels, test_labels):
+      pass
 
-  print(class_folders)
+
+  all_files_list = []
   for i in range(len(class_folders)):
     file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
-    #all_files_list.extend(file_list)
+    all_files_list.append(file_list)
     all_file_count += len(file_list)
 
     rem_file_size = len(file_list)
@@ -186,10 +192,10 @@ def read_data_sets(path, one_hot=False):
 
   print('Files to read:', all_file_count)
 
-  #import pickle
-  #with open('class_folders.pkl', 'wb') as f:
-  #    pickle.dump(class_folders, f)
-  #    pickle.dump(all_files_list, f)
+  import pickle
+  with open('class_folders.pkl', 'wb') as f:
+      pickle.dump(class_folders, f)
+      pickle.dump(all_files_list, f)
 
   data_sets.train = DataSet(train_file_list, train_labels, one_hot)
   data_sets.validation = DataSet(validation_file_list, validation_labels, one_hot)
@@ -200,7 +206,6 @@ def read_data_sets(path, one_hot=False):
 def test():
   #dataset = read_data_sets('~/scratch/Datasets/ShapeNetVox32')
   dataset = read_data_sets('~/ShapeNet/shapenetvox/ShapeNetVox32')
-  print(dataset)
   tmp1, tmp2 = dataset.train.next_batch(2)
   print(dataset.train.volumes.shape)
   print(tmp1.shape)
