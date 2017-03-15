@@ -294,12 +294,22 @@ def read_data_sets_splits(basedir, one_hot=False):
   #  validation_labels.extend(cur_validation_labels)
   #  test_labels.extend(cur_test_labels)
 
+  print(file_list[0])
   print('Files to read:', all_file_count)
   #import pickle
   #with open('class_folders.pkl', 'wb') as f:
   #    pickle.dump(class_folders, f)
   #    pickle.dump(all_files_list, f)
 
+  print('file list lengths')
+  print(len(train_file_list))
+  print(len(validation_file_list))
+  print(len(test_file_list))
+
+  print('file list elements')
+  print(train_file_list[0])
+  print(validation_file_list[0])
+  print(test_file_list[0])
 
   data_sets.train = DataSet(train_file_list, train_labels, one_hot)
   data_sets.validation = DataSet(validation_file_list, validation_labels, one_hot)
@@ -312,6 +322,8 @@ def test():
   #dataset = read_data_sets('~/ShapeNet/shapenetvox/ShapeNetVox32')
   tmp1, tmp2 = dataset.train.next_batch(2)
   print(dataset.train.volumes.shape)
+  print(dataset.validation.volumes.shape)
+  print(dataset.test.volumes.shape)
   print(tmp1.shape)
   print(np.amax(tmp1))
   print(np.amin(tmp1))
