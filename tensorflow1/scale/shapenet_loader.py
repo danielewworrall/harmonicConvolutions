@@ -23,6 +23,7 @@ def save_binvox(inp, prefix='model_'):
     with open(prefix + str(i) + '.binvox', 'wb') as f:
       cur_model.write(f)
 
+
 def read_binbox(path):
   with open(path, 'rb') as f:
     model = binvox_rw.read_as_3d_array(f)
@@ -30,6 +31,7 @@ def read_binbox(path):
     result = np.transpose(result, [2,1,0])
     return result
   return None
+
  
 def dense_to_one_hot(labels_dense, num_classes=10):
   """Convert class labels from scalars to one-hot vectors."""
@@ -128,17 +130,17 @@ def read_data_sets(path, one_hot=False):
   print('Reading', path)
 
   # TODO
-  train_split = 0.01#8
-  validation_split = 0.01
-  test_split = 0.01
+  #train_split = 0.8
+  #validation_split = 0.1
+  #test_split = 0.1
+  train_split = 0.8
+  validation_split = 0.1
+  test_split = 0.1
 
   class_folders = sorted(glob.glob(os.path.join(path, '*')))
-  import pickle
-  with open('class_folders.pkl', 'wb') as f:
-      pickle.dump(class_folders, f)
-  return
 
   #print(class_folders)
+
   classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]
   #print(classes)
   train_file_list = []
@@ -149,8 +151,13 @@ def read_data_sets(path, one_hot=False):
   test_labels = []
 
   all_file_count = 0
+  #all_files_list = []
+  class_folders = class_folders[3:4]
+
+  print(class_folders)
   for i in range(len(class_folders)):
     file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
+    #all_files_list.extend(file_list)
     all_file_count += len(file_list)
 
     rem_file_size = len(file_list)
@@ -179,6 +186,11 @@ def read_data_sets(path, one_hot=False):
 
   print('Files to read:', all_file_count)
 
+  #import pickle
+  #with open('class_folders.pkl', 'wb') as f:
+  #    pickle.dump(class_folders, f)
+  #    pickle.dump(all_files_list, f)
+
   data_sets.train = DataSet(train_file_list, train_labels, one_hot)
   data_sets.validation = DataSet(validation_file_list, validation_labels, one_hot)
   data_sets.test = DataSet(test_file_list, test_labels, one_hot)
@@ -186,10 +198,14 @@ def read_data_sets(path, one_hot=False):
 
 
 def test():
-  dataset = read_data_sets('~/scratch/Datasets/ShapeNetVox32')
+  #dataset = read_data_sets('~/scratch/Datasets/ShapeNetVox32')
+  dataset = read_data_sets('~/ShapeNet/shapenetvox/ShapeNetVox32')
+  print(dataset)
   tmp1, tmp2 = dataset.train.next_batch(2)
   print(dataset.train.volumes.shape)
   print(tmp1.shape)
+  print(np.amax(tmp1))
+  print(np.amin(tmp1))
   print(tmp2)
 
 def main(argv=None):  # pylint: disable=unused-argument

@@ -26,7 +26,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_boolean('ANALYSE', False, 'runs model analysis')
 flags.DEFINE_integer('eq_dim', -1, 'number of latent units to rotate')
 flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on latents')
-flags.DEFINE_integer('save_step', 50, 'Interval (epoch) for which to save')
+flags.DEFINE_integer('save_step', 10, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', True, 'Dopey execution environment')
@@ -39,13 +39,16 @@ def tf_im_summary(prefix, images):
         tf.summary.image(desc_str, images[j:(j+1), :, :, :], max_outputs=1)
 
 def tf_vol_summary(prefix, vols):
+    # need to keep 4-dim tensor for tf_im_summary
+    #vols = tf.reduce_sum(vols, axis=4)
+
     vols_d = tf.reduce_sum(vols, axis=1)
     vols_h = tf.reduce_sum(vols, axis=2)
     vols_w = tf.reduce_sum(vols, axis=3)
 
-    vols_d = vols_d / tf.reduce_sum(vols_d, axis=[1,2,3], keep_dims=True)
-    vols_h = vols_h / tf.reduce_sum(vols_h, axis=[1,2,3], keep_dims=True)
-    vols_w = vols_w / tf.reduce_sum(vols_w, axis=[1,2,3], keep_dims=True)
+    vols_d = vols_d / tf.reduce_max(vols_d, axis=[1,2,3], keep_dims=True)
+    vols_h = vols_h / tf.reduce_max(vols_h, axis=[1,2,3], keep_dims=True)
+    vols_w = vols_w / tf.reduce_max(vols_w, axis=[1,2,3], keep_dims=True)
 
     tf_im_summary(prefix + '_d', vols_d)
     tf_im_summary(prefix + '_h', vols_h)
@@ -58,14 +61,23 @@ def imsave(path, img):
     scipy.misc.toimage(img, cmin=0.0, cmax=1.0).save(path)
 
 def get_imgs_from_vol(tile_image, tile_h, tile_w):
+    tile_image = tile_image.astype(np.float32)
     tile_image = np.sum(tile_image, axis=4)
     tile_image_d = np.sum(tile_image, axis=1)
     tile_image_h = np.sum(tile_image, axis=2)
     tile_image_w = np.sum(tile_image, axis=3)
 
-    tile_image_d /= np.sum(tile_image_d)
-    tile_image_h /= np.sum(tile_image_h)
-    tile_image_w /= np.sum(tile_image_w)
+    d_sum = np.sum(np.sum(tile_image_d, axis=2, keepdims=True), axis=1, keepdims=True)
+    h_sum = np.sum(np.sum(tile_image_h, axis=2, keepdims=True), axis=1, keepdims=True)
+    w_sum = np.sum(np.sum(tile_image_w, axis=2, keepdims=True), axis=1, keepdims=True)
+
+    d_max = tile_image_d.max(axis=2, keepdims=True).max(axis=1, keepdims=True)
+    h_max = tile_image_h.max(axis=2, keepdims=True).max(axis=1, keepdims=True)
+    w_max = tile_image_w.max(axis=2, keepdims=True).max(axis=1, keepdims=True)
+    
+    tile_image_d = tile_image_d / d_max
+    tile_image_h = tile_image_h / h_max
+    tile_image_w = tile_image_w / w_max
 
     def tile_batch(batch, tile_w=1, tile_h=1):
         assert tile_w * tile_h == batch.shape[0], 'tile dimensions inconsistent'
@@ -75,9 +87,9 @@ def get_imgs_from_vol(tile_image, tile_h, tile_w):
         batch = batch[0,:,:]
         return batch
 
-    tile_image_d = 1.0 - tile_batch(tile_image_d, tile_h, tile_w)
-    tile_image_h = 1.0 - tile_batch(tile_image_h, tile_h, tile_w)
-    tile_image_w = 1.0 - tile_batch(tile_image_w, tile_h, tile_w)
+    tile_image_d = tile_batch(tile_image_d, tile_h, tile_w)
+    tile_image_h = tile_batch(tile_image_h, tile_h, tile_w)
+    tile_image_w = tile_batch(tile_image_w, tile_h, tile_w)
 
     return tile_image_d, tile_image_h, tile_image_w
 
@@ -134,29 +146,35 @@ def variable(name, shape=None, initializer=tf.contrib.layers.xavier_initializer_
 def encoder(x, num_latents, is_training, reuse=False):
     """Encoder with conv3d"""
     
-    def convlayer(i, inp, ksize, inpdim, outdim, stride, reuse):
+    def convlayer(i, inp, ksize, inpdim, outdim, stride, reuse, nonlin=tf.nn.elu, dobn=True, padding='SAME'):
         scopename = 'conv_layer' + str(i)
-        #print(scopename)
-        #print(' input:', inp)
+        print(scopename)
+        print(' input:', inp)
         strides = [1, stride, stride, stride, 1]
         with tf.variable_scope(scopename) as scope:
             if reuse:
                 scope.reuse_variables()
             kernel = variable(scopename + '_kernel', [ksize, ksize, ksize, inpdim, outdim])
             bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
-            linout = bias + tf.nn.conv3d(inp, kernel, strides=strides, padding='SAME')
-            bnout = bn5d(linout, is_training, reuse=reuse)
-            out = tf.nn.elu(bnout, name=scopename + 'elu')
-        #print(' out:', out)
+            linout = tf.nn.conv3d(inp, kernel, strides=strides, padding=padding)
+            linout = tf.nn.bias_add(linout, bias)
+            if dobn:
+                bnout = bn5d(linout, is_training, reuse=reuse)
+            else:
+                bnout = linout
+            out = nonlin(bnout, name=scopename + '_nonlin')
+        print(' out:', out)
         return out
 
-    l1 = convlayer(1, x, 3, 1, 32, 2, reuse) # 56
-    l2 = convlayer(2, l1, 3, 32, 64, 2, reuse) # 28
-    l3 = convlayer(3, l2, 3, 64, 64, 2, reuse) # 14
-    l4 = convlayer(4, l3, 3, 64, 128, 2, reuse) # 7
-    l5 = convlayer(5, l4, 3, 128, 128, 2, reuse) # 4
-    l6 = convlayer(6, l5, 3, 128, 256, 2, reuse) # 2
-    codes = convlayer(7, l6, 2, 256, num_latents, 2, reuse) # 1
+    # TODO increase ksize
+    l0 = convlayer(0, x,  3, 1,     32,  1, reuse)                    # 56 -> 56
+    l1 = convlayer(1, l0, 4, 32,    64,  2, reuse)                    # 56 -> 28
+    l2 = convlayer(2, l1, 4, 64,   128,  2, reuse)                    # 28 -> 14
+    l3 = convlayer(3, l2, 4, 128,  256,  2, reuse)                    # 14 -> 7
+    l4 = convlayer(4, l3, 4, 256,  512,  2, reuse)                     # 7  -> 4
+    l5 = convlayer(5, l4, 4, 512, 2048,  1, reuse, padding='VALID')    # 4  -> 1
+    #l6 = convlayer(6, l5, 3, 256, 512,  2, reuse)                     # 2  -> 1
+    codes = convlayer(6, l5, 1, 2048, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
     return codes
 
 
@@ -165,8 +183,8 @@ def decoder(codes, is_training, reuse=False):
 
     def upconvlayer(i, inp, ksize, inpdim, outdim, outshape, stride, reuse, nonlin=tf.nn.elu):
         scopename = 'upconv_layer' + str(i)
-        #print(scopename)
-        #print(' input:', inp)
+        print(scopename)
+        print(' input:', inp)
         output_shape = [inp.get_shape().as_list()[0], outshape, outshape, outshape, outdim]
         strides = [1, stride, stride, stride, 1]
         with tf.variable_scope(scopename) as scope:
@@ -177,16 +195,18 @@ def decoder(codes, is_training, reuse=False):
             linout = bias + tf.nn.conv3d_transpose(inp, kernel, output_shape, strides=strides, padding='SAME')
             bnout = bn5d(linout, is_training, reuse=reuse)
             out = nonlin(bnout, name=scopename + 'nonlin')
-        #print(' out:', out)
+        print(' out:', out)
         return out
 
-    l1 = upconvlayer(1, codes, 2, num_latents, 256, 2, 2, reuse)
-    l2 = upconvlayer(2, l1, 3, 256, 128, 4, 2, reuse)
-    l3 = upconvlayer(3, l2, 3, 128, 128, 7, 2, reuse)
-    l4 = upconvlayer(4, l3, 3, 128, 64, 14, 2, reuse)
-    l5 = upconvlayer(5, l4, 3, 64, 64, 28, 2, reuse)
-    l6 = upconvlayer(6, l5, 3, 64, 32, 56, 2, reuse)
-    recons = upconvlayer(7, l6, 3, 32, 1, 56, 1, reuse, nonlin=tf.nn.sigmoid)
+    # TODO increase ksize
+    #l0 = upconvlayer(0,     codes, 1, num_latents, 512, 1, 1, reuse)
+    l1 = upconvlayer(1,     codes, 1, num_latents, 2048, 1, 1, reuse) #  1 -> 2
+    l2 = upconvlayer(2,     l1,    4, 2048,        512,  4, 4, reuse) #  2 -> 4
+    l3 = upconvlayer(3,     l2,    4, 512,         256,  7, 2, reuse) #  4 -> 7
+    l4 = upconvlayer(4,     l3,    5, 256,         128, 14, 2, reuse) #  7 -> 14
+    l5 = upconvlayer(5,     l4,    5, 128,         64,  28, 2, reuse) # 14 -> 28
+    l6 = upconvlayer(6,     l5,    5, 64,          32,  56, 2, reuse) # 28 -> 56
+    recons = upconvlayer(7, l6,    3, 32,          1,   56, 1, reuse, nonlin=tf.nn.sigmoid)
     return recons
 
 
@@ -203,6 +223,8 @@ def spatial_transform(stl, x, transmat, paddings):
     transmat_full = tf.concat([transmat, shiftmat], axis=2)
     transmat_full = tf.reshape(transmat_full, [batch_size, -1])
     x_in = stl.transform(x_padded, transmat_full)
+    # thresholding
+    x_in = tf.floor(0.5 + x_in)
     return x_in
 
 def get_3drotmat(xyzrot):
@@ -235,9 +257,14 @@ def get_3dscalemat(xyzfactor):
     scalemat[:,2,2] = xyzfactor[:,2]
     return scalemat
 
-def get_2drotmat(theta):
+def get_2drotscalemat(theta, min_scale, max_scale):
     batch_size = theta.shape[0]
-    Rot = np.empty([batch_size, 2, 2])
+    Rot = np.zeros([batch_size, 2, 2])
+
+    if max_scale>min_scale + 1e-6:
+        theta = theta-min_scale
+        theta = theta/(max_scale-min_scale)
+    theta = np.pi*theta
     Rot[:,0,0] = np.cos(theta)
     Rot[:,0,1] = -np.sin(theta)
     Rot[:,1,0] = np.sin(theta)
@@ -247,28 +274,49 @@ def get_2drotmat(theta):
 def random_transmats(batch_size):
     """ Random rotations in 3D
     """
-    params_inp_rot = 2*np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-    params_inp_scale = 0.8 + 0.2*np.random.rand(batch_size, 3)
-    params_trg_rot = 2*np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-    params_trg_scale = 0.8 + 0.2*np.random.rand(batch_size, 3)
+    min_scale = 1.0
+    max_scale = 1.0
+
+    if False:
+        params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+        params_inp_rot[:,[0]] = 0.0
+        params_inp_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
+
+        params_trg_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+        params_trg_rot[:,[0]] = 0.0
+        params_trg_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
+    else:
+        params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+        params_inp_rot[:,1] = params_inp_rot[:,1]/2
+        params_inp_scale = min_scale + (max_scale-min_scale)*np.random.rand(batch_size, 3)
+
+        params_trg_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+        params_trg_rot[:,1] = params_trg_rot[:,1]/2
+        params_trg_scale = min_scale + (max_scale-min_scale)*np.random.rand(batch_size, 3)
 
     inp_3drotmat = get_3drotmat(params_inp_rot)
     inp_3dscalemat = get_3dscalemat(params_inp_scale)
+
     trg_3drotmat = get_3drotmat(params_trg_rot)
     trg_3dscalemat = get_3dscalemat(params_trg_scale)
 
-    stl_transmat_inp = np.matmul(inp_3drotmat, inp_3dscalemat)
-    stl_transmat_trg = np.matmul(trg_3drotmat, trg_3dscalemat)
-
+    # TODO scale and rot because inverse warp in stl
+    stl_transmat_inp = np.matmul(inp_3dscalemat, inp_3drotmat)
+    stl_transmat_trg = np.matmul(trg_3dscalemat, trg_3drotmat)
     
-    f_params_inp = np.zeros([batch_size, 9, 9])
-    cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
+    f_params_inp = np.zeros([batch_size, 3, 3])
+    # TODO was like this:
+    #cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
+    cur_rotmat = np.matmul(trg_3drotmat.transpose([0,2,1]), inp_3drotmat)
     f_params_inp = set_f_params_rot(f_params_inp, cur_rotmat)
-    for i in xrange(3):
-        inp_f_2dscalemat = get_2drotmat(params_inp_scale[:, i])
-        trg_f_2dscalemat = get_2drotmat(params_trg_scale[:, i])
-        cur_f_scalemat = np.matmul(trg_f_2dscalemat, inp_f_2dscalemat.transpose([0,2,1]))
-        f_params_inp = set_f_params_scale(f_params_inp, i, cur_f_scalemat)
+    #print(f_params_inp[0,:,:])
+
+    # TODO
+    #for i in xrange(3):
+    #    inp_f_2dscalemat = get_2drotscalemat(params_inp_scale[:, i], min_scale, max_scale)
+    #    trg_f_2dscalemat = get_2drotscalemat(params_trg_scale[:, i], min_scale, max_scale)
+    #    cur_f_scalemat = np.matmul(trg_f_2dscalemat, inp_f_2dscalemat.transpose([0,2,1]))
+    #    f_params_inp = set_f_params_scale(f_params_inp, i, cur_f_scalemat)
 
     return stl_transmat_inp.astype(np.float32), stl_transmat_trg.astype(np.float32), f_params_inp.astype(np.float32)
 
@@ -278,6 +326,14 @@ def set_f_params_rot(f_params, rotmat):
 
 def set_f_params_scale(f_params, i, rotmat):
     f_params[:,3+i*2:5+i*2,3+i*2:5+i*2] = rotmat
+    return f_params
+
+def mul_f_params_rot(f_params, rotmat):
+    f_params[:,0:3,0:3] = np.matmul(rotmat, f_params[:,0:3,0:3])
+    return f_params
+
+def mul_f_params_scale(f_params, i, rotmat):
+    f_params[:,3+i*2:5+i*2,3+i*2:5+i*2] = np.matmul(rotmat, f_params[:,3+i*2:5+i*2,3+i*2:5+i*2])
     return f_params
 
 def update_f_params(f_params, rot_or_scale, ax, theta):
@@ -291,7 +347,8 @@ def update_f_params(f_params, rot_or_scale, ax, theta):
         # do 2x2 scale rotation
         angles = np.zeros([1,1])
         angles[:,0] = theta
-        inp_f_2dscalemat = get_2drotmat(angles)
+        # TODO min_scale, max_scale
+        inp_f_2dscalemat = get_2drotscalemat(angles, 1.0, 1.0)
         f_params = set_f_params_scale(f_params, ax, inp_f_2dscalemat)
     return f_params
 
@@ -330,6 +387,7 @@ def bn5d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 
 ############################################
+
 def train(inputs, outputs, ops, opt, data):
     """Training loop"""
     # Unpack inputs, outputs and ops
@@ -354,7 +412,7 @@ def train(inputs, outputs, ops, opt, data):
     for epoch in xrange(opt['n_epochs']):
         # Learning rate
         exponent = sum([epoch > i for i in opt['lr_schedule']])
-        current_lr = opt['lr']*np.power(0.1, exponent)
+        current_lr = opt['lr']*np.power(0.2, exponent)
         
         # Train
         train_loss = 0.
@@ -380,6 +438,17 @@ def train(inputs, outputs, ops, opt, data):
 
             # Summary writers
             train_writer.add_summary(summary, gs)
+
+        if epoch % FLAGS.save_step == 0:
+            cur_recons = sess.run(recons, feed_dict=feed_dict)
+            tile_size = int(np.floor(np.sqrt(cur_recons.shape[0])))
+            cur_recons = cur_recons[0:tile_size*tile_size, :,:,:,:]
+            tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(cur_recons, tile_size, tile_size)
+            save_name = './samples/' + opt['flag'] + '/train_image_%04d' % epoch
+            imsave(save_name + '_d.png', tile_image_d) 
+            imsave(save_name + '_h.png', tile_image_h) 
+            imsave(save_name + '_w.png', tile_image_w) 
+
         train_loss /= num_steps
         print('[{:03d}]: {:03f}'.format(epoch, train_loss))
 
@@ -389,23 +458,25 @@ def train(inputs, outputs, ops, opt, data):
             print('Saved model to ' + path)
         
         # Validation
-        if epoch % 10 == 0:
-            recons = []
+        if epoch % 2 == 0:
+            val_recons = []
             max_angles = 20
             #pick a random initial transformation
             cur_stl_params_in, _, cur_f_params = random_transmats(1)
             cur_x, _ = data.validation.next_batch(1)
-            fparams = np.linspace(0., np.pi, num=max_angles)
+            fangles = np.linspace(0., np.pi, num=max_angles)
+            fscales = np.linspace(0.8, 1.0, num=max_angles)
 
+            rot_ax = 1#np.random.randint(0, 3)
             for j in xrange(max_angles):
-                ax = np.random.randint(0, 3)
-                cur_f_params_j = update_f_params(cur_f_params, 0, ax, fparams[j])
+                cur_f_params_j = update_f_params(cur_f_params, 0, rot_ax, fangles[j])
                 do_scale_ax = np.random.rand(3)>0.5
                 for i in xrange(max_angles):
                     cur_f_params_ji = cur_f_params_j
-                    for ax in xrange(3):
-                        if do_scale_ax[ax]:
-                            cur_f_params_ji = update_f_params(cur_f_params_ji, 1, ax, fparams[i])
+                    # TODO
+                    #for scale_ax in xrange(3):
+                    #    if do_scale_ax[scale_ax]:
+                    #        cur_f_params_ji = update_f_params(cur_f_params_ji, 1, scale_ax, fscales[i])
 
                     feed_dict = {
                                 test_x : cur_x,
@@ -415,9 +486,9 @@ def train(inputs, outputs, ops, opt, data):
                             }
 
                     y = sess.run(test_recon, feed_dict=feed_dict)
-                    recons.append(y[0,:,:,:,:].copy())
+                    val_recons.append(y[0,:,:,:,:].copy())
             
-            samples_ = np.stack(recons)
+            samples_ = np.stack(val_recons)
 
             tile_image = np.reshape(samples_, [max_angles*max_angles, opt['outsize'][0], opt['outsize'][1], opt['outsize'][2], opt['color_chn']])
 
@@ -451,10 +522,9 @@ def main(_):
         opt['root'] = '/home/sgarbin'
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
-    opt['mb_size'] = 16
-    opt['n_channels'] = 10
-    opt['n_epochs'] = 2000
-    opt['lr_schedule'] = [50, 75]
+    opt['mb_size'] = 32
+    opt['n_epochs'] = 200
+    opt['lr_schedule'] = [30, 60, 100, 150, 190]
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
@@ -463,8 +533,9 @@ def main(_):
     stl = AffineVolumeTransformer(opt['outsize'])
     opt['color_chn'] = 1
     opt['stl_size'] = 3 # no translation
-    opt['f_params_dim'] = 3 + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
-    opt['num_latents'] = opt['f_params_dim']*64
+    # TODO
+    opt['f_params_dim'] = 3# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
+    opt['num_latents'] = opt['f_params_dim']*128
 
 
     opt['flag'] = 'shapenet'
@@ -506,8 +577,8 @@ def main(_):
     test_recon, __ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
     
     # LOSS
-    #loss = bernoulli_xentropy(x_trg, recons)
-    loss = tf.reduce_mean(tf.square(x_trg-recons))
+    loss = bernoulli_xentropy(x_trg, recons)
+    #loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_trg-recons), axis=[1,2,3,4]))
     
     # Summaries
     tf_vol_summary('recons', recons) 
