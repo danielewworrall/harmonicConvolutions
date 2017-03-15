@@ -175,6 +175,11 @@ def read_data_sets(basedir, one_hot=False):
           filelist.remove(f)
       return filelist
 
+  all_file_count = 0
+  #class_folders = class_folders[3:4] # cars
+  #class_folders = class_folders[4:5] # chairs
+
+  #print(class_folders)
   for i in range(len(class_folders)):
     file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
     all_file_count += len(file_list)
