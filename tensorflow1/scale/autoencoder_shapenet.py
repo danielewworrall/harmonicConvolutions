@@ -167,22 +167,53 @@ def encoder(x, num_latents, is_training, reuse=False):
         return out
 
     # TODO increase ksize
-    l0 = convlayer(0, x,  3, 1,     32,  1, reuse)                    # 56 -> 56
-    l1 = convlayer(1, l0, 4, 32,    64,  2, reuse)                    # 56 -> 28
-    l2 = convlayer(2, l1, 4, 64,   128,  2, reuse)                    # 28 -> 14
-    l3 = convlayer(3, l2, 4, 128,  256,  2, reuse)                    # 14 -> 7
-    l4 = convlayer(4, l3, 4, 256,  512,  2, reuse)                     # 7  -> 4
-    l5 = convlayer(5, l4, 4, 512, 2048,  1, reuse, padding='VALID')    # 4  -> 1
-    #l6 = convlayer(6, l5, 3, 256, 512,  2, reuse)                     # 2  -> 1
-    codes = convlayer(6, l5, 1, 2048, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
+    l0 = convlayer(0, x,  3, 1,     16,  1, reuse)                     
+    l1 = convlayer(1, l0, 3, 16,    32,  2, reuse)                     
+    l2 = convlayer(2, l1, 3, 32,    64,  2, reuse)                     
+    l3 = convlayer(3, l2, 3, 64,   128,  2, reuse)                     
+    l4 = convlayer(4, l3, 3, 128,  256,  2, reuse)                     
+    l5 = convlayer(5, l4, 4, 256,  2**11, 1, reuse, padding='VALID')   
+    codes = convlayer(6, l5, 1, 2**11, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
     return codes
+
+
+def vol_resize_nearest(x, outshapes, align_corners=None):
+    outdepth, outheight, outwidth = outshapes
+    batch_size, depth, height, width, inpdim = x.get_shape().as_list()
+    xd_hw = tf.reshape(x, [-1, height, width, inpdim])
+    xd_hhww = tf.image.resize_nearest_neighbor(xd_hw, [outheight, outwidth], align_corners=align_corners)
+    x_dhhww = tf.reshape(xd_hhww, [batch_size, depth, outheight, outwidth, inpdim])
+    x_hhwwd = tf.transpose(x_dhhww, [0,2,3,1,4])
+    xhh_wwd = tf.reshape(x_hhwwd, [-1, outwidth, depth, inpdim])
+    xhh_wwdd = tf.image.resize_nearest_neighbor(xhh_wwd, [outwidth, outdepth], align_corners=align_corners)
+    x_hhwwdd = tf.reshape(xhh_wwdd, [batch_size, outheight, outwidth, outdepth, inpdim])
+    x_ddhhww = tf.transpose(x_hhwwdd, [0,3,1,2,4])
+    return x_ddhhww
 
 
 def decoder(codes, is_training, reuse=False):
     num_latents = codes.get_shape()[-1]
 
-    def upconvlayer(i, inp, ksize, inpdim, outdim, outshape, stride, reuse, nonlin=tf.nn.elu):
+    def upconvlayer(i, inp, ksize, inpdim, outdim, outshape, reuse, nonlin=tf.nn.elu, padding='SAME'):
         scopename = 'upconv_layer' + str(i)
+        print(scopename)
+        print(' input:', inp)
+        output_shape = [inp.get_shape().as_list()[0], outshape, outshape, outshape, outdim]
+        with tf.variable_scope(scopename) as scope:
+            if reuse:
+                scope.reuse_variables()
+            kernel = variable(scopename + '_kernel', [ksize, ksize, ksize, inpdim, outdim])
+            bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
+            inp_resized = vol_resize_nearest(inp, [outshape, outshape, outshape])
+            linout = tf.nn.conv3d(inp_resized, kernel, strides=[1, 1, 1, 1, 1], padding=padding)
+            linout = tf.nn.bias_add(linout, bias)
+            bnout = bn5d(linout, is_training, reuse=reuse)
+            out = nonlin(bnout, name=scopename + 'nonlin')
+        print(' out:', out)
+        return out
+
+    def upconvlayer_tr(i, inp, ksize, inpdim, outdim, outshape, stride, reuse, nonlin=tf.nn.elu, padding='SAME'):
+        scopename = 'upconv_layer_tr_' + str(i)
         print(scopename)
         print(' input:', inp)
         output_shape = [inp.get_shape().as_list()[0], outshape, outshape, outshape, outdim]
@@ -192,7 +223,8 @@ def decoder(codes, is_training, reuse=False):
                 scope.reuse_variables()
             kernel = variable(scopename + '_kernel', [ksize, ksize, ksize, outdim, inpdim])
             bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
-            linout = bias + tf.nn.conv3d_transpose(inp, kernel, output_shape, strides=strides, padding='SAME')
+            linout = tf.nn.conv3d_transpose(inp, kernel, output_shape, strides=strides, padding=padding)
+            linout = tf.nn.bias_add(linout, bias)
             bnout = bn5d(linout, is_training, reuse=reuse)
             out = nonlin(bnout, name=scopename + 'nonlin')
         print(' out:', out)
@@ -200,13 +232,22 @@ def decoder(codes, is_training, reuse=False):
 
     # TODO increase ksize
     #l0 = upconvlayer(0,     codes, 1, num_latents, 512, 1, 1, reuse)
-    l1 = upconvlayer(1,     codes, 1, num_latents, 2048, 1, 1, reuse) #  1 -> 2
-    l2 = upconvlayer(2,     l1,    4, 2048,        512,  4, 4, reuse) #  2 -> 4
-    l3 = upconvlayer(3,     l2,    4, 512,         256,  7, 2, reuse) #  4 -> 7
-    l4 = upconvlayer(4,     l3,    5, 256,         128, 14, 2, reuse) #  7 -> 14
-    l5 = upconvlayer(5,     l4,    5, 128,         64,  28, 2, reuse) # 14 -> 28
-    l6 = upconvlayer(6,     l5,    5, 64,          32,  56, 2, reuse) # 28 -> 56
-    recons = upconvlayer(7, l6,    3, 32,          1,   56, 1, reuse, nonlin=tf.nn.sigmoid)
+    #l1 = upconvlayer(1,     codes, 1, num_latents, 2048, 1, 1, reuse) #  1 -> 2
+    #l2 = upconvlayer(2,     l1,    4, 2048,        512,  4, 4, reuse) #  2 -> 4
+    #l3 = upconvlayer(3,     l2,    4, 512,         256,  7, 2, reuse) #  4 -> 7
+    #l4 = upconvlayer(4,     l3,    5, 256,         128, 14, 2, reuse) #  7 -> 14
+    #l5 = upconvlayer(5,     l4,    5, 128,         64,  28, 2, reuse) # 14 -> 28
+    #l6 = upconvlayer(6,     l5,    5, 64,          32,  56, 2, reuse) # 28 -> 56
+    #recons = upconvlayer(7, l6,    3, 32,          1,   56, 1, reuse, nonlin=tf.nn.sigmoid)
+
+    l1 = upconvlayer(1,     codes, 1, num_latents, 2**11, 1, reuse) 
+    l2 = upconvlayer_tr(2,  l1,    4, 2**11,       512,   4, 4, reuse)
+    l3 = upconvlayer(3,     l2,    3, 512,         256,   8, reuse)
+    l4 = upconvlayer(4,     l3,    3, 256,         128,  16, reuse)
+    l5 = upconvlayer(5,     l4,    3, 128,         64,   32, reuse)
+    l6 = upconvlayer(6,     l5,    3, 64,          32,   32, reuse)
+    l7 = upconvlayer(7,     l6,    3, 32,          16,   64, reuse)
+    recons = upconvlayer(8, l7,    5, 16,          1,    64, reuse, nonlin=tf.nn.sigmoid)
     return recons
 
 
@@ -528,7 +569,7 @@ def main(_):
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
-    pad_size = int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
+    pad_size = 16#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
     opt['outsize'] = [i + 2*pad_size for i in opt['vol_size']]
     stl = AffineVolumeTransformer(opt['outsize'])
     opt['color_chn'] = 1
