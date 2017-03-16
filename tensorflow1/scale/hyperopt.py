@@ -15,11 +15,15 @@ def run(n_trials):
 	opt = {}
 	opt['root'] = '/home/dworrall'
 	dir_ = opt['root'] + '/Code/harmonicConvolutions/tensorflow1/scale'
-	opt['n_epochs'] = 1500
+	opt['n_epochs'] = 1000
 	opt['im_size'] = (28,28)
 	opt['train_size'] = 10000
 	opt['loss_type_image'] = 'l2'
 	opt['save_step'] = 10
+	opt['mb_size'] = 128
+	opt['lr_schedule'] = [550,750]
+	# I think these are good
+	opt['n_layers'] = 8
 	
 	best_test_acc = 0.
 	best_opt = None
@@ -27,19 +31,22 @@ def run(n_trials):
 	options = []
 	for i in xrange(n_trials):
 		NaN = True
-		while NaN:
-			opt['mb_size'] = int(np.random.randint(100)+150)
-			opt['lr_schedule'] = [600+int(np.random.randint(100)), 1000+int(np.random.randint(250))]
-			opt['lr'] = np.power(10.,4*np.random.rand()-6)
-			opt['equivariant_weight'] = 0.65*(np.random.rand()-0.5) + 0.5
-			opt['n_mid'] = int(10 + 2*np.random.randint(5))
-			opt['n_layers'] = int(2 + np.random.randint(3))
-			opt['n_mid_class'] = opt['n_mid']
-			opt['n_layers_class'] = int(4 + np.random.randint(2))
+		while NaN:			
 			
-			opt['summary_path'] = dir_ + 'hyperopt/narrow/summaries/conv_rot_mnist_{:.0e}_{:s}'.format(opt['equivariant_weight'], 'hp')
-			opt['save_path'] = dir_ + 'hyperopt/narrow/checkpoints/conv_rot_mnist_{:.0e}_{:s}/model.ckpt'.format(opt['equivariant_weight'], 'hp')
+			opt['lr'] = np.power(10.,-3. + 0.2*np.random.rand())
+			opt['equivariant_weight'] = 0.6 + 0.25*(2.*(np.random.rand()-0.5))
+			opt['n_mid'] = int(10 + 2*np.random.randint(3))
+			opt['n_mid_class'] = opt['n_mid']
+			opt['n_layers_deconv'] = int(3 + 2*np.random.randint(2))
+			opt['n_layers_class'] = int(2 + 2*np.random.randint(2))
+			
+			opt['summary_path'] = dir_ + 'hyperopt/invariant/summaries/conv_rot_mnist_{:.0e}_{:s}'.format(opt['equivariant_weight'], 'hp')
+			opt['save_path'] = dir_ + 'hyperopt/invariant/checkpoints/conv_rot_mnist_{:.0e}_{:s}/model.ckpt'.format(opt['equivariant_weight'], 'hp')
 			options.append(opt)
+			
+			# Print options at beginning
+			for key, val in opt.iteritems():
+				print key, val
 			
 			# Run
 			tf.reset_default_graph()
@@ -48,8 +55,8 @@ def run(n_trials):
 		
 		# Save
 		test_accs.append(test_acc)
-		np.save('./hyperopt/narrow/test_accs1.npy', test_acc)
-		with open('./hyperopt/narrow/test_options1.pkl','w') as fp:
+		np.save('./hyperopt/invariant/test_accs1.npy', test_acc)
+		with open('./hyperopt/invariant/test_options1.pkl','w') as fp:
 			pkl.dump(options, fp, protocol=pkl.HIGHEST_PROTOCOL)
 		
 		# Best
@@ -66,4 +73,4 @@ def run(n_trials):
 
 
 if __name__ == '__main__':
-	run(25)
+	run(35)

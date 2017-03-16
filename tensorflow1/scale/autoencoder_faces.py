@@ -489,14 +489,14 @@ def main(_):
 		dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
 	opt['mb_size'] = 32
 	opt['n_iterations'] = 10000000
-	opt['lr_schedule'] = [15000, 30000]
+	opt['lr_schedule'] = [30000, 50000]
 	opt['lr'] = 1e-4
 	opt['im_size'] = (150,150)
 	opt['train_size'] = 240000
 	opt['loss_type'] = 'SSIM_L1'
 	opt['loss_weights'] = (0.85,0.15)
 	opt['nonlinearity'] = leaky_relu
-	opt['color'] = 3
+	opt['color'] = 1
 	opt['method'] = 'kulkarni'
 	if opt['method'] == 'kulkarni':
 		opt['color'] = 1
@@ -510,8 +510,8 @@ def main(_):
 	#check and clear directories
 	checkFolder(opt['summary_path'])
 	checkFolder(opt['save_path'])
-	removeAllFilesInDirectory(opt['summary_path'], '.*')
-	removeAllFilesInDirectory(opt['save_path'], '.*')
+	#removeAllFilesInDirectory(opt['summary_path'], '.*')
+	#removeAllFilesInDirectory(opt['save_path'], '.*')
 	
 	# Load data
 	train_files = face_loader.get_files(opt['data_folder'])

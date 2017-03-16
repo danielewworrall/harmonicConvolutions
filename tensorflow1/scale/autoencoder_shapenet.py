@@ -30,8 +30,8 @@ flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on late
 flags.DEFINE_integer('save_step', 10, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
-flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
-flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
+flags.DEFINE_boolean('Dopey', True, 'Dopey execution environment')
+flags.DEFINE_boolean('DaniyarSleepy', False, 'Dopey execution environment')
 ##---------------------
 
 ################ UTIL #################
@@ -267,27 +267,27 @@ def decoder(codes, is_training, reuse=False):
     l5 = upconvlayer(5,     l4,    3, 128,         64,   32, reuse)
     l6 = upconvlayer(6,     l5,    3, 64,          32,   32, reuse)
     l7 = upconvlayer(7,     l6,    3, 32,          16,   64, reuse)
-    recons_logits = upconvlayer(8, l7,    5, 16,          1,    64, reuse, nonlin=tf.identity)
+    recons_logits = upconvlayer(8, l7,    5, 16,          1,    64, reuse, nonlin=tf.identity, dobn=False)
     recons = tf.sigmoid(recons_logits)
     return recons, recons_logits
 
 
-def bernoulli_xentropy(target, output):
-    """Cross-entropy for Bernoulli variables"""
-    target = 3*target-1
-    output = 0.9*output + 0.1
-    wx_entropy = -(90.0*target * tf.log(output) + 10.0*(1.0 - target) * tf.log(1.0 - output))/100.0
-    #wx_entropy = -(target * tf.log(output) + (1.0 - target) * tf.log(1.0 - output))
-    return tf.reduce_mean(tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
-    #diff = tf.square(target-output)
-    #return tf.reduce_mean(tf.reduce_sum(diff, axis=(1,2,3,4)))
+#def bernoulli_xentropy(target, output):
+#    """Cross-entropy for Bernoulli variables"""
+#    target = 3*target-1
+#    output = 0.9*output + 0.1
+#    wx_entropy = -(90.0*target * tf.log(output) + 10.0*(1.0 - target) * tf.log(1.0 - output))/100.0
+#    #wx_entropy = -(target * tf.log(output) + (1.0 - target) * tf.log(1.0 - output))
+#    return tf.reduce_mean(tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
+#    #diff = tf.square(target-output)
+#    #return tf.reduce_mean(tf.reduce_sum(diff, axis=(1,2,3,4)))
 
-#def bernoulli_xentropy(target, logits):
-#    batch_size = target.get_shape().as_list()[0]
-#    target = tf.reshape(target, [batch_size, -1])
-#    logits = tf.reshape(logits, [batch_size, -1])
-#    x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=target, logits=logits)
-#    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=1))
+def bernoulli_xentropy(target, logits):
+    batch_size = target.get_shape().as_list()[0]
+    target = tf.reshape(target, [batch_size, -1])
+    logits = tf.reshape(logits, [batch_size, -1])
+    x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=target, logits=logits)
+    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=1))
 
 
 def spatial_transform(stl, x, transmat, paddings):
@@ -656,8 +656,8 @@ def main(_):
     test_recon, __, _ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
     
     # LOSS
-    loss = bernoulli_xentropy(x_trg, recons)
-    #loss = bernoulli_xentropy(x_trg, recons_logits)
+    #loss = bernoulli_xentropy(x_trg, recons)
+    loss = bernoulli_xentropy(x_trg, recons_logits)
     
     # Summaries
     tf_vol_summary('recons', recons) 
