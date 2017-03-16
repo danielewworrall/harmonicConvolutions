@@ -12,6 +12,7 @@ import scipy.misc
 ### local files ######
 
 import shapenet_loader
+import modelnet_loader
 import equivariant_loss as el
 from spatial_transformer_3d import AffineVolumeTransformer
 
@@ -97,10 +98,11 @@ def get_imgs_from_vol(tile_image, tile_h, tile_w):
 ################ DATA #################
 
 def load_data():
-    # TODO
     #shapenet = shapenet_loader.read_data_sets_splits('~/scratch/Datasets/ShapeNetVox32', one_hot=True)
-    shapenet = shapenet_loader.read_data_sets('~/scratch/Datasets/ShapeNetVox32', one_hot=True)
-    return shapenet
+    #shapenet = shapenet_loader.read_data_sets('~/scratch/Datasets/ShapeNetVox32', one_hot=True)
+    #return shapenet
+    modelnet = modelnet_loader.read_data_sets('~/scratch/Datasets/ModelNet', one_hot=True)
+    return modelnet
 
 
 def checkFolder(dir):
@@ -269,11 +271,12 @@ def decoder(codes, is_training, reuse=False):
     return recons
 
 
-def bernoulli_xentropy(x, test_recon):
+def bernoulli_xentropy(target, output):
     """Cross-entropy for Bernoulli variables"""
-    x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=test_recon)
-    print(x_entropy)
-    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=(1,2,3,4)))
+    target = 3*target-1
+    output = 0.9*output + 0.1
+    wx_entropy = -(97.0*target * tf.log(output) + 3.0*(1.0 - target) * tf.log(1.0 - output))/100.0
+    return tf.reduce_mean(tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
 
 
 def spatial_transform(stl, x, transmat, paddings):
@@ -587,8 +590,8 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 16
-    opt['n_epochs'] = 100
-    opt['lr_schedule'] = [2, 15, 30, 70, 95, 100]
+    opt['n_epochs'] = 50
+    opt['lr_schedule'] = [10, 20]
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
@@ -643,7 +646,6 @@ def main(_):
     
     # LOSS
     loss = bernoulli_xentropy(x_trg, recons)
-    #loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_trg-recons), axis=[1,2,3,4]))
     
     # Summaries
     tf_vol_summary('recons', recons) 
