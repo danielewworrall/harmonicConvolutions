@@ -30,8 +30,8 @@ flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on late
 flags.DEFINE_integer('save_step', 10, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
-flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
-flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
+flags.DEFINE_boolean('Dopey', True, 'Dopey execution environment')
+flags.DEFINE_boolean('DaniyarSleepy', False, 'Dopey execution environment')
 ##---------------------
 
 ################ UTIL #################
@@ -591,7 +591,7 @@ def main(_):
     
     opt['mb_size'] = 16
     opt['n_epochs'] = 50
-    opt['lr_schedule'] = [10, 20]
+    opt['lr_schedule'] = [1, 30, 40]
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
