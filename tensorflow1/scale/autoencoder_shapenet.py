@@ -174,13 +174,15 @@ def encoder(x, num_latents, is_training, reuse=False):
         print(' out:', out)
         return out
 
-    l0 = convlayer(0, x,  3, 1,     16,  1, reuse)
-    l1 = convlayer(1, l0, 3, 16,    32,  2, reuse)
-    l2 = convlayer(2, l1, 3, 32,    64,  2, reuse)
-    l3 = convlayer(3, l2, 3, 64,   128,  2, reuse)
-    l4 = convlayer(4, l3, 3, 128,  256,  2, reuse)
-    l5 = convlayer(5, l4, 4, 256,  2**10, 1, reuse, padding='VALID')   
-    codes = convlayer(6, l5, 1, 2**10, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
+    l0 = convlayer(0, x,  3, 1,      8,  1, reuse)                   #  48-46
+    l1 = convlayer(1, l0, 3, 8,     16,  2, reuse)                   #  46-24
+    l11= convlayer(2, l1, 3, 16,    16,  1, reuse, padding='VALID')  #  24-22
+    l2 = convlayer(3, l11,3, 16,    32,  2, reuse)                   #  22-11
+    l22= convlayer(4, l2, 3, 32,    32,  1, reuse, padding='VALID')  #  11-9
+    l3 = convlayer(5, l22,3, 32,    64,  2, reuse)                   #  9-5
+    l33= convlayer(6, l3, 3, 64,    128,  1, reuse, padding='VALID')  #  5-3
+    l4 = convlayer(7, l33,3, 128,   512,  1, reuse, padding='VALID')  #  3-1 
+    codes = convlayer(8, l4, 1, 512, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
     return codes
 
 
@@ -260,22 +262,25 @@ def decoder(codes, is_training, reuse=False):
     #l6 = upconvlayer(6,     l5,    5, 64,          32,  56, 2, reuse) # 28 -> 56
     #recons = upconvlayer(7, l6,    3, 32,          1,   56, 1, reuse, nonlin=tf.nn.sigmoid)
 
-    l1 = upconvlayer(1,     codes, 1, num_latents, 2**10, 1, reuse) 
-    l2 = upconvlayer_tr(2,  l1,    4, 2**10,       512,   4, 4, reuse)
-    l3 = upconvlayer(3,     l2,    3, 512,         256,   8, reuse)
-    l4 = upconvlayer(4,     l3,    3, 256,         128,  16, reuse)
-    l5 = upconvlayer(5,     l4,    3, 128,         64,   32, reuse)
-    l6 = upconvlayer(6,     l5,    3, 64,          32,   32, reuse)
-    l7 = upconvlayer(7,     l6,    3, 32,          16,   64, reuse)
-    recons_logits = upconvlayer(8, l7,    5, 16,          1,    64, reuse, nonlin=tf.identity, dobn=False)
+    l1 = upconvlayer(1,             codes, 1, num_latents, 512,   1, reuse) 
+    l2 = upconvlayer_tr(2,          l1,    3, 512,         256,   3, 3, reuse)
+    l3 = upconvlayer(3,             l2,    3, 256,        128,    3, reuse)
+    l4 = upconvlayer(4,             l3,    3, 128,        128,    6, reuse)
+    l5 = upconvlayer(5,             l4,    3, 128,         64,    6, reuse)
+    l6 = upconvlayer(6,             l5,    3, 64,          64,   12, reuse)
+    l7 = upconvlayer(7,             l6,    3, 64,          32,   12, reuse)
+    l8 = upconvlayer(8,             l7,    3, 32,          32,   24, reuse)
+    l9 = upconvlayer(9,             l8,    3, 32,          16,   24, reuse)
+    l9 = upconvlayer(10,            l9,    3, 16,          16,   48, reuse)
+    recons_logits = upconvlayer(11, l9,    3, 16,          1,    48, reuse, nonlin=tf.identity, dobn=False)
     recons = tf.sigmoid(recons_logits)
     return recons, recons_logits
 
 
 def bernoulli_xentropy(target, output):
     """Cross-entropy for Bernoulli variables"""
-    #target = 3*target-1
-    output = 0.999*output + 0.001
+    target = 3*target-1
+    output = 0.8999*output + 0.1000
     wx_entropy = -(98.0 * target * tf.log(output) + 2.0*(1.0 - target) * tf.log(1.0 - output))/100.0
     #wx_entropy = -(target * tf.log(output) + (1.0 - target) * tf.log(1.0 - output))
     return tf.reduce_mean(tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
@@ -510,6 +515,10 @@ def train(inputs, outputs, ops, opt, data):
             gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
             train_loss += l
 
+            print('[{:03f}]: {:03f}'.format(float(step_i)/num_steps, l))
+
+            assert not np.isnan(l), 'Model diverged with loss = NaN'
+
             # Summary writers
             train_writer.add_summary(summary, gs)
 
@@ -602,18 +611,18 @@ def main(_):
     
     opt['mb_size'] = 16
     opt['n_epochs'] = 50
-    opt['lr_schedule'] = [15, 45]
-    opt['lr'] = 1e-4
+    opt['lr_schedule'] = [30]
+    opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
-    pad_size = 16#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
+    pad_size = 8#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
     opt['outsize'] = [i + 2*pad_size for i in opt['vol_size']]
     stl = AffineVolumeTransformer(opt['outsize'])
     opt['color_chn'] = 1
     opt['stl_size'] = 3 # no translation
     # TODO
     opt['f_params_dim'] = 3# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
-    opt['num_latents'] = opt['f_params_dim']*256
+    opt['num_latents'] = opt['f_params_dim']*100
 
 
     opt['flag'] = 'shapenet'
