@@ -1,4 +1,4 @@
-'''Conditional GAN model'''
+'''Autoencoder'''
 
 import os
 import sys
@@ -10,13 +10,15 @@ sys.path.append('../')
 #import input_data
 import numpy as np
 import skimage.io as skio
+import skimage.transform as sktr
 import tensorflow as tf
 
 import equivariant_loss as el
-import face_loader
+#import face_loader
 import models
 
 from spatial_transformer import transformer
+from matplotlib import pyplot as plt
 
 
 ################ DATA #################
@@ -57,26 +59,6 @@ def random_sampler(n_data, opt, random=True):
 	for i in xrange(int(float(n_data)/opt['mb_size'])):
 		mb_list.append(indices[opt['mb_size']*i:opt['mb_size']*(i+1)])
 	return mb_list
-
-
-def checkFolder(dir):
-	"""Checks if a folder exists and creates it if not.
-	dir: directory
-	Returns nothing
-	"""
-	if not os.path.exists(dir):
-		os.makedirs(dir)
-
-
-def removeAllFilesInDirectory(directory, extension):
-	cwd = os.getcwd()
-	os.chdir(directory)
-	filelist = glob.glob('*' + extension)
-	for f in filelist:
-		os.remove(f)
-	os.chdir(cwd)
-
-
 ############## MODEL ####################
 def leaky_relu(x, leak=0.1):
 	"""The leaky ReLU nonlinearity"""
@@ -139,10 +121,10 @@ def autoencoder(x, f_params, is_training, opt, reuse=False):
 			z = encoder(x, is_training, opt, reuse=reuse)
 		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
 			matrix_shape = [xsh[0], z.get_shape()[1]]
-			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
+			z_ = el.feature_transform_matrix_n(z, matrix_shape, f_params)
 		with tf.variable_scope("decoder", reuse=reuse) as scope:
-			r = decoder(z, is_training, opt, reuse=reuse)
-	return r
+			r = decoder(z_, is_training, opt, reuse=reuse)
+	return r, z
 
 
 def autoencoder_efros(x, d_params, is_training, opt, reuse=False):
@@ -286,41 +268,8 @@ def decoder_DCIGN(z, is_training, opt, reuse=False):
 		return deconv(nl(l2), [7,7,96,opt['color']], [156,156], name='d1', padding='VALID')
 
 
-############################## GAN stuff ######################################
-def discriminator(x, is_training, opt, reuse=False):
-	"""Discriminator network a la Isola et al. 2016...may need an extra layer"""
-	nl = (lambda arg: leaky_relu(arg, leak=0.2))
-	
-	with tf.variable_scope('discriminator_1', reuse=reuse) as scope:
-		l1 = conv(x, [4,4,opt['color'],64], stride=2, name='dc1')
-	
-	with tf.variable_scope('discriminator_2', reuse=reuse) as scope:
-		l2 = conv(nl(l1), [4,4,64,128], stride=2, name='dc2')
-		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
-	
-	with tf.variable_scope('discriminator_3', reuse=reuse) as scope:
-		l3 = conv(nl(l2), [4,4,128,256], stride=2, name='dc3')
-		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
-	
-	with tf.variable_scope('discriminator_4', reuse=reuse) as scope:
-		l4 = conv(nl(l3), [4,4,256,512], stride=2, name='dc4')
-		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
-
-	with tf.variable_scope('discriminator_out', reuse=reuse) as scope:
-		l5 = conv(nl(l4), [4,4,512,1], stride=2, name='dc5')
-		return tf.reduce_mean(tf.nn.sigmoid(l5), axis=(1,2,3))
-
-
-def GAN_loss(target, recon, is_training, opt):
-	"""The Generative Adversarial Loss"""
-	with tf.variable_scope('GAN') as scope:
-		flip = tf.random_uniform([]) > 0.5
-		loss_data = tf.log(discriminator(target, is_training, opt))
-		loss_gen = -tf.log(discriminator(recon, is_training, opt, reuse=True))
-		return tf.cond(flip, lambda: loss_data, lambda: loss_gen)
-	
-
 ###############################################################################
+
 
 def bernoulli_xentropy(target, recon, mean=False):
 	"""Cross-entropy for Bernoulli variables"""
@@ -449,66 +398,153 @@ def bn4d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 
 ############################################
-def train(inputs, outputs, ops, summaries, opt):
+def validate(inputs, outputs, opt):
+	"""Validate network"""
+	# Unpack inputs, outputs and ops
+	x, geometry, lighting, is_training = inputs
+	recon = outputs[0]
+	
+	save_dir = '{:s}/Code/harmonicConvolutions/tensorflow1/scale'.format(opt['root'])
+	DOF = ['az_light', 'az_rot', 'el_light', 'el_rot']
+	
+	for j in xrange(4):
+		save_folder = '{:s}/validation_samples/{:s}'.format(save_dir, DOF[j])
+		saver = tf.train.Saver()
+		with tf.Session() as sess:
+			# Load variables from stored model
+			saver.restore(sess, opt['save_path'])
+			X = skio.imread('{:s}/azimuth/face{:03d}/-01_000_045_045.png'.format(opt['data_folder'],j))[np.newaxis,...]
+			X = X.astype(np.float32)
+
+			# Angular limits
+			lo = np.asarray([-114,-86,-114,-30]) * (np.pi/180.)
+			hi = np.asarray([114,86,114,30]) * (np.pi/180.)
+			
+			# loop
+			for i, var in enumerate(np.linspace(lo[j], hi[j], num=16)):
+				# Defaults
+				phi = -29 * (np.pi/180.)
+				theta = 0. * (np.pi/180.)
+				phi_light = -60 * (np.pi/180.)
+				theta_light = -60 * (np.pi/180.)
+				# Assign var
+				if j == 0:
+					phi_light = var
+				elif j == 1:
+					phi = var
+				elif j == 2:
+					theta_light = var
+				elif j == 3:
+					theta = var
+				Geometry = rot3d(phi, theta)[np.newaxis,...].astype(np.float32)
+				Lighting = rot3d(phi_light, theta_light)[np.newaxis,...].astype(np.float32)
+				
+				feed_dict = {x: X,
+								 geometry: Geometry,
+								 lighting: Lighting,
+								 is_training: False}
+				Recon = sess.run(recon, feed_dict=feed_dict)
+				Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
+				skio.imsave('{:s}/{:04d}.png'.format(save_folder, i), Recon_)
+
+
+def feature_stability(inputs, outputs, opt):
 	"""Training loop"""
 	# Unpack inputs, outputs and ops
-	lr, is_training = inputs
-	loss = outputs[0]
-	merged, recon_summary, target_summary, input_summary = summaries
-	train_op_dis, train_op_gen, global_step = ops
-	
-	# For checkpoints
-	gs = 0
-	start = time.time()
+	x, geometry, lighting, is_training = inputs
+	recon, latents = outputs
+
 	saver = tf.train.Saver()
-	
+	Latents_list = []
 	with tf.Session() as sess:
-		# Initialize variables
-		init = tf.global_variables_initializer()
-		sess.run(init)
-		# Threading and queueing
-		coord = tf.train.Coordinator()
-		threads = tf.train.start_queue_runners(coord=coord)
-		train_writer = tf.summary.FileWriter(opt['summary_path'], sess.graph)
-		# Training loop
-		try:
-			while not coord.should_stop():
-				# Learning rate
-				exponent = sum([gs > i for i in opt['lr_schedule']])
-				current_lr = opt['lr']*np.power(0.1, exponent)
-				
-				# Train
-				ops = [global_step, loss, merged, train_op_dis]
-				feed_dict = {lr: current_lr, is_training: True}
-				gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
-				# Summary writers
-				train_writer.add_summary(summary, gs)
-				
-				ops = [global_step, loss, merged, train_op_gen]
-				feed_dict = {lr: current_lr, is_training: True}
-				gs, k, summary, __ = sess.run(ops, feed_dict=feed_dict)
-				# Summary writers
-				train_writer.add_summary(summary, gs)
-				print('[{:06d} s | {:03d}]: {:01f}'.format(int(time.time()-start), gs, l+k))
-				
-				if gs % 250 == 0:
-					ops = [recon_summary, target_summary, input_summary]
-					rs, ts, is_ = sess.run(ops, feed_dict={is_training: False})
-					train_writer.add_summary(rs, gs)
-					train_writer.add_summary(ts, gs)
-					train_writer.add_summary(is_, gs)
-				
-				# Save model
-				if gs % FLAGS.save_step == 0:
-					path = saver.save(sess, opt['save_path'], gs)
-					print('Saved model to ' + path)
-		except tf.errors.OutOfRangeError:
-			pass
-		finally:
-			# When done, ask the threads to stop.
-			coord.request_stop()
-			coord.join(threads)
+		# Load variables from stored model
+		saver.restore(sess, opt['save_path'])
+		
+		X, fnames = load_images('{:s}/azimuth/face009/'.format(opt['data_folder']), 0)
+		# Test -- variables beginning with a capital letter are not part of the
+		# TF Graph
+		phi = -0.3
+		theta = 0.
+		phi_light = -np.pi/3
+		theta_light = -np.pi/3
+		lim_lo = -np.pi
+		lim_hi = np.pi
+		#for i, phi_light in enumerate(np.linspace(lim_lo, lim_hi, num=200)):
+		for i, fname in enumerate(fnames):
+			phi = 0 #-(np.pi / 180.) * fname
+			Geometry = rot3d(phi, theta)[np.newaxis,...].astype(np.float32)
+			Lighting = rot3d(phi_light, theta_light)[np.newaxis,...].astype(np.float32)
 			
+			ops = [recon, latents]
+			feed_dict = {x: X[fname],
+							 geometry: Geometry,
+							 lighting: Lighting,
+							 is_training: False}
+			Recon, Latents = sess.run(ops, feed_dict=feed_dict)
+			Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
+			skio.imsave('{:s}/{:04d}.png'.format(opt['movie_faces'], i), Recon_)
+			Latents_list.append(Latents)
+			
+			
+		ops = [recon, latents]
+		feed_dict = {x: skio.imread('{:s}/azimuth/face009/-01_000_045_045.png'.format(opt['data_folder']))[np.newaxis,...],
+						 geometry: Geometry,
+						 lighting: Lighting,
+						 is_training: False}
+		Recon, Latents = sess.run(ops, feed_dict=feed_dict)
+		Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
+		#skio.imsave('{:s}/{:04d}.png'.format(opt['movie_faces'], i), Recon_)
+		Latents_list.append(Latents)
+	
+	errors = []
+	L_canon = Latents_list[len(Latents_list)/2]
+	L_canon = np.sqrt(np.sum(np.reshape(L_canon, (-1,3))**2, axis=1))
+	for L in Latents_list:
+		L = np.sqrt(np.sum(np.reshape(L, (-1,3))**2, axis=1))
+		#error = np.sqrt(np.sum((L-L_canon)**2)) / np.sqrt(np.sum(L_canon**2))
+		error = np.dot(L,L_canon) / np.sum(L_canon**2)
+		#error = np.dot(L,L_canon) / np.sqrt(np.sum(L_canon**2)*np.sum(L**2))
+		errors.append(error)
+	plt.plot(errors)
+	plt.savefig('{:s}/graph.png'.format(opt['movie_faces']))
+
+
+def load_images(folder, index):
+	"""Load images from folder, order, and return"""
+	images = {}
+	fnames = []
+	for root, dirs, files in os.walk(folder):
+		for f in files:
+			fnames.append(int(f.split('_')[index]))
+			images[fnames[-1]] = skio.imread('{:s}/{:s}'.format(root,f))[np.newaxis,...]
+	fnames = np.sort(fnames)
+	return images, fnames
+
+
+def rot3d(phi, theta):
+	"""Compute the 3D rotation matrix for a roll-less transformation"""
+	rotY = [[np.cos(phi),0.,-np.sin(phi)],
+				[0.,1.,0.],
+				[np.sin(phi),0.,np.cos(phi)]]
+	rotZ = [[np.cos(theta),np.sin(theta),0.],
+				[-np.sin(theta),np.cos(theta),0.],
+				[0.,0.,1]]
+	return np.dot(rotZ, rotY)
+
+
+def get_latest_model(model_file):
+	"""Model file"""
+	dirname = os.path.dirname(model_file)
+	basename = os.path.basename(model_file)
+	nums = []
+	for root, dirs, files in os.walk(dirname):
+		for f in files:
+			f = f.split('-')
+			if f[0] == basename:
+				nums.append(int(f[1].split('.')[0]))
+	model_file += '-{:05d}'.format(max(nums))
+	return model_file
+
 
 def main(_):
 	opt = {}
@@ -522,45 +558,38 @@ def main(_):
 		print('Hello dworrall!')
 		opt['root'] = '/home/dworrall'
 		dir_ = '{:s}/Code/harmonicConvolutions/tensorflow1/scale'.format(opt['root'])
-		opt['data_folder'] = '{:s}/Data/faces15'.format(opt['root'])
+		opt['data_folder'] = '{:s}/Data/test_faces'.format(opt['root'])
 	else:
 		opt['root'] = '/home/sgarbin'
 		dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
-	opt['mb_size'] = 32
-	opt['n_iterations'] = 10000000
-	opt['lr_schedule'] = [15000, 30000]
-	opt['lr'] = 1e-4
+	opt['mb_size'] = 1
 	opt['im_size'] = (150,150)
-	opt['train_size'] = 240000
-	opt['loss_type'] = 'L1'
+	opt['valid_size'] = 240
+	opt['loss_type'] = 'SSIM_L1'
 	opt['loss_weights'] = (0.85,0.15)
 	opt['nonlinearity'] = leaky_relu
 	opt['color'] = 3
 	opt['method'] = 'worrall'
 	if opt['method'] == 'kulkarni':
-		opt['color'] = 3
+		opt['color'] = 1
 	if opt['loss_type'] == 'SSIM_L1':
 		lw = '_' + '_'.join([str(l) for l in opt['loss_weights']])
 	else:
 		lw = ''
-	opt['summary_path'] = '{:s}/summaries/face15GAN_{:s}_{:s}{:s}'.format(dir_, opt['loss_type'], opt['method'], lw)
-	opt['save_path'] = '{:s}/checkpoints/face15GAN_{:s}_{:s}{:s}/model.ckpt'.format(dir_, opt['loss_type'], opt['method'], lw)
-
-	#check and clear directories
-	checkFolder(opt['summary_path'])
-	checkFolder(opt['save_path'])
-	#removeAllFilesInDirectory(opt['summary_path'], '.*')
-	#removeAllFilesInDirectory(opt['save_path'], '.*')
+	opt['movie_faces'] = '{:s}/movie_faces'.format(dir_)
+	save_path = '{:s}/checkpoints/face15train_{:s}_{:s}{:s}/model.ckpt'.format(dir_, opt['loss_type'], opt['method'], lw)
+	opt['save_path'] = get_latest_model(save_path)
 	
 	# Load data
-	train_files = face_loader.get_files(opt['data_folder'])
-	x, target, geometry, lighting, d_params = face_loader.get_batches(train_files, True, opt)
-	x /= 255.
-	target /= 255.
+	#valid_files = face_loader.get_files(opt['data_folder'])
+	#x, target, geometry, lighting, d_params = face_loader.get_batches(valid_files, True, opt)
+	#x /= 255.
+	#target /= 255.
 
 	# Placeholders
-	global_step = tf.Variable(0, name='global_step', trainable=False)
-	lr = tf.placeholder(tf.float32, [], name='lr')
+	x = tf.placeholder(tf.float32, [opt['mb_size'],opt['im_size'][0],opt['im_size'][1],opt['color']], name='x')
+	geometry = tf.placeholder(tf.float32, [opt['mb_size'],3,3], name='f_params')
+	lighting = tf.placeholder(tf.float32, [opt['mb_size'],3,3], name='f_params')
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
 	
 	# Build the training model
@@ -569,13 +598,16 @@ def main(_):
 	f_params2 = tf.concat([zeros,lighting], 1)
 	f_params = tf.concat([f_params1, f_params2], 2)
 	
+	x_ = x / 255.
 	if opt['method'] == 'efros':
-		recon = autoencoder_efros(x, d_params, is_training, opt)	
+		recon, latents = autoencoder_efros(x_, d_params, is_training, opt)	
 	elif opt['method'] == 'worrall':
-		recon = autoencoder(x, f_params, is_training, opt)
+		recon, latents = autoencoder(x_, f_params, is_training, opt)
 	elif opt['method'] == 'kulkarni':
-		recon = autoencoder_DCIGN(x, f_params, is_training, opt)
-
+		recon, latents = autoencoder_DCIGN(x_, f_params, is_training, opt)
+	recon = tf.nn.sigmoid(recon)
+	
+	'''
 	# LOSS
 	if opt['loss_type'] == 'xentropy':
 		loss = bernoulli_xentropy(target, recon, mean=True)
@@ -586,68 +618,15 @@ def main(_):
 	elif opt['loss_type'] == 'SSIM_L1':
 		loss = opt['loss_weights'][0]*SSIM(target, tf.nn.sigmoid(recon), mean=True)
 		loss += opt['loss_weights'][1]*mean_loss(tf.abs(target - tf.nn.sigmoid(recon)), mean=True)
-	elif opt['loss_type'] == 'L1':
-		loss = mean_loss(tf.abs(target - tf.nn.sigmoid(recon)), mean=True)
-	# Add the PatchGAN loss
-	#loss += tf.reduce_mean(GAN_loss(target, recon, is_training, opt))
-	y_real = discriminator(target, is_training, opt)
-	y_fake = discriminator(recon, is_training, opt, reuse=True)
-	
-	# L1+cGAN loss as per Isola et al., 2016
-	d_loss_real = bernoulli_xentropy(tf.ones_like(y_real), y_real, mean=True)
-	d_loss_fake = bernoulli_xentropy(tf.zeros_like(y_fake), y_fake, mean=True)
-	d_loss = d_loss_real + d_loss_fake
-	g_loss = 0.99*loss + 0.01*bernoulli_xentropy(tf.ones_like(y_fake), y_fake, mean=True)
-	
-	#d_loss_real = tf.reduce_mean(sigmoid_cross_entropy_with_logits(D_logits, tf.ones_like(self.D)))
-	#d_loss_fake = tf.reduce_mean(sigmoid_cross_entropy_with_logits(D_logits_, tf.zeros_like(self.D_)))
-	#g_loss = tf.reduce_mean(sigmoid_cross_entropy_with_logits(D_logits_, tf.ones_like(self.D_)))
-	#d_loss = - tf.reduce_mean(tf.log(y_real) + tf.log(1 - y_fake))
-	#g_loss = loss - tf.reduce_mean(tf.log(y_fake))
-
-	all_var = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
-	d_vars = [var for var in all_var if 'discriminator' in var.name]
-	g_vars = [var for var in all_var if 'mainModel' in var.name]
-
-	# Summaries
-	tf.summary.scalar('Loss', loss)
-	tf.summary.scalar('Learning_Rate', lr)
-	tf.summary.scalar('Discimrinator_Loss', d_loss)
-	tf.summary.scalar('Generator_Loss', d_loss)
-	tf.summary.scalar('Total_loss', g_loss + d_loss)
-	merged = tf.summary.merge_all()
-	input_summary = tf.summary.image('Inputs', x, max_outputs=3)
-	target_summary = tf.summary.image('Targets', target, max_outputs=3)
-	recon_summary = tf.summary.image('Reconstruction', tf.nn.sigmoid(recon), max_outputs=3)
-	
-	# Build optimizer
-	optim_d = tf.train.AdamOptimizer(lr, beta1=0.5)
-	optim_g = tf.train.AdamOptimizer(lr, beta1=0.5)
-	
-	train_op_dis = optim_d.minimize(d_loss, var_list=d_vars, global_step=global_step)
-	train_op_gen = optim_g.minimize(g_loss, var_list=g_vars, global_step=global_step)
-	'''
-	gvs = optim.compute_gradients(loss)
-	gv_gen = []
-	gv_dis = []
-	for g, v in gvs:
-		if 'discriminator' in v.name:
-			gv_dis.append((-g,v))
-		else:
-			gv_gen.append((g,v))
-	train_op_dis = optim.apply_gradients(gv_dis, global_step=global_step)
-	train_op_gen = optim.apply_gradients(gv_gen, global_step=global_step)
 	'''
 
-	
 	# Set inputs, outputs, and training ops
-	inputs = [lr, is_training]
-	outputs = [loss]
-	summaries = [merged, recon_summary, target_summary, input_summary]
-	ops = [train_op_dis, train_op_gen, global_step]
+	inputs = [x, geometry, lighting, is_training]
+	outputs = [recon, latents]
 	
 	# Train
-	return train(inputs, outputs, ops, summaries, opt)
+	validate(inputs, outputs, opt)
+	#feature_stability(inputs, outputs, opt)
 
 if __name__ == '__main__':
 	tf.app.run()

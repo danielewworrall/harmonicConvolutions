@@ -169,8 +169,17 @@ def feature_transform_tensor_n(x, xsh, f_params):
 	return tf.reshape(x, tf.stack([xsh[0],xsh[1],xsh[2],xsh[3]]))
 
 
-
-
+def transform_features_tensor(x, t_params, f_params):
+	temp_shape = x.get_shape()
+	"""Rotate features in the channels"""
+	# Feature transform
+	xsh = x.get_shape()
+	x = feature_transform_tensor_n(x, xsh, f_params)
+	# Spatial transform
+	xsh = x.get_shape().as_list()
+	y = transformer(x, t_params, (xsh[1],xsh[2]))
+	y.set_shape(temp_shape)
+	return y
 
 
 
