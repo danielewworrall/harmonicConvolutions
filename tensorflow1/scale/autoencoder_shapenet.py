@@ -273,10 +273,12 @@ def decoder(codes, is_training, reuse=False):
 
 def bernoulli_xentropy(target, output):
     """Cross-entropy for Bernoulli variables"""
-    target = 3*target-1
-    output = 0.9*output + 0.1
-    wx_entropy = -(97.0*target * tf.log(output) + 3.0*(1.0 - target) * tf.log(1.0 - output))/100.0
-    return tf.reduce_mean(tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
+    #target = 3*target-1
+    #output = 0.9*output + 0.1
+    #wx_entropy = -(97.0*target * tf.log(output) + 3.0*(1.0 - target) * tf.log(1.0 - output))/100.0
+    #return tf.reduce_mean(tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
+    diff = tf.square(target-output)
+    return tf.reduce_mean(tf.reduce_sum(diff, axis=(1,2,3,4)))
 
 
 def spatial_transform(stl, x, transmat, paddings):
