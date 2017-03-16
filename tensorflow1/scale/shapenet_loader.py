@@ -23,6 +23,7 @@ def save_binvox(inp, prefix='model_'):
     with open(prefix + str(i) + '.binvox', 'wb') as f:
       cur_model.write(f)
 
+
 def read_binbox(path):
   with open(path, 'rb') as f:
     model = binvox_rw.read_as_3d_array(f)
@@ -30,6 +31,7 @@ def read_binbox(path):
     result = np.transpose(result, [2,1,0])
     return result
   return None
+
  
 def dense_to_one_hot(labels_dense, num_classes=10):
   """Convert class labels from scalars to one-hot vectors."""
@@ -116,36 +118,38 @@ class DataSet(object):
       labels = self._labels[self.perm[start:end]]
       return volumes, labels
 
-  
-def read_data_sets(path, one_hot=False):
+def read_data_sets(basedir, one_hot=False):
   class DataSets(object):
     pass
   data_sets = DataSets()
-  #print(path)
-  #print(os.path.expanduser(path))
-  #print(os.path.realpath(os.path.expanduser(path)))
-  path = os.path.realpath(os.path.expanduser(path))
-  print('Reading', path)
+  basedir = os.path.realpath(os.path.expanduser(basedir))
+  print('Reading', basedir)
 
   # TODO
-  train_split = 0.01#8
-  validation_split = 0.01
-  test_split = 0.01
+  train_split = 0.8
+  validation_split = 0.1
+  test_split = 0.1
 
-  class_folders = sorted(glob.glob(os.path.join(path, '*')))
-  #print(class_folders)
+  class_folders = sorted(glob.glob(os.path.join(basedir, '*')))
   classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]
-  #print(classes)
+  all_file_count = 0
+  #class_folders = class_folders[3:4] # cars
+  class_folders = class_folders[4:5] # chairs
+  classes = classes[3:4]
+
   train_file_list = []
   validation_file_list = []
   test_file_list = []
   train_labels = []
   validation_labels = []
   test_labels = []
+  
 
   all_file_count = 0
+  #all_files_list = []
   for i in range(len(class_folders)):
     file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
+    #all_files_list.append(file_list)
     all_file_count += len(file_list)
 
     rem_file_size = len(file_list)
@@ -173,6 +177,139 @@ def read_data_sets(path, one_hot=False):
     test_labels.extend(cur_test_labels)
 
   print('Files to read:', all_file_count)
+  #import pickle
+  #with open('class_folders.pkl', 'wb') as f:
+  #    pickle.dump(class_folders, f)
+  #    pickle.dump(all_files_list, f)
+
+  data_sets.train = DataSet(train_file_list, train_labels, one_hot)
+  data_sets.validation = DataSet(validation_file_list, validation_labels, one_hot)
+  data_sets.test = DataSet(test_file_list, test_labels, one_hot)
+  return data_sets
+  
+def read_data_sets_splits(basedir, one_hot=False):
+  class DataSets(object):
+    pass
+  data_sets = DataSets()
+  #print(basedir)
+  #print(os.path.expanduser(basedir))
+  #print(os.path.realpath(os.path.expanduser(basedir)))
+  basedir = os.path.realpath(os.path.expanduser(basedir))
+  print('Reading', basedir)
+
+  # TODO
+  #train_split = 0.8
+  #validation_split = 0.1
+  #test_split = 0.1
+  #train_split = 0.8
+  #validation_split = 0.1
+  #test_split = 0.1
+
+  class_folders = sorted(glob.glob(os.path.join(basedir, '*')))
+  classes = [os.path.basename(os.path.normpath(class_folder)) for class_folder in class_folders]
+  #print(classes)
+  all_file_count = 0
+  #class_folders = class_folders[3:4] # cars
+  #class_folders = class_folders[4:5] # chairs
+  #classes = classes[3:4]
+  print(class_folders)
+
+  train_file_list = []
+  validation_file_list = []
+  test_file_list = []
+  train_labels = []
+  validation_labels = []
+  test_labels = []
+  
+  import pandas as pd
+  pdsplits = pd.read_csv('shapenet.csv', header=0, index_col=None, dtype=object)
+
+  def make_filelist(present_files, synsetId, split):
+      modelIds = pdsplits[(pdsplits['synsetId'] == synsetId) & (pdsplits['split']==split)]['modelId']
+      modelIds = modelIds.tolist()
+      def makepath(modelid):
+          path = os.path.join(basedir, synsetId)
+          path = os.path.join(path, modelid)
+          path = os.path.join(path, 'model.binvox')
+          return path
+          
+      filelist = [makepath(modelid) for modelid in modelIds]
+      toberemoved = []
+      for f in filelist:
+          if not f in present_files:
+              toberemoved.append(f)
+  
+      for f in toberemoved:
+          filelist.remove(f)
+      return filelist
+
+  all_file_count = 0
+
+  for i in range(len(class_folders)):
+    file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
+    all_file_count += len(file_list)
+
+    cur_train_file_list = make_filelist(file_list, classes[i], 'train')
+    cur_validation_file_list = make_filelist(file_list, classes[i], 'val')
+    cur_test_file_list = make_filelist(file_list, classes[i], 'test')
+
+    cur_train_labels = [i]*len(cur_train_file_list) # DANGER BEWARE do not change values in this list
+    cur_validation_labels = [i]*len(cur_validation_file_list) # DANGER BEWARE do not change values in this list
+    cur_test_labels = [i]*len(cur_test_file_list) # DANGER BEWARE do not change values in this list
+
+    train_file_list.extend(cur_train_file_list)
+    validation_file_list.extend(cur_validation_file_list)
+    test_file_list.extend(cur_test_file_list)
+    train_labels.extend(cur_train_labels)
+    validation_labels.extend(cur_validation_labels)
+    test_labels.extend(cur_test_labels)
+
+  #all_files_list = []
+  #for i in range(len(class_folders)):
+  #  file_list = sorted(glob.glob(os.path.join(class_folders[i], '*/model.binvox')))
+  #  #all_files_list.append(file_list)
+  #  all_file_count += len(file_list)
+
+  #  rem_file_size = len(file_list)
+  #  train_split_size = np.min([rem_file_size, np.ceil(len(file_list)*train_split).astype(np.int)])
+  #  rem_file_size = np.max([0, len(file_list) - train_split_size])
+  #  validation_split_size = np.ceil(len(file_list)*validation_split).astype(np.int)
+  #  rem_file_size = np.max([0, len(file_list) - train_split_size - validation_split_size])
+  #  test_split_size = np.min([rem_file_size, np.ceil(len(file_list)*test_split).astype(np.int)])
+
+  #  cur_train_file_list = file_list[0:train_split_size]
+  #  cur_validation_file_list = file_list[train_split_size: (train_split_size + validation_split_size)]
+  #  cur_test_file_list = file_list[(train_split_size + validation_split_size):(train_split_size + validation_split_size + test_split_size)]
+
+  #  cur_train_labels = [i]*train_split_size # DANGER BEWARE do not change values in this list
+  #  cur_validation_labels = [i]*validation_split_size # DANGER BEWARE do not change values in this list
+  #  cur_test_labels = [i]*test_split_size # DANGER BEWARE do not change values in this list
+
+  #  #print(os.path.basename(os.path.normpath(os.path.dirname(file_list[0]))))
+
+  #  train_file_list.extend(cur_train_file_list)
+  #  validation_file_list.extend(cur_validation_file_list)
+  #  test_file_list.extend(cur_test_file_list)
+  #  train_labels.extend(cur_train_labels)
+  #  validation_labels.extend(cur_validation_labels)
+  #  test_labels.extend(cur_test_labels)
+
+  print(file_list[0])
+  print('Files to read:', all_file_count)
+  #import pickle
+  #with open('class_folders.pkl', 'wb') as f:
+  #    pickle.dump(class_folders, f)
+  #    pickle.dump(all_files_list, f)
+
+  print('file list lengths')
+  print(len(train_file_list))
+  print(len(validation_file_list))
+  print(len(test_file_list))
+
+  print('file list elements')
+  print(train_file_list[0])
+  print(validation_file_list[0])
+  print(test_file_list[0])
 
   data_sets.train = DataSet(train_file_list, train_labels, one_hot)
   data_sets.validation = DataSet(validation_file_list, validation_labels, one_hot)
@@ -182,9 +319,14 @@ def read_data_sets(path, one_hot=False):
 
 def test():
   dataset = read_data_sets('~/scratch/Datasets/ShapeNetVox32')
+  #dataset = read_data_sets('~/ShapeNet/shapenetvox/ShapeNetVox32')
   tmp1, tmp2 = dataset.train.next_batch(2)
   print(dataset.train.volumes.shape)
+  print(dataset.validation.volumes.shape)
+  print(dataset.test.volumes.shape)
   print(tmp1.shape)
+  print(np.amax(tmp1))
+  print(np.amin(tmp1))
   print(tmp2)
 
 def main(argv=None):  # pylint: disable=unused-argument
