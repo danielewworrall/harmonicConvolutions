@@ -137,8 +137,8 @@ def autoencoder(x, num_latents, f_params, is_training, reuse=False):
             codes_transformed = el.feature_transform_matrix_n(codes, codes.get_shape(), f_params)
             codes_transformed = tf.reshape(codes_transformed, code_shape)
         with tf.variable_scope("decoder", reuse=reuse) as scope:
-            recons = decoder(codes_transformed, is_training, reuse=reuse)
-    return recons, codes
+            recons, recons_logits = decoder(codes_transformed, is_training, reuse=reuse)
+    return recons, codes, recons_logits
 
 
 def variable(name, shape=None, initializer=tf.contrib.layers.xavier_initializer_conv2d(uniform=False), trainable=True):
@@ -267,18 +267,27 @@ def decoder(codes, is_training, reuse=False):
     l5 = upconvlayer(5,     l4,    3, 128,         64,   32, reuse)
     l6 = upconvlayer(6,     l5,    3, 64,          32,   32, reuse)
     l7 = upconvlayer(7,     l6,    3, 32,          16,   64, reuse)
-    recons = upconvlayer(8, l7,    5, 16,          1,    64, reuse, nonlin=tf.nn.sigmoid)
-    return recons
+    recons_logits = upconvlayer(8, l7,    5, 16,          1,    64, reuse, nonlin=tf.identity, dobn=False)
+    recons = tf.sigmoid(recons_logits)
+    return recons, recons_logits
 
 
-def bernoulli_xentropy(target, output):
-    """Cross-entropy for Bernoulli variables"""
-    #target = 3*target-1
-    #output = 0.9*output + 0.1
-    #wx_entropy = -(97.0*target * tf.log(output) + 3.0*(1.0 - target) * tf.log(1.0 - output))/100.0
-    #return tf.reduce_mean(tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
-    diff = tf.square(target-output)
-    return tf.reduce_mean(tf.reduce_sum(diff, axis=(1,2,3,4)))
+#def bernoulli_xentropy(target, output):
+#    """Cross-entropy for Bernoulli variables"""
+#    target = 3*target-1
+#    output = 0.9*output + 0.1
+#    wx_entropy = -(90.0*target * tf.log(output) + 10.0*(1.0 - target) * tf.log(1.0 - output))/100.0
+#    #wx_entropy = -(target * tf.log(output) + (1.0 - target) * tf.log(1.0 - output))
+#    return tf.reduce_mean(tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
+#    #diff = tf.square(target-output)
+#    #return tf.reduce_mean(tf.reduce_sum(diff, axis=(1,2,3,4)))
+
+def bernoulli_xentropy(target, logits):
+    batch_size = target.get_shape().as_list()[0]
+    target = tf.reshape(target, [batch_size, -1])
+    logits = tf.reshape(logits, [batch_size, -1])
+    x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=target, logits=logits)
+    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=1))
 
 
 def spatial_transform(stl, x, transmat, paddings):
@@ -593,8 +602,8 @@ def main(_):
     
     opt['mb_size'] = 16
     opt['n_epochs'] = 50
-    opt['lr_schedule'] = [1, 30, 40]
-    opt['lr'] = 1e-3
+    opt['lr_schedule'] = [15, 45]
+    opt['lr'] = 1e-4
 
     opt['vol_size'] = [32,32,32]
     pad_size = 16#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
@@ -640,14 +649,15 @@ def main(_):
     # Build the training model
     x_in = spatial_transform(stl, x, stl_params_in, paddings)
     x_trg = spatial_transform(stl, x, stl_params_trg, paddings)
-    recons, codes = autoencoder(x_in, opt['num_latents'], f_params, is_training)
+    recons, codes, recons_logits = autoencoder(x_in, opt['num_latents'], f_params, is_training)
     
     # Test model
     test_x_in = spatial_transform(stl, test_x, test_stl_params_in, paddings)
-    test_recon, __ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
+    test_recon, __, _ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
     
     # LOSS
-    loss = bernoulli_xentropy(x_trg, recons)
+    #loss = bernoulli_xentropy(x_trg, recons)
+    loss = bernoulli_xentropy(x_trg, recons_logits)
     
     # Summaries
     tf_vol_summary('recons', recons) 
