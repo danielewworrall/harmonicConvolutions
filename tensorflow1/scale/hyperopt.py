@@ -34,12 +34,12 @@ def run(n_trials):
 		while NaN:			
 			
 			opt['lr'] = np.power(10.,-3. + 0.2*np.random.rand())
-			opt['equivariant_weight'] = 0.6 + 0.25*(2.*(np.random.rand()-0.5))
+			opt['equivariant_weight'] = 0.01 + 0.005*(np.random.rand()-0.5)
 			opt['n_mid'] = int(20 + 2*np.random.randint(3))
 			opt['n_mid_class'] = opt['n_mid']
 			opt['n_layers_deconv'] = int(3 + 2*np.random.randint(2))
 			opt['n_layers_class'] = int(2 + 2*np.random.randint(2))
-			opt['dropout'] = 0.25*np.random.rand()
+			opt['dropout'] = 0.15*np.random.rand()
 			
 			opt['summary_path'] = dir_ + 'hyperopt/invariant/summaries/conv_rot_mnist_{:.0e}_{:s}'.format(opt['equivariant_weight'], 'hp')
 			opt['save_path'] = dir_ + 'hyperopt/invariant/checkpoints/conv_rot_mnist_{:.0e}_{:s}/model.ckpt'.format(opt['equivariant_weight'], 'hp')
