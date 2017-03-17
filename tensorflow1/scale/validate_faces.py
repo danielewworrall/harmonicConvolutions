@@ -9,6 +9,7 @@ sys.path.append('../')
 #import cv2
 #import input_data
 import numpy as np
+import skimage.color as skco
 import skimage.io as skio
 import skimage.transform as sktr
 import tensorflow as tf
@@ -19,6 +20,7 @@ import models
 
 from spatial_transformer import transformer
 from matplotlib import pyplot as plt
+from matplotlib.pyplot import cm
 
 
 ################ DATA #################
@@ -206,6 +208,72 @@ def decoder(z, is_training, opt, reuse=False, n_in=1026):
 	with tf.variable_scope('decoder_1') as scope:
 		return deconv(nl(l2), [5,5,32,opt['color']], opt['im_size'], name='d1')
 
+'''
+def encoder(x, is_training, opt, reuse=False):
+	"""Encoder MLP"""
+	nl = opt['nonlinearity']
+	
+	with tf.variable_scope('encoder_1') as scope:
+		l1 = conv(x, [5,5,opt['color'],16], stride=1, name='e1', padding='VALID')
+		l1 = bn4d(l1, is_training, reuse=reuse, name='bn1')
+	
+	with tf.variable_scope('encoder_2') as scope:
+		l2 = conv(nl(l1), [3,3,16,32], stride=2, name='e2', padding='SAME')
+		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
+	
+	with tf.variable_scope('encoder_3') as scope:
+		l3 = conv(nl(l2), [3,3,32,64], stride=2, name='e3', padding='SAME')
+		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
+	
+	with tf.variable_scope('encoder_4') as scope:
+		l4 = conv(nl(l3), [3,3,64,128], stride=2, name='e4', padding='SAME')
+		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
+	
+	with tf.variable_scope('encoder_5') as scope:
+		l5 = conv(nl(l4), [3,3,128,256], stride=2, name='e5', padding='SAME')
+		l5 = bn4d(l5, is_training, reuse=reuse, name='bn5')
+	
+	with tf.variable_scope('encoder_6') as scope:
+		l6 = conv(nl(l5), [3,3,256,512], stride=2, name='e6', padding='SAME')
+		l6 = bn4d(l6, is_training, reuse=reuse, name='bn6')
+		l6 = tf.reduce_mean(l6, axis=(1,2))
+	
+	with tf.variable_scope('encoder_mid') as scope:
+		return linear(nl(l6), [512,510], name='e_out')
+
+
+def decoder(z, is_training, opt, reuse=False, n_in=510):
+	"""Encoder MLP"""
+	nl = opt['nonlinearity']
+	
+	with tf.variable_scope('decoder_mid') as scope:
+		l_in = linear(z, [n_in,2*2*512], name='d_in')
+		l_in = tf.reshape(l_in, shape=(-1,2,2,512))
+	
+	with tf.variable_scope('decoder_6') as scope:
+		l6 = deconv(nl(l_in), [4,4,1024,256], [5,5], name='d6')
+		l6 = bn4d(l6, is_training, reuse=reuse, name='bn6')
+	
+	with tf.variable_scope('decoder_5') as scope:
+		l5 = deconv(nl(l6), [5,5,256,128], [9,9], name='d5')
+		l5 = bn4d(l5, is_training, reuse=reuse, name='bn5')
+	
+	with tf.variable_scope('decoder_4') as scope:
+		l4 = deconv(nl(l5), [5,5,128,64], [18,18], name='d4')
+		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
+	
+	with tf.variable_scope('decoder_3') as scope:
+		l3 = deconv(nl(l4), [5,5,64,32], [37,37], name='d3')
+		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
+	
+	with tf.variable_scope('decoder_2') as scope:
+		l2 = deconv(nl(l3), [5,5,32,16], [75,75], name='d2')
+		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
+	
+	with tf.variable_scope('decoder_1') as scope:
+		return deconv(nl(l2), [5,5,16,opt['color']], opt['im_size'], name='d1')
+'''
+
 ############################## DC-IGN ##########################################
 def autoencoder_DCIGN(x, f_params, is_training, opt, reuse=False):
 	"""Build a model to rotate features"""
@@ -215,10 +283,10 @@ def autoencoder_DCIGN(x, f_params, is_training, opt, reuse=False):
 			z = encoder_DCIGN(x, is_training, opt, reuse=reuse)
 		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
 			matrix_shape = [xsh[0], z.get_shape()[1]]
-			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
+			z_ = el.feature_transform_matrix_n(z, matrix_shape, f_params)
 		with tf.variable_scope("decoder", reuse=reuse) as scope:
-			r = decoder_DCIGN(z, is_training, opt, reuse=reuse)
-	return r
+			r = decoder_DCIGN(z_, is_training, opt, reuse=reuse)
+	return r, z
 
 
 def encoder_DCIGN(x, is_training, opt, reuse=False):
@@ -408,12 +476,12 @@ def validate(inputs, outputs, opt):
 	DOF = ['az_light', 'az_rot', 'el_light', 'el_rot']
 	
 	for j in xrange(4):
-		save_folder = '{:s}/validation_samples/{:s}'.format(save_dir, DOF[j])
+		save_folder = '{:s}/movie_faces_rectify/{:s}'.format(save_dir, DOF[j])
 		saver = tf.train.Saver()
 		with tf.Session() as sess:
 			# Load variables from stored model
 			saver.restore(sess, opt['save_path'])
-			X = skio.imread('{:s}/azimuth/face{:03d}/-01_000_045_045.png'.format(opt['data_folder'],j))[np.newaxis,...]
+			X = skio.imread('{:s}/az_rot/face{:03d}/-01_000_045_045.png'.format(opt['data_folder'],j))[np.newaxis,...]
 			X = X.astype(np.float32)
 
 			# Angular limits
@@ -453,60 +521,122 @@ def feature_stability(inputs, outputs, opt):
 	# Unpack inputs, outputs and ops
 	x, geometry, lighting, is_training = inputs
 	recon, latents = outputs
-
+	
+	dataset = ['az_rot', 'el_rot', 'az_light', 'el_light']
+	labels = ['Azimuth (degrees)','Elevation (degrees)','Lighting azimuth (degrees)','Lighting elevation (degrees)']
+	
+	#template = skio.imread('{:s}/az_rot/face001/041_000_014_014.png'.format(opt['data_folder']))[np.newaxis,...]
+	template = skio.imread('{:s}/el_light/face000/000_000_000_001.png'.format(opt['data_folder']))[np.newaxis,...]
+	Geometry = np.eye(3)[np.newaxis,...].astype(np.float32)
+	Lighting = np.eye(3)[np.newaxis,...].astype(np.float32)
+	feed_dict = {x: template, geometry: Geometry, lighting: Lighting, is_training: False}
+	
 	saver = tf.train.Saver()
-	Latents_list = []
 	with tf.Session() as sess:
 		# Load variables from stored model
 		saver.restore(sess, opt['save_path'])
+		Template = get_invariant(sess.run(latents, feed_dict=feed_dict))
+		for d in xrange(4):
+			colorB=iter(cm.Blues(np.linspace(0.3,0.7,10)))
+			colorR=iter(cm.Reds(np.linspace(0.3,0.7,10)))
+			for j in xrange(10):
+				angle = []
+				Latents_list = []
+				X, fnames = load_images('{:s}/{:s}/face{:03d}/'.format(opt['data_folder'],dataset[d],j), d)
+				# Test -- variables beginning with a capital letter are not part of the
+				# TF Graph
+				for i, fname in enumerate(fnames):
+					#Geometry = rot3d(phi, theta)[np.newaxis,...].astype(np.float32)
+					#Lighting = rot3d(phi_light, theta_light)[np.newaxis,...].astype(np.float32)
+					Geometry = np.eye(3)[np.newaxis,...].astype(np.float32)
+					Lighting = np.eye(3)[np.newaxis,...].astype(np.float32)
+					if opt['color'] == 1:
+						X_ = skco.rgb2gray(X[fname])[...,np.newaxis]
+					else:
+						X_ = X[fname]
 		
-		X, fnames = load_images('{:s}/azimuth/face009/'.format(opt['data_folder']), 0)
-		# Test -- variables beginning with a capital letter are not part of the
-		# TF Graph
-		phi = -0.3
-		theta = 0.
-		phi_light = -np.pi/3
-		theta_light = -np.pi/3
-		lim_lo = -np.pi
-		lim_hi = np.pi
-		#for i, phi_light in enumerate(np.linspace(lim_lo, lim_hi, num=200)):
-		for i, fname in enumerate(fnames):
-			phi = 0 #-(np.pi / 180.) * fname
-			Geometry = rot3d(phi, theta)[np.newaxis,...].astype(np.float32)
-			Lighting = rot3d(phi_light, theta_light)[np.newaxis,...].astype(np.float32)
-			
-			ops = [recon, latents]
-			feed_dict = {x: X[fname],
-							 geometry: Geometry,
-							 lighting: Lighting,
-							 is_training: False}
-			Recon, Latents = sess.run(ops, feed_dict=feed_dict)
-			Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
-			skio.imsave('{:s}/{:04d}.png'.format(opt['movie_faces'], i), Recon_)
-			Latents_list.append(Latents)
-			
-			
-		ops = [recon, latents]
-		feed_dict = {x: skio.imread('{:s}/azimuth/face009/-01_000_045_045.png'.format(opt['data_folder']))[np.newaxis,...],
-						 geometry: Geometry,
-						 lighting: Lighting,
-						 is_training: False}
-		Recon, Latents = sess.run(ops, feed_dict=feed_dict)
-		Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
-		#skio.imsave('{:s}/{:04d}.png'.format(opt['movie_faces'], i), Recon_)
-		Latents_list.append(Latents)
+					ops = [recon, latents]
+					feed_dict = {x: X_,
+									 geometry: Geometry,
+									 lighting: Lighting,
+									 is_training: False}
+					Recon, Latents = sess.run(ops, feed_dict=feed_dict)
+					Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
+					if opt['color'] == 1:
+						Recon_ = Recon_[:,:,0]
+					#skio.imsave('{:s}/{:04d}.png'.format(opt['movie_faces'], i), Recon_)
+					Latents_list.append(Latents)
+					angle.append(fname)
+				
+				errors = []
+				Terrors = []
+				L_canon = get_invariant(Latents_list[len(Latents_list)/2])
+				for L in Latents_list:
+					L = get_invariant(L)
+					#error = np.dot(L,L_canon) / np.sqrt(np.sum(L_canon**2)*np.sum(L**2))
+					#terror = np.dot(L,Template) / np.sqrt(np.sum(Template**2)*np.sum(L**2))
+					error = np.sqrt(np.mean((L - L_canon)**2))
+					terror = np.sqrt(np.mean((L - Template)**2))
+					errors.append(error)
+					Terrors.append(terror)
+				plt.plot(angle, errors, c=next(colorB))
+				plt.plot(angle, Terrors, c=next(colorR))
+				
+			plt.tick_params(axis='both', which='major', labelsize=16)
+			plt.xlim([np.amin(angle),np.amax(angle)])
+			plt.ylim([0.,0.9])
+			plt.xlabel(labels[d], fontsize=16)
+			#plt.ylabel('Cosine similarity', fontsize=16)
+			plt.ylabel('L2 distance on matrix features', fontsize=16)
+			plt.tight_layout()
+			plt.savefig('{:s}/mixed_face/mf_L2mfeat_{:s}_.pdf'.format(opt['movie_faces'], dataset[d]))
+			plt.clf()
+
+
+def L2_distance(opt):
+	"""Training loop"""
+	dataset = ['az_rot', 'el_rot', 'az_light', 'el_light']
+	labels = ['Azimuth (degrees)','Elevation (degrees)','Lighting azimuth (degrees)','Lighting elevation (degrees)']
 	
-	errors = []
-	L_canon = Latents_list[len(Latents_list)/2]
-	L_canon = np.sqrt(np.sum(np.reshape(L_canon, (-1,3))**2, axis=1))
-	for L in Latents_list:
-		L = np.sqrt(np.sum(np.reshape(L, (-1,3))**2, axis=1))
-		#error = np.sqrt(np.sum((L-L_canon)**2)) / np.sqrt(np.sum(L_canon**2))
-		error = np.dot(L,L_canon) / np.sum(L_canon**2)
-		#error = np.dot(L,L_canon) / np.sqrt(np.sum(L_canon**2)*np.sum(L**2))
-		errors.append(error)
-	plt.plot(errors)
-	plt.savefig('{:s}/graph.png'.format(opt['movie_faces']))
+	template = skio.imread('{:s}/az_rot/face001/041_000_014_014.png'.format(opt['data_folder']))[np.newaxis,...]
+	for d in xrange(4):
+		colorB=iter(cm.Blues(np.linspace(0.3,0.7,10)))
+		colorR=iter(cm.Reds(np.linspace(0.3,0.7,10)))
+		for j in xrange(10):
+			angle = []
+			errors = []
+			Terrors = []
+			X, fnames = load_images('{:s}/{:s}/face{:03d}/'.format(opt['data_folder'],dataset[d],j), d)
+			key = np.sort(X.keys())[len(fnames)/2]
+			X_canon = X[key]
+			for i, fname in enumerate(fnames):
+				X_ = X[fname]
+				angle.append(fname)
+
+				error = np.mean((X_ - X_canon)**2)
+				terror = np.mean((X_ - template)**2)
+				errors.append(error)
+				Terrors.append(terror)
+					
+			plt.plot(angle, errors, c=next(colorB))
+			plt.plot(angle, Terrors, c=next(colorR))
+			
+		plt.tick_params(axis='both', which='major', labelsize=16)
+		plt.xlim([np.amin(angle),np.amax(angle)])
+		#plt.ylim([0.8,1.002])
+		plt.xlabel(labels[d], fontsize=16)
+		plt.ylabel('L2 distance', fontsize=16)
+		plt.tight_layout()
+		plt.savefig('{:s}/mixed_face/mf_L2_{:s}.pdf'.format(opt['movie_faces'], dataset[d]))
+		plt.clf()
+
+
+def get_invariant(x):
+	n = np.prod(x.shape)
+	x1 = np.reshape(x, (n/6,1,6))
+	x2 = np.reshape(x, (1,n/6,6))
+	return np.reshape(np.sum(x2*x1, axis=2), -1)
+	#return np.sum(np.reshape(x**2, (n/6,6)), axis=1)
 
 
 def load_images(folder, index):
@@ -515,7 +645,7 @@ def load_images(folder, index):
 	fnames = []
 	for root, dirs, files in os.walk(folder):
 		for f in files:
-			fnames.append(int(f.split('_')[index]))
+			fnames.append(int(f.replace('.png','').split('_')[index]))
 			images[fnames[-1]] = skio.imread('{:s}/{:s}'.format(root,f))[np.newaxis,...]
 	fnames = np.sort(fnames)
 	return images, fnames
@@ -537,6 +667,7 @@ def get_latest_model(model_file):
 	dirname = os.path.dirname(model_file)
 	basename = os.path.basename(model_file)
 	nums = []
+	print model_file
 	for root, dirs, files in os.walk(dirname):
 		for f in files:
 			f = f.split('-')
@@ -577,7 +708,7 @@ def main(_):
 	else:
 		lw = ''
 	opt['movie_faces'] = '{:s}/movie_faces'.format(dir_)
-	save_path = '{:s}/checkpoints/face15train_{:s}_{:s}{:s}/model.ckpt'.format(dir_, opt['loss_type'], opt['method'], lw)
+	save_path = '{:s}/checkpoints/val_face15train_{:s}_{:s}{:s}/model.ckpt'.format(dir_, opt['loss_type'], opt['method'], lw)
 	opt['save_path'] = get_latest_model(save_path)
 	
 	# Load data
@@ -606,19 +737,7 @@ def main(_):
 	elif opt['method'] == 'kulkarni':
 		recon, latents = autoencoder_DCIGN(x_, f_params, is_training, opt)
 	recon = tf.nn.sigmoid(recon)
-	
-	'''
-	# LOSS
-	if opt['loss_type'] == 'xentropy':
-		loss = bernoulli_xentropy(target, recon, mean=True)
-	elif opt['loss_type'] == 'L2':
-		loss = gaussian_nll(target, tf.nn.sigmoid(recon), mean=True)
-	elif opt['loss_type'] == 'SSIM':
-		loss = SSIM(target, tf.nn.sigmoid(recon), mean=True)
-	elif opt['loss_type'] == 'SSIM_L1':
-		loss = opt['loss_weights'][0]*SSIM(target, tf.nn.sigmoid(recon), mean=True)
-		loss += opt['loss_weights'][1]*mean_loss(tf.abs(target - tf.nn.sigmoid(recon)), mean=True)
-	'''
+
 
 	# Set inputs, outputs, and training ops
 	inputs = [x, geometry, lighting, is_training]
@@ -627,6 +746,7 @@ def main(_):
 	# Train
 	validate(inputs, outputs, opt)
 	#feature_stability(inputs, outputs, opt)
+	#L2_distance(opt)
 
 if __name__ == '__main__':
 	tf.app.run()

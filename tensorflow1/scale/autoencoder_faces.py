@@ -139,10 +139,10 @@ def autoencoder(x, f_params, is_training, opt, reuse=False):
 			z = encoder(x, is_training, opt, reuse=reuse)
 		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
 			matrix_shape = [xsh[0], z.get_shape()[1]]
-			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
+			z_ = el.feature_transform_matrix_n(z, matrix_shape, f_params)
 		with tf.variable_scope("decoder", reuse=reuse) as scope:
-			r = decoder(z, is_training, opt, reuse=reuse)
-	return r
+			r = decoder(z_, is_training, opt, reuse=reuse)
+	return r, z
 
 
 def autoencoder_efros(x, d_params, is_training, opt, reuse=False):
@@ -223,7 +223,71 @@ def decoder(z, is_training, opt, reuse=False, n_in=1026):
 	
 	with tf.variable_scope('decoder_1') as scope:
 		return deconv(nl(l2), [5,5,32,opt['color']], opt['im_size'], name='d1')
+'''
+def encoder(x, is_training, opt, reuse=False):
+	"""Encoder MLP"""
+	nl = opt['nonlinearity']
+	
+	with tf.variable_scope('encoder_1') as scope:
+		l1 = conv(x, [5,5,opt['color'],16], stride=1, name='e1', padding='VALID')
+		l1 = bn4d(l1, is_training, reuse=reuse, name='bn1')
+	
+	with tf.variable_scope('encoder_2') as scope:
+		l2 = conv(nl(l1), [3,3,16,32], stride=2, name='e2', padding='SAME')
+		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
+	
+	with tf.variable_scope('encoder_3') as scope:
+		l3 = conv(nl(l2), [3,3,32,64], stride=2, name='e3', padding='SAME')
+		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
+	
+	with tf.variable_scope('encoder_4') as scope:
+		l4 = conv(nl(l3), [3,3,64,128], stride=2, name='e4', padding='SAME')
+		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
+	
+	with tf.variable_scope('encoder_5') as scope:
+		l5 = conv(nl(l4), [3,3,128,256], stride=2, name='e5', padding='SAME')
+		l5 = bn4d(l5, is_training, reuse=reuse, name='bn5')
+	
+	with tf.variable_scope('encoder_6') as scope:
+		l6 = conv(nl(l5), [3,3,256,512], stride=2, name='e6', padding='SAME')
+		l6 = bn4d(l6, is_training, reuse=reuse, name='bn6')
+		l6 = tf.reduce_mean(l6, axis=(1,2))
+	
+	with tf.variable_scope('encoder_mid') as scope:
+		return linear(nl(l6), [512,510], name='e_out')
 
+
+def decoder(z, is_training, opt, reuse=False, n_in=510):
+	"""Encoder MLP"""
+	nl = opt['nonlinearity']
+	
+	with tf.variable_scope('decoder_mid') as scope:
+		l_in = linear(z, [n_in,2*2*512], name='d_in')
+		l_in = tf.reshape(l_in, shape=(-1,2,2,512))
+	
+	with tf.variable_scope('decoder_6') as scope:
+		l6 = deconv(nl(l_in), [4,4,512,256], [5,5], name='d6')
+		l6 = bn4d(l6, is_training, reuse=reuse, name='bn6')
+	
+	with tf.variable_scope('decoder_5') as scope:
+		l5 = deconv(nl(l6), [5,5,256,128], [9,9], name='d5')
+		l5 = bn4d(l5, is_training, reuse=reuse, name='bn5')
+	
+	with tf.variable_scope('decoder_4') as scope:
+		l4 = deconv(nl(l5), [5,5,128,64], [18,18], name='d4')
+		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
+	
+	with tf.variable_scope('decoder_3') as scope:
+		l3 = deconv(nl(l4), [5,5,64,32], [37,37], name='d3')
+		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
+	
+	with tf.variable_scope('decoder_2') as scope:
+		l2 = deconv(nl(l3), [5,5,32,16], [75,75], name='d2')
+		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
+	
+	with tf.variable_scope('decoder_1') as scope:
+		return deconv(nl(l2), [5,5,16,opt['color']], opt['im_size'], name='d1')
+'''
 ############################## DC-IGN ##########################################
 def autoencoder_DCIGN(x, f_params, is_training, opt, reuse=False):
 	"""Build a model to rotate features"""
@@ -284,6 +348,21 @@ def decoder_DCIGN(z, is_training, opt, reuse=False):
 	
 	with tf.variable_scope('decoder_1') as scope:
 		return deconv(nl(l2), [7,7,96,opt['color']], [156,156], name='d1', padding='VALID')
+
+
+def classifier(x, opt):
+	"""Linear classifier"""
+	# Create invariant representation
+	#x = tf.reshape(x, [opt['mb_size'],1026/6,6])
+	#x3 = tf.reduce_sum(tf.square(x), axis=2)
+	# Matrix of invariants
+	x1 = tf.reshape(x, [opt['mb_size'],1026/6,1,6])
+	x2 = tf.reshape(x, [opt['mb_size'],1,1026/6,6])
+	#x2 = tf.reshape(x, [opt['mb_size'],1026/6,6])
+	x3 = tf.reduce_mean(x1*x2, axis=3)
+	x3 = tf.reshape(x3, (opt['mb_size'],(1026/6)**2))
+	
+	return linear(x3, [(1026/6)**2,1000])
 
 
 ###############################################################################
@@ -446,7 +525,7 @@ def train(inputs, outputs, ops, summaries, opt):
 				
 				# Train
 				ops = [global_step, loss, merged, train_op]
-				feed_dict = {lr: current_lr, is_training: True}
+				feed_dict = {lr: current_lr, is_training: True, }
 				gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
 				# Summary writers
 				train_writer.add_summary(summary, gs)
@@ -488,7 +567,7 @@ def main(_):
 		opt['root'] = '/home/sgarbin'
 		dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
 	opt['mb_size'] = 32
-	opt['n_iterations'] = 10000000
+	opt['n_iterations'] = 100000
 	opt['lr_schedule'] = [30000, 50000]
 	opt['lr'] = 1e-4
 	opt['im_size'] = (150,150)
@@ -496,16 +575,16 @@ def main(_):
 	opt['loss_type'] = 'SSIM_L1'
 	opt['loss_weights'] = (0.85,0.15)
 	opt['nonlinearity'] = leaky_relu
-	opt['color'] = 1
-	opt['method'] = 'kulkarni'
+	opt['color'] = 3
+	opt['method'] = 'worrall'
 	if opt['method'] == 'kulkarni':
 		opt['color'] = 1
 	if opt['loss_type'] == 'SSIM_L1':
 		lw = '_' + '_'.join([str(l) for l in opt['loss_weights']])
 	else:
 		lw = ''
-	opt['summary_path'] = '{:s}/summaries/face15train_{:s}_{:s}{:s}'.format(dir_, opt['loss_type'], opt['method'], lw)
-	opt['save_path'] = '{:s}/checkpoints/face15train_{:s}_{:s}{:s}/model.ckpt'.format(dir_, opt['loss_type'], opt['method'], lw)
+	opt['summary_path'] = '{:s}/summaries/class_face15train_{:s}_{:s}{:s}'.format(dir_, opt['loss_type'], opt['method'], lw)
+	opt['save_path'] = '{:s}/checkpoints/class_face15train_{:s}_{:s}{:s}/model.ckpt'.format(dir_, opt['loss_type'], opt['method'], lw)
 
 	#check and clear directories
 	checkFolder(opt['summary_path'])
@@ -515,7 +594,7 @@ def main(_):
 	
 	# Load data
 	train_files = face_loader.get_files(opt['data_folder'])
-	x, target, geometry, lighting, d_params = face_loader.get_batches(train_files, True, opt)
+	x, target, geometry, lighting, d_params, ids = face_loader.get_batches(train_files, True, opt)
 	x /= 255.
 	target /= 255.
 
@@ -523,6 +602,7 @@ def main(_):
 	global_step = tf.Variable(0, name='global_step', trainable=False)
 	lr = tf.placeholder(tf.float32, [], name='lr')
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
+	labels = tf.placeholder(tf.int32, [None,], name='labels')
 	
 	# Build the training model
 	zeros = tf.zeros_like(geometry)
@@ -533,7 +613,7 @@ def main(_):
 	if opt['method'] == 'efros':
 		recon = autoencoder_efros(x, d_params, is_training, opt)	
 	elif opt['method'] == 'worrall':
-		recon = autoencoder(x, f_params, is_training, opt)
+		recon, latents = autoencoder(x, f_params, is_training, opt)
 	elif opt['method'] == 'kulkarni':
 		recon = autoencoder_DCIGN(x, f_params, is_training, opt)
 
@@ -548,9 +628,18 @@ def main(_):
 		loss = opt['loss_weights'][0]*SSIM(target, tf.nn.sigmoid(recon), mean=True)
 		loss += opt['loss_weights'][1]*mean_loss(tf.abs(target - tf.nn.sigmoid(recon)), mean=True)
 	
+	y = classifier(latents, opt)
+	ids = tf.to_int32(tf.string_to_number(ids))
+	class_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=ids, logits=latents))
+	combined_loss = 0.1*class_loss + loss
+	acc = tf.reduce_mean(tf.to_float(tf.equal(ids, tf.to_int32(tf.argmax(latents, axis=1)))))
+	
 	# Summaries
-	tf.summary.scalar('Loss', loss)
+	tf.summary.scalar('ReconstructionLoss', loss)
+	tf.summary.scalar('CombinedLoss', combined_loss)
 	tf.summary.scalar('LearningRate', lr)
+	tf.summary.scalar('ClassificationLoss', class_loss)
+	tf.summary.scalar('Accuracy', acc)
 	merged = tf.summary.merge_all()
 	input_summary = tf.summary.image('Inputs', x, max_outputs=3)
 	target_summary = tf.summary.image('Targets', target, max_outputs=3)
@@ -562,7 +651,7 @@ def main(_):
 
 	# Set inputs, outputs, and training ops
 	inputs = [lr, is_training]
-	outputs = [loss]
+	outputs = [combined_loss]
 	summaries = [merged, recon_summary, target_summary, input_summary]
 	ops = [train_op, global_step]
 	
