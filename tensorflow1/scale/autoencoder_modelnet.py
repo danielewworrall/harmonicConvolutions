@@ -180,8 +180,8 @@ def encoder(x, num_latents, is_training, reuse=False):
     l1 = convlayer(1, l0, 3, 8,     16,  2, reuse) # 16
     l2 = convlayer(2, l1, 3, 16,    32,  1, reuse) # 16
     l3 = convlayer(3, l2, 3, 32,    64,  2, reuse) # 8
-    l4 = convlayer(4, l3, 8, 64,   343,  1, reuse, padding='VALID')   
-    codes = convlayer(5, l4, 1, 343, num_latents, 1, reuse, nonlin=tf.identity) # 1 -> 1
+    l4 = convlayer(4, l3, 8, 64,   512,  1, reuse, padding='VALID')   
+    codes = convlayer(5, l4, 1, 512, num_latents, 1, reuse, nonlin=tf.identity) # 1 -> 1
     return codes
 
 
@@ -261,12 +261,13 @@ def decoder(codes, is_training, reuse=False):
     #l6 = upconvlayer(6,     l5,    5, 64,          32,  56, 2, reuse) # 28 -> 56
     #recons = upconvlayer(7, l6,    3, 32,          1,   56, 1, reuse, nonlin=tf.nn.sigmoid)
 
-    l1 = upconvlayer(1,     codes, 1, num_latents, 343, 1, reuse) 
-    l2 = upconvlayer_tr(2,  l1,    8, 343,         64,   8, 8, reuse) # 8
-    l3 = upconvlayer(3,     l2,    3, 64,          32,   16, reuse) # 8->16
-    l4 = upconvlayer(4,     l3,    3, 32,          16,   16, reuse)
-    l5 = upconvlayer(5,     l4,    3, 16,          16,   32, reuse)
-    recons_logits = upconvlayer(8, l5,3,16,         1,   32, reuse, nonlin=tf.identity, dobn=False)
+    l1 = upconvlayer(1,     codes, 1, num_latents, 512, 1, reuse) 
+    l2 = upconvlayer_tr(2,  l1,    8, 512,         128,  8, 8, reuse) # 8
+    l22= upconvlayer(3,     l2,    3, 128,         64,    8, reuse) # 8
+    l3 = upconvlayer(4,     l22,   3, 64,          32,   16, reuse) # 8->16
+    l4 = upconvlayer(5,     l3,    3, 32,          16,   16, reuse)
+    l5 = upconvlayer(6,     l4,    3, 16,          16,   32, reuse)
+    recons_logits = upconvlayer(7, l5,3,16,         1,   32, reuse, nonlin=tf.identity, dobn=False)
     recons = tf.sigmoid(recons_logits)
     return recons, recons_logits
 
@@ -612,8 +613,8 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 16
-    opt['n_epochs'] = 50
-    opt['lr_schedule'] = [45]
+    opt['n_epochs'] = 400
+    opt['lr_schedule'] = [390]
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
@@ -679,7 +680,7 @@ def main(_):
     merged = tf.summary.merge_all()
     
     # Build optimizer
-    optim = tf.train.AdamOptimizer(lr)
+    optim = tf.train.AdamOptimizer(lr, beta1=0.5)
     #optim = tf.train.MomentumOptimizer(lr, momentum=0.1, use_nesterov=True)
     train_op = optim.minimize(loss, global_step=global_step)
     
