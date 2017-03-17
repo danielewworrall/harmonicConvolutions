@@ -13,26 +13,37 @@ def dense_to_one_hot(labels_dense, num_classes=10):
   return labels_one_hot
 
 
-class_names = ['airplane', 'bathtub', 'bed','bench','bookshelf','bottle','bowl','car','chair','cone','cup', 'curtain', 'desk', 'door','dresser','flower_pot','glass_box','guitar','keyboard','lamp','laptop','mantel','monitor','night_stand','person', 'piano', 'plant', 'radio','range_hood','sink','sofa', 'stairs', 'stool', 'table','tent','toilet','tv_stand', 'vase', 'wardrobe', 'xbox']
+class_names_40 = ['airplane', 'bathtub', 'bed','bench','bookshelf','bottle','bowl','car','chair','cone','cup', 'curtain', 'desk', 'door','dresser','flower_pot','glass_box','guitar','keyboard','lamp','laptop','mantel','monitor','night_stand','person', 'piano', 'plant', 'radio','range_hood','sink','sofa', 'stairs', 'stool', 'table','tent','toilet','tv_stand', 'vase', 'wardrobe', 'xbox']
+
+class_names = ['bathtub', 'bed', 'chair', 'desk', 'dresser', 'monitor', 'night_stand', 'sofa', 'table', 'toilet']
 class_id = dict(zip(class_names, range(len(class_names))))
 
 class DataSet(object):
   def __init__(self, path, one_hot):
     reader = NpyTarReader(path)
-    self._num_examples = reader.num_files
-    print('num_examples: ' self._num_examples)
+    num_examples = reader.num_files
+
+    valid_counter = 0
     for ix, (x, name) in enumerate(reader):
         if ix==0:
             # read first file to get width, height, depth
             depth, height, width = x.shape # TODO not sure if order is correct
-            self._volumes = np.empty([self._num_examples, depth, height, width, 1], dtype=np.uint8)
-            self._labels = np.empty([self._num_examples], dtype=np.uint16)
-        self._volumes[ix,:,:,:,0] = x
+            volumes = np.empty([num_examples, depth, height, width, 1], dtype=np.uint8)
+            labels = -1000*np.ones([num_examples], dtype=np.int16)
         name = name[4:]
         name = name[:name.find('0')-1]
-        label = class_id[name]
-        self._labels[ix] = label
+        label = class_id.get(name)
+        if label is not None:
+            volumes[valid_counter,:,:,:,0] = x
+            labels[valid_counter] = label
+            valid_counter += 1
+        else:
+            print('Unexpected class name:', name)
+    self._volumes = volumes[0:valid_counter]
+    self._labels = labels[0:valid_counter]
+    self._num_examples = valid_counter
 
+    print('num_examples: ', self._num_examples)
     self.perm = np.arange(self._num_examples, dtype=np.int64)
     self._epochs_completed = 0
     self._index_in_epoch = 0
@@ -98,6 +109,7 @@ def read_data_sets(basedir, one_hot=False):
   return data_sets
   
 def test():
+  print(class_id)
   dataset = read_data_sets('~/Documents/Datasets/ModelNet/')
   #dataset = read_data_sets('~/ShapeNet/shapenetvox/ShapeNetVox32')
   tmp1, tmp2 = dataset.train.next_batch(2)
@@ -108,6 +120,10 @@ def test():
   print(np.amax(tmp1))
   print(np.amin(tmp1))
   print(tmp2)
+  print(np.unique(dataset.train._labels))
+  for i in (np.unique(dataset.train._labels)):
+      print(class_names[i])
+  
 
 def main(argv=None):  # pylint: disable=unused-argument
   test()
