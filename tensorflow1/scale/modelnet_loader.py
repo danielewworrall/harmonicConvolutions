@@ -125,8 +125,8 @@ def read_data_sets(basedir, one_hot=False):
   basedir = os.path.realpath(os.path.expanduser(basedir))
   print('Reading', basedir)
 
-  data_sets.train = DataSet(os.path.join(basedir, 'shapenet10_train_nr.tar'), one_hot, 0.01)
-  data_sets.validation = DataSet(os.path.join(basedir, 'shapenet10_train_nr.tar'), one_hot, 0.0, data_sets.train.sel)
+  data_sets.train = DataSet(os.path.join(basedir, 'shapenet10_train_nr.tar'), one_hot, 0.00)
+  #data_sets.validation = DataSet(os.path.join(basedir, 'shapenet10_train_nr.tar'), one_hot, 0.0, data_sets.train.sel)
   #data_sets.validation = data_sets.test # no decision based on validation sets
 
   data_sets.test = DataSet(os.path.join(basedir, 'shapenet10_test_nr.tar'), one_hot)
@@ -135,18 +135,26 @@ def read_data_sets(basedir, one_hot=False):
   
 def test():
   print(class_id)
-  #dataset = read_data_sets('~/Documents/Datasets/ModelNet/')
+  dataset = read_data_sets('~/Documents/Datasets/ModelNet/')
   #dataset = read_data_sets('~/ShapeNet/shapenetvox/ShapeNetVox32')
-  dataset = read_data_sets('~/scratch/Datasets/ModelNet/', True)
+  #dataset = read_data_sets('~/scratch/Datasets/ModelNet/', True)
   tmp1, tmp2 = dataset.train.next_batch(2)
   print(dataset.train.volumes.shape)
-  print(dataset.validation.volumes.shape)
+  #print(dataset.validation.volumes.shape)
   print(dataset.test.volumes.shape)
   print(tmp1.shape)
   print(np.amax(tmp1))
   print(np.amin(tmp1))
   print(tmp2)
   print(np.unique(dataset.train._labels))
+  y = np.bincount(dataset.train._labels)
+  #ii = np.nonzero(y)[0]
+  print(y)
+  print(sum(y))
+  yt = np.bincount(dataset.test._labels)
+  print(yt)
+  print(sum(yt))
+
   for i in (np.unique(dataset.train._labels)):
       print(class_names[i])
   
