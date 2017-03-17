@@ -32,6 +32,8 @@ flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
 flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
+flags.DEFINE_boolean('TEST', False, 'Evaluate model on the test set')
+
 ##---------------------
 
 ################ UTIL #################
@@ -271,23 +273,56 @@ def decoder(codes, is_training, reuse=False):
     recons = tf.sigmoid(recons_logits)
     return recons, recons_logits
 
+def classifier(codes, f_params_dim, is_training, reuse=False):
+    print('classifier')
+    print(codes)
+    batch_size = codes.get_shape().as_list()[0]
+    codes = tf.reshape(codes, [batch_size, 20, -1, f_params_dim])
+    #inv_codes = tf.reduce_sum(tf.square(codes), axis=2)
+    inv_codes_mat = tf.matmul(codes, tf.transpose(codes, [0, 1, 3, 2]))
+    print(inv_codes_mat)
+    #inv_codes = tf.reshape(inv_codes, [batch_size, -1])
+    inv_codes_mat = tf.reshape(inv_codes_mat, [batch_size, -1])
+    #feats = tf.concat([inv_codes, inv_codes_mat], 1)
+    feats = inv_codes_mat
+    inpdim = feats.get_shape().as_list()[1]
+    print(feats)
+
+    def mlplayer(i, inp, inpdim, outdim, reuse=False, nonlin=tf.nn.elu, dobn=False):
+        scopename = 'classifier_' + str(i)
+        print(scopename)
+        print(' input:', inp)
+        with tf.variable_scope(scopename) as scope:
+            if reuse:
+                scope.reuse_variables()
+            kernel = variable(scopename + '_kernel', [inpdim, outdim])
+            bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
+            linout = tf.matmul(inp, kernel)
+            linout = tf.nn.bias_add(linout, bias)
+            if dobn:
+                bnout = bn5d(linout, is_training, reuse=reuse)
+            else:
+                bnout = linout
+            out = nonlin(bnout, name=scopename + '_nonlin')
+        print(' out:', out)
+        return out
+    l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse)
+    y_logits = mlplayer(1, l1, 256, 10, nonlin=tf.identity, reuse=reuse)
+    return y_logits
+
+
+def classifier_loss(y_true, y_logits):
+    print('classifier_loss')
+    print(y_true)
+    print(y_logits)
+    return tf.nn.softmax_cross_entropy_with_logits(labels=y_true, logits=y_logits)
 
 def bernoulli_xentropy(target, output):
     """Cross-entropy for Bernoulli variables"""
     target = 3*target-1
     output = 0.8999*output + 0.1000
     wx_entropy = -(98.0*target*tf.log(output) + 2.0*(1. - target)*tf.log(1.0 - output))/100.0
-    #wx_entropy = -(target * tf.log(output) + (1.0 - target) * tf.log(1.0 - output))
-    return tf.reduce_mean(tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
-    #diff = tf.square(target-output)
-    #return tf.reduce_mean(tf.reduce_sum(diff, axis=(1,2,3,4)))
-
-#def bernoulli_xentropy(target, logits):
-#    batch_size = target.get_shape().as_list()[0]
-#    target = tf.reshape(target, [batch_size, -1])
-#    logits = tf.reshape(logits, [batch_size, -1])
-#    x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=target, logits=logits)
-#    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=1))
+    return tf.reduce_sum(wx_entropy, axis=(1,2,3,4))
 
 
 def spatial_transform(stl, x, transmat, paddings):
@@ -344,6 +379,17 @@ def get_2drotscalemat(theta, min_scale, max_scale):
     Rot[:,1,0] = np.sin(theta)
     Rot[:,1,1] = np.cos(theta)
     return Rot
+
+def identity_stl_transmats(batch_size):
+    stl_transmat_inp, _, _ = random_transmats(batch_size)
+    print(stl_transmat_inp.shape)
+    stl_transmat_inp[:,:,:] = 0.0
+    stl_transmat_inp[:,0,0] = 1.0
+    stl_transmat_inp[:,1,1] = 1.0
+    stl_transmat_inp[:,2,2] = 1.0
+    print(stl_transmat_inp[0,:,:])
+    return stl_transmat_inp.astype(np.float32)
+
 
 def random_transmats(batch_size):
     """ Random rotations in 3D
@@ -470,11 +516,11 @@ def bn5d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 ############################################
 
-def train(inputs, outputs, ops, opt, data):
+def test(inputs, outputs, ops, opt, data):
     """Training loop"""
     # Unpack inputs, outputs and ops
-    x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training = inputs
-    loss, merged, test_recon, recons = outputs
+    x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true = inputs
+    loss, merged, test_recon, recons, rec_loss, c_loss, y_logits, test_y_logits = outputs
     train_op = ops
     
     # For checkpoints
@@ -483,10 +529,107 @@ def train(inputs, outputs, ops, opt, data):
     
     saver = tf.train.Saver()
     sess = tf.Session()
+
+    # Initialize variables
+    if len(opt['load_path'])>0:
+        ckpt = tf.train.get_checkpoint_state(opt['load_path'])
+        print('loading from', opt['load_path'])
+
+        if ckpt and ckpt.model_checkpoint_path:
+            vars_to_restore = tf.global_variables()
+            res_saver = tf.train.Saver(vars_to_restore)
+            
+            # Restores from checkpoint
+            model_checkpoint_path = os.path.abspath(ckpt.model_checkpoint_path)
+            print(model_checkpoint_path)
+            res_saver.restore(sess, model_checkpoint_path)
+        else:
+            print('No checkpoint file found')
+            return
+    else:
+        return
     
+    # check test set
+    num_steps = data.test.num_steps(1)
+    test_acc = 0
+    cur_stl_params_in = identity_stl_transmats(1)
+    for step_i in xrange(num_steps):
+        cur_x, cur_y_true = data.test.next_batch(1)
+        feed_dict = {
+                    test_x: cur_x,
+                    test_stl_params_in: cur_stl_params_in, 
+                    is_training : False
+                }
+        y_pred = sess.run(tf.nn.softmax(test_y_logits), feed_dict=feed_dict)
+        test_y = (np.argmax(y_pred, axis=1))
+        test_y_pred = (np.argmax(cur_y_true, axis=1))
+        #if step_i==0:
+        print(test_y)
+        print(test_y_pred)
+
+        diff = (test_y - test_y_pred)==0
+        diff = diff.astype(np.float32)
+        test_acc += np.sum(diff)
+
+    print('correctly classified:', test_acc)
+    print('num_steps', num_steps)
+
+    
+
+def train(inputs, outputs, ops, opt, data):
+    """Training loop"""
+    # Unpack inputs, outputs and ops
+    x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true = inputs
+    loss, merged, test_recon, recons, rec_loss, c_loss, y_logits, test_y_logits = outputs
+    train_op = ops
+    
+    # For checkpoints
+    gs = 0
+    start = time.time()
+    
+    saver = tf.train.Saver()
+    sess = tf.Session()
+
     # Initialize variables
     init = tf.global_variables_initializer()
     sess.run(init)
+
+    if len(opt['load_path'])>0:
+        ckpt = tf.train.get_checkpoint_state(opt['load_path'])
+        print('loading from', opt['load_path'])
+
+        if ckpt and ckpt.model_checkpoint_path:
+            # Restore the moving average version of the learned variables for eval.
+            #variable_averages = tf.train.ExponentialMovingAverage(0.99)
+            vars_to_restore = tf.global_variables()
+
+            vars_to_pop = [var for var in vars_to_restore if 'classifier' in var.name]
+            for var in vars_to_pop:
+                vars_to_restore.remove(var)
+
+            #print('all vars')
+            #for var in tf.global_variables():
+            #    print(var.name)
+
+            #print('vars_to_restore')
+            #for var in vars_to_restore:
+            #    print(var.name)
+
+            #print('vars popped')
+            #for var in vars_to_pop:
+            #    print(var.name)
+
+            res_saver = tf.train.Saver(vars_to_restore)
+            
+            # Restores from checkpoint
+            model_checkpoint_path = os.path.abspath(ckpt.model_checkpoint_path)
+            print(model_checkpoint_path)
+            res_saver.restore(sess, model_checkpoint_path)
+        else:
+            print('No checkpoint file found')
+            return
+    else:
+        print('Training from scratch')
     
     train_writer = tf.summary.FileWriter(opt['summary_path'], sess.graph)
 
@@ -496,18 +639,50 @@ def train(inputs, outputs, ops, opt, data):
         exponent = sum([epoch > i for i in opt['lr_schedule']])
         current_lr = opt['lr']*np.power(0.1, exponent)
         
+
+        if opt['do_classify']:
+            # check validation accuracy
+            num_steps = data.validation.num_steps(opt['mb_size'])-1
+            val_acc = 0
+            for step_i in xrange(num_steps):
+                cur_stl_params_in, _, _ = random_transmats(opt['mb_size'])
+                cur_x, cur_y_true = data.validation.next_batch(opt['mb_size'])
+                feed_dict = {
+                            x: cur_x,
+                            y_true: cur_y_true,
+                            stl_params_in: cur_stl_params_in, 
+                            is_training : False
+                        }
+                y_pred = sess.run(tf.nn.softmax(y_logits), feed_dict=feed_dict)
+                val_y = (np.argmax(y_pred, axis=1))
+                val_y_pred = (np.argmax(cur_y_true, axis=1))
+                if step_i==0:
+                    print(val_y)
+                    print(val_y_pred)
+
+                diff = (val_y - val_y_pred)==0
+                diff = diff.astype(np.float32)
+                val_acc += np.sum(diff)/opt['mb_size']
+
+            val_acc /= num_steps
+            print('validation accuracy', val_acc)
+        
         # Train
         train_loss = 0.
+        train_rec_loss = 0.
+        train_c_loss = 0.
         train_acc = 0.
         # Run training steps
         num_steps = data.train.num_steps(opt['mb_size'])
         for step_i in xrange(num_steps):
             cur_stl_params_in, cur_stl_params_trg, cur_f_params = random_transmats(opt['mb_size'])
-            ops = [global_step, loss, merged, train_op]
-            cur_x, _ = data.train.next_batch(opt['mb_size'])
+            # TODO depends if doing classification
+            ops = [global_step, loss, merged, train_op, tf.reduce_mean(rec_loss), tf.reduce_mean(c_loss), tf.nn.softmax(y_logits)]
+            cur_x, cur_y_true = data.train.next_batch(opt['mb_size'])
             
             feed_dict = {
                         x: cur_x,
+                        y_true: cur_y_true,
                         stl_params_trg: cur_stl_params_trg, 
                         stl_params_in: cur_stl_params_in, 
                         f_params : cur_f_params, 
@@ -515,15 +690,19 @@ def train(inputs, outputs, ops, opt, data):
                         is_training : True
                     }
 
-            gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
+            gs, l, summary, __, rec_l, c_l, y_pred = sess.run(ops, feed_dict=feed_dict)
             train_loss += l
+            train_rec_loss += rec_l
+            train_c_loss += c_l
 
-            print('[{:03f}]: {:03f}'.format(float(step_i)/num_steps, l))
+            #print('[{:03f}]: {:03f}'.format(float(step_i)/num_steps, l))
+            print('[{:03f}]: train_loss: {:03f}. rec_loss: {:03f}. c_loss: {:03f}.'.format(float(step_i)/num_steps, l, rec_l, c_l))
 
             assert not np.isnan(l), 'Model diverged with loss = NaN'
 
             # Summary writers
             train_writer.add_summary(summary, gs)
+
 
         if epoch % FLAGS.save_step == 0:
             cur_recons = sess.run(recons, feed_dict=feed_dict)
@@ -536,11 +715,13 @@ def train(inputs, outputs, ops, opt, data):
             imsave(save_name + '_w.png', tile_image_w) 
 
         train_loss /= num_steps
-        print('[{:03d}]: {:03f}'.format(epoch, train_loss))
+        train_rec_loss /= num_steps
+        train_c_loss /= num_steps
+        print('[{:03d}]: train_loss: {:03f}. rec_loss: {:03f}. c_loss: {:03f}.'.format(epoch, train_loss, train_rec_loss, train_c_loss))
 
         # Save model
-        if epoch % FLAGS.save_step == 0:
-            path = saver.save(sess, opt['save_path'], epoch)
+        if epoch % FLAGS.save_step == 0 or epoch+1==opt['n_epochs']:
+            path = saver.save(sess, opt['save_path'] + 'model.ckpt', epoch)
             print('Saved model to ' + path)
         
         # Validation
@@ -549,7 +730,7 @@ def train(inputs, outputs, ops, opt, data):
             max_angles = 20
             #pick a random initial transformation
             cur_stl_params_in, _, cur_f_params = random_transmats(1)
-            cur_x, _ = data.validation.next_batch(1)
+            cur_x, cur_y_true = data.validation.next_batch(1)
             fangles = np.linspace(0., np.pi, num=max_angles)
             fscales = np.linspace(0.8, 1.0, num=max_angles)
 
@@ -587,7 +768,6 @@ def train(inputs, outputs, ops, opt, data):
 
             # TODO save binvox
 
-
 def main(_):
     opt = {}
     """Main loop"""
@@ -613,9 +793,9 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 16
-    opt['n_epochs'] = 400
-    opt['lr_schedule'] = [390]
-    opt['lr'] = 1e-3
+    opt['n_epochs'] = 50
+    opt['lr_schedule'] = [15, 30, 40]
+    opt['lr'] = 1e-4
 
     opt['vol_size'] = [32,32,32]
     pad_size = 0#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
@@ -628,9 +808,13 @@ def main(_):
     opt['num_latents'] = opt['f_params_dim']*100
 
 
-    opt['flag'] = 'modelnet'
+    opt['flag'] = 'modelnet_cont_classify'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
-    opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/model.ckpt'.format(opt['flag'])
+    opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
+    
+    ###
+    opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
+    opt['do_classify'] = True
     
     #check and clear directories
     checkFolder(opt['summary_path'])
@@ -645,11 +829,14 @@ def main(_):
     # Placeholders
     # batch_size, depth, height, width, in_channels
     x = tf.placeholder(tf.float32, [opt['mb_size'],opt['vol_size'][0],opt['vol_size'][1],opt['vol_size'][2], opt['color_chn']], name='x')
+    y_true = tf.placeholder(tf.int32, [opt['mb_size'],10], name='y_true')
+
     stl_params_in  = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_size'],opt['stl_size']], name='stl_params_in')
     stl_params_trg = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_size'],opt['stl_size']], name='stl_params_trg')
     f_params = tf.placeholder(tf.float32, [opt['mb_size'], opt['f_params_dim'], opt['f_params_dim']], name='f_params')
 
     test_x = tf.placeholder(tf.float32, [1,opt['vol_size'][0],opt['vol_size'][1],opt['vol_size'][2],opt['color_chn']], name='test_x')
+    test_y_true = tf.placeholder(tf.int32, [1,10], name='test_y_true')
     test_stl_params_in  = tf.placeholder(tf.float32, [1,opt['stl_size'],opt['stl_size']], name='test_stl_params_in')
     val_f_params = tf.placeholder(tf.float32, [1, opt['f_params_dim'], opt['f_params_dim']], name='val_f_params') 
     paddings = tf.convert_to_tensor(np.array([[0,0], [pad_size,pad_size], [pad_size,pad_size], [pad_size, pad_size], [0,0]]), dtype=tf.int32)
@@ -665,11 +852,17 @@ def main(_):
     
     # Test model
     test_x_in = spatial_transform(stl, test_x, test_stl_params_in, paddings)
-    test_recon, __, _ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
-    
+    test_recon, test_codes, _ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
+
     # LOSS
-    loss = bernoulli_xentropy(x_trg, recons)
-    #loss = bernoulli_xentropy(x_trg, recons_logits)
+    rec_loss = bernoulli_xentropy(x_trg, recons)
+    c_loss = 0
+
+    if opt['do_classify']:
+        y_logits = classifier(codes, opt['f_params_dim'], is_training) 
+        test_y_logits = classifier(test_codes, opt['f_params_dim'], is_training, reuse=True)
+        c_loss = 10000*classifier_loss(y_true, y_logits)
+    loss = tf.reduce_mean(rec_loss + c_loss)
     
     # Summaries
     tf_vol_summary('recons', recons) 
@@ -685,12 +878,16 @@ def main(_):
     train_op = optim.minimize(loss, global_step=global_step)
     
     # Set inputs, outputs, and training ops
-    inputs = [x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training]
-    outputs = [loss, merged, test_recon, recons]
+    inputs = [x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true]
+    outputs = [loss, merged, test_recon, recons, rec_loss, c_loss, y_logits, test_y_logits]
     ops = [train_op]
     
+    print(FLAGS.TEST)
+    if FLAGS.TEST:
+        return test(inputs, outputs, ops, opt, data)
     # Train
     return train(inputs, outputs, ops, opt, data)
+
 
 if __name__ == '__main__':
     tf.app.run()
