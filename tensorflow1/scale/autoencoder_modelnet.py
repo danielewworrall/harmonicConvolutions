@@ -806,15 +806,16 @@ def main(_):
     opt['num_latents'] = opt['f_params_dim']*100
 
     #opt['flag'] = 'modelnet_classify100_cont'
-    #opt['flag'] = 'modelnet_classify1000_cont'
-    opt['flag'] = 'modelnet_classify10000_scratch'
+    opt['flag'] = 'modelnet_classify1000_scratch'
+    #opt['flag'] = 'modelnet_classify10000_scratch'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
     ###
     opt['load_path'] = ''
-    #opt['load_path'] = ''dir_ + '/checkpoints/autotrain_modelnet_cont/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify100_scratch/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_scratch/'
     opt['do_classify'] = True
     
