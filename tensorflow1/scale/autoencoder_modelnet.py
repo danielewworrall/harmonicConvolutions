@@ -312,7 +312,7 @@ def classifier_loss(y_true, y_logits, class_weight):
     print(class_weight)
     print(y_true)
     print(y_logits)
-    y_logits = y_logits/class_weight
+    y_logits = y_logits/(0.01 + class_weight)
     return tf.nn.softmax_cross_entropy_with_logits(labels=y_true, logits=y_logits)
 
 def bernoulli_xentropy(target, output):
@@ -792,7 +792,7 @@ def main(_):
     
     opt['mb_size'] = 16
     opt['n_epochs'] = 200
-    opt['lr_schedule'] = [2, 50,150]
+    opt['lr_schedule'] = [10, 50,150]
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
@@ -805,12 +805,17 @@ def main(_):
     opt['f_params_dim'] = 2# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
     opt['num_latents'] = opt['f_params_dim']*100
 
-    opt['flag'] = 'modelnet_cont_classify'
+    #opt['flag'] = 'modelnet_classify100_cont'
+    #opt['flag'] = 'modelnet_classify1000_cont'
+    opt['flag'] = 'modelnet_classify10000_scratch'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
     ###
-    opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
+    opt['load_path'] = ''
+    #opt['load_path'] = ''dir_ + '/checkpoints/autotrain_modelnet_cont/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify100_scratch/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_scratch/'
     opt['do_classify'] = True
     
     #check and clear directories
@@ -858,13 +863,15 @@ def main(_):
     if opt['do_classify']:
         y_logits = classifier(codes, opt['f_params_dim'], is_training) 
         test_y_logits = classifier(test_codes, opt['f_params_dim'], is_training, reuse=True)
-        c_loss = 1000*classifier_loss(y_true, y_logits, data.train.class_balance)
+        c_loss = 10000*classifier_loss(y_true, y_logits, data.train.class_balance)
     loss = tf.reduce_mean(rec_loss + c_loss)
     
     # Summaries
     tf_vol_summary('recons', recons) 
     tf_vol_summary('inputs', x_in) 
     tf_vol_summary('targets', x_trg) 
+    tf.summary.scalar('Rec Loss', tf.reduce_mean(rec_loss))
+    tf.summary.scalar('C Loss', tf.reduce_mean(c_loss))
     tf.summary.scalar('Loss', loss)
     tf.summary.scalar('LearningRate', lr)
     merged = tf.summary.merge_all()
