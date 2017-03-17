@@ -30,8 +30,8 @@ flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on late
 flags.DEFINE_integer('save_step', 10, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
-flags.DEFINE_boolean('Dopey', True, 'Dopey execution environment')
-flags.DEFINE_boolean('DaniyarSleepy', False, 'Dopey execution environment')
+flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
+flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
 ##---------------------
 
 ################ UTIL #################
@@ -134,7 +134,10 @@ def autoencoder(x, num_latents, f_params, is_training, reuse=False):
             code_shape = codes.get_shape()
             batch_size = code_shape.as_list()[0]
             codes = tf.reshape(codes, [batch_size, -1])
+            print(f_params)
+            print(codes)
             codes_transformed = el.feature_transform_matrix_n(codes, codes.get_shape(), f_params)
+            print(codes_transformed)
             codes_transformed = tf.reshape(codes_transformed, code_shape)
         with tf.variable_scope("decoder", reuse=reuse) as scope:
             recons, recons_logits = decoder(codes_transformed, is_training, reuse=reuse)
@@ -142,7 +145,6 @@ def autoencoder(x, num_latents, f_params, is_training, reuse=False):
 
 
 def variable(name, shape=None, initializer=tf.contrib.layers.xavier_initializer_conv2d(uniform=False), trainable=True):
-    #tf.random_normal_initializer(stddev=0.0001)
     #tf.constant_initializer(0.0)
     with tf.device('/gpu:0'):
         var = tf.get_variable(name, shape, initializer=initializer, trainable=trainable)
@@ -174,15 +176,12 @@ def encoder(x, num_latents, is_training, reuse=False):
         print(' out:', out)
         return out
 
-    l0 = convlayer(0, x,  3, 1,      8,  1, reuse)                   #  48-46
-    l1 = convlayer(1, l0, 3, 8,     16,  2, reuse)                   #  46-24
-    l2 = convlayer(2, l1, 3, 16,    16,  1, reuse)                  #  24-24
-    l3 = convlayer(3, l2, 3, 16,    32,  2, reuse)                   #  24-12
-    l4 = convlayer(4, l3, 3, 32,    32,  1, reuse)                  #  12-12
-    l5 = convlayer(5, l4, 3, 32,    64,  2, reuse)                   #  12-6
-    l6 = convlayer(6, l5, 3, 64,    64,  1, reuse)                   #  6-6
-    l7 = convlayer(7, l6, 6, 64,   512,  1, reuse, padding='VALID')  #  6-1 
-    codes = convlayer(8, l7, 1, 512, num_latents, 1, reuse, nonlin=tf.identity, dobn=False) # 1 -> 1
+    l0 = convlayer(0, x,  3, 1,     8,  1, reuse) # 32
+    l1 = convlayer(1, l0, 3, 8,     16,  2, reuse) # 16
+    l2 = convlayer(2, l1, 3, 16,    32,  1, reuse) # 16
+    l3 = convlayer(3, l2, 3, 32,    64,  2, reuse) # 8
+    l4 = convlayer(4, l3, 8, 64,   512,  1, reuse, padding='VALID')   
+    codes = convlayer(5, l4, 1, 512, num_latents, 1, reuse, nonlin=tf.identity) # 1 -> 1
     return codes
 
 
@@ -262,61 +261,34 @@ def decoder(codes, is_training, reuse=False):
     #l6 = upconvlayer(6,     l5,    5, 64,          32,  56, 2, reuse) # 28 -> 56
     #recons = upconvlayer(7, l6,    3, 32,          1,   56, 1, reuse, nonlin=tf.nn.sigmoid)
 
-    l1 = upconvlayer(1,             codes, 1, num_latents, 512,   1, reuse) 
-    l2 = upconvlayer_tr(2,          l1,    6, 512,         64,    6, 6, reuse)
-    l3 = upconvlayer(3,             l2,    3, 64,          64,    6, reuse)
-    l4 = upconvlayer(4,             l3,    3, 64,          64,   12, reuse)
-    l5 = upconvlayer(5,             l4,    3, 64,          32,   12, reuse)
-    l6 = upconvlayer(6,             l5,    3, 32,          32,   24, reuse)
-    l7 = upconvlayer(7,             l6,    3, 32,          16,   24, reuse)
-    l8 = upconvlayer(8,             l7,    3, 16,          16,   48, reuse)
-    recons_logits = upconvlayer(9,  l8,    3, 16,          1,    48, reuse, nonlin=tf.identity, dobn=False)
+    l1 = upconvlayer(1,     codes, 1, num_latents, 512, 1, reuse) 
+    l2 = upconvlayer_tr(2,  l1,    8, 512,         128,  8, 8, reuse) # 8
+    l22= upconvlayer(3,     l2,    3, 128,         64,    8, reuse) # 8
+    l3 = upconvlayer(4,     l22,   3, 64,          32,   16, reuse) # 8->16
+    l4 = upconvlayer(5,     l3,    3, 32,          16,   16, reuse)
+    l5 = upconvlayer(6,     l4,    3, 16,          16,   32, reuse)
+    recons_logits = upconvlayer(7, l5,3,16,         1,   32, reuse, nonlin=tf.identity, dobn=False)
     recons = tf.sigmoid(recons_logits)
     return recons, recons_logits
 
-def ssim3d(x, y):
-    C1 = 0.01 ** 2
-    C2 = 0.03 ** 2
-
-    def avg_pool3d(x, kw, stride, padding='VALID'):
-        return tf.nn.avg_pool3d(x,
-                          ksize=[1, kw, kw, kw, 1],
-                          strides=[1, stride, stride, stride, 1],
-                          padding=padding)
-
-    x = avg_pool3d(x, 3, 1, 'VALID')
-    y = avg_pool3d(y, 3, 1, 'VALID')
-
-    mu_x = avg_pool3d(x, 3, 1, 'VALID')
-    mu_y = avg_pool3d(y, 3, 1, 'VALID')
-
-    sigma_x  = avg_pool3d(x ** 2, 3, 1, 'VALID') - mu_x ** 2
-    sigma_y  = avg_pool3d(y ** 2, 3, 1, 'VALID') - mu_y ** 2
-    sigma_xy = avg_pool3d(x * y , 3, 1, 'VALID') - mu_x * mu_y
-
-    SSIM_n = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
-    SSIM_d = (mu_x ** 2 + mu_y ** 2 + C1) * (sigma_x + sigma_y + C2)
-    SSIM = SSIM_n / SSIM_d
-
-    cost = tf.clip_by_value((1 - SSIM) / 2, 0, 1)
-    print(cost)
-    cost = tf.reduce_sum(cost, axis=(1,2,3,4))
-    return cost
-
-def diffl1(x,y):
-    batch_size = x.get_shape().as_list()[0]
-    x = tf.reshape(x, [batch_size, -1])
-    y = tf.reshape(y, [batch_size, -1])
-    return (tf.reduce_sum(tf.abs(x-y), axis=1))
 
 def bernoulli_xentropy(target, output):
     """Cross-entropy for Bernoulli variables"""
     target = 3*target-1
     output = 0.8999*output + 0.1000
-    wx_entropy = -(98.0 * target * tf.log(output) + 2.0*(1.0 - target) * tf.log(1.0 - output))/100.0
-    return (tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
+    wx_entropy = -(98.0*target*tf.log(output) + 2.0*(1. - target)*tf.log(1.0 - output))/100.0
+    #wx_entropy = -(target * tf.log(output) + (1.0 - target) * tf.log(1.0 - output))
+    return tf.reduce_mean(tf.reduce_sum(wx_entropy, axis=(1,2,3,4)))
     #diff = tf.square(target-output)
     #return tf.reduce_mean(tf.reduce_sum(diff, axis=(1,2,3,4)))
+
+#def bernoulli_xentropy(target, logits):
+#    batch_size = target.get_shape().as_list()[0]
+#    target = tf.reshape(target, [batch_size, -1])
+#    logits = tf.reshape(logits, [batch_size, -1])
+#    x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=target, logits=logits)
+#    return tf.reduce_mean(tf.reduce_sum(x_entropy, axis=1))
+
 
 def spatial_transform(stl, x, transmat, paddings):
     x_padded = tf.pad(x, paddings, mode='CONSTANT')
@@ -379,13 +351,13 @@ def random_transmats(batch_size):
     min_scale = 1.0
     max_scale = 1.0
 
-    if False:
+    if True:
         params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-        params_inp_rot[:,[0]] = 0.0
+        params_inp_rot[:,[1,2]] = 0.0
         params_inp_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
 
         params_trg_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-        params_trg_rot[:,[0]] = 0.0
+        params_trg_rot[:,[1,2]] = 0.0
         params_trg_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
     else:
         params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
@@ -405,13 +377,21 @@ def random_transmats(batch_size):
     # scale and rot because inverse warp in stl
     stl_transmat_inp = np.matmul(inp_3dscalemat, inp_3drotmat)
     stl_transmat_trg = np.matmul(trg_3dscalemat, trg_3drotmat)
-    
-    f_params_inp = np.zeros([batch_size, 3, 3])
+
+    f_params_inp = np.zeros([batch_size, 2, 2])
     # was like this:
     #cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
     cur_rotmat = np.matmul(trg_3drotmat.transpose([0,2,1]), inp_3drotmat)
+    #print(cur_rotmat[0,:,:])
     f_params_inp = set_f_params_rot(f_params_inp, cur_rotmat)
     #print(f_params_inp[0,:,:])
+    
+    #f_params_inp = np.zeros([batch_size, 3, 3])
+    ## was like this:
+    ##cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
+    #cur_rotmat = np.matmul(trg_3drotmat.transpose([0,2,1]), inp_3drotmat)
+    #f_params_inp = set_f_params_rot(f_params_inp, cur_rotmat)
+    ##print(f_params_inp[0,:,:])
 
     # TODO
     #for i in xrange(3):
@@ -423,7 +403,7 @@ def random_transmats(batch_size):
     return stl_transmat_inp.astype(np.float32), stl_transmat_trg.astype(np.float32), f_params_inp.astype(np.float32)
 
 def set_f_params_rot(f_params, rotmat):
-    f_params[:,0:3,0:3] = rotmat
+    f_params[:,0:2,0:2] = rotmat[:,1:3,1:3]
     return f_params
 
 def set_f_params_scale(f_params, i, rotmat):
@@ -573,7 +553,7 @@ def train(inputs, outputs, ops, opt, data):
             fangles = np.linspace(0., np.pi, num=max_angles)
             fscales = np.linspace(0.8, 1.0, num=max_angles)
 
-            rot_ax = 1#np.random.randint(0, 3)
+            rot_ax = 0#np.random.randint(0, 3)
             for j in xrange(max_angles):
                 cur_f_params_j = update_f_params(cur_f_params, 0, rot_ax, fangles[j])
                 do_scale_ax = np.random.rand(3)>0.5
@@ -633,22 +613,22 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 16
-    opt['n_epochs'] = 200
-    opt['lr_schedule'] = [190]
+    opt['n_epochs'] = 400
+    opt['lr_schedule'] = [390]
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
-    pad_size = 8#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
+    pad_size = 0#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
     opt['outsize'] = [i + 2*pad_size for i in opt['vol_size']]
     stl = AffineVolumeTransformer(opt['outsize'])
     opt['color_chn'] = 1
     opt['stl_size'] = 3 # no translation
     # TODO
-    opt['f_params_dim'] = 3# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
+    opt['f_params_dim'] = 2# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
     opt['num_latents'] = opt['f_params_dim']*100
 
 
-    opt['flag'] = 'shapenet_l1ssim'
+    opt['flag'] = 'modelnet'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/model.ckpt'.format(opt['flag'])
     
@@ -688,9 +668,8 @@ def main(_):
     test_recon, __, _ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
     
     # LOSS
-    #loss = tf.reduce_mean(bernoulli_xentropy(x_trg, recons))
-    #loss = tf.reduce_mean(0.5*diffl1(x_trg, recons) + 0.5*ssim3d(x_trg, recons))
-    loss = tf.reduce_mean(0.5*bernoulli_xentropy(x_trg, recons) + 0.5*ssim3d(x_trg, recons))
+    loss = bernoulli_xentropy(x_trg, recons)
+    #loss = bernoulli_xentropy(x_trg, recons_logits)
     
     # Summaries
     tf_vol_summary('recons', recons) 
@@ -701,7 +680,8 @@ def main(_):
     merged = tf.summary.merge_all()
     
     # Build optimizer
-    optim = tf.train.AdamOptimizer(lr)
+    optim = tf.train.AdamOptimizer(lr, beta1=0.5)
+    #optim = tf.train.MomentumOptimizer(lr, momentum=0.1, use_nesterov=True)
     train_op = optim.minimize(loss, global_step=global_step)
     
     # Set inputs, outputs, and training ops
