@@ -20,7 +20,7 @@ class DataSet(object):
   def __init__(self, path, one_hot):
     reader = NpyTarReader(path)
     self._num_examples = reader.num_files
-    print('num_examples: ' self._num_examples)
+    print('num_examples: ', self._num_examples)
     for ix, (x, name) in enumerate(reader):
         if ix==0:
             # read first file to get width, height, depth

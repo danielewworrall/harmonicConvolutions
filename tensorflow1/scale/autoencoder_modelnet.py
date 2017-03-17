@@ -271,6 +271,8 @@ def decoder(codes, is_training, reuse=False):
     recons = tf.sigmoid(recons_logits)
     return recons, recons_logits
 
+def classifier_loss(y_true, y_logits):
+    return tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y_true, logits=y_logits))
 
 def bernoulli_xentropy(target, output):
     """Cross-entropy for Bernoulli variables"""
@@ -470,7 +472,7 @@ def bn5d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 ############################################
 
-def train(inputs, outputs, ops, opt, data):
+def train(inputs, outputs, ops, opt, data, cont_train=False):
     """Training loop"""
     # Unpack inputs, outputs and ops
     x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training = inputs
@@ -485,8 +487,27 @@ def train(inputs, outputs, ops, opt, data):
     sess = tf.Session()
     
     # Initialize variables
-    init = tf.global_variables_initializer()
-    sess.run(init)
+    if cont_train:
+        # TODO
+        ckpt = tf.train.get_checkpoint_state(opt['load_path'])
+        print('loading from', opt['load_path'])
+
+        if ckpt and ckpt.model_checkpoint_path:
+            # Restore the moving average version of the learned variables for eval.
+            #variable_averages = tf.train.ExponentialMovingAverage(0.99)
+            variables_to_restore = tf.global_variables()
+            res_saver = tf.train.Saver(variables_to_restore)
+            
+            # Restores from checkpoint
+            res_saver.restore(sess, ckpt.model_checkpoint_path)
+            save_epoch_shift = opt['n_epochs']
+        else:
+            print('No checkpoint file found')
+            return
+    else:
+        print('Training from scratch')
+        init = tf.global_variables_initializer()
+        sess.run(init)
     
     train_writer = tf.summary.FileWriter(opt['summary_path'], sess.graph)
 
@@ -539,8 +560,8 @@ def train(inputs, outputs, ops, opt, data):
         print('[{:03d}]: {:03f}'.format(epoch, train_loss))
 
         # Save model
-        if epoch % FLAGS.save_step == 0:
-            path = saver.save(sess, opt['save_path'], epoch)
+        if epoch % FLAGS.save_step == 0 or epoch+1==opt['n_epochs']:
+            path = saver.save(sess, opt['save_path'] + '/model.ckpt', save_epoch_shift + epoch)
             print('Saved model to ' + path)
         
         # Validation
@@ -587,7 +608,6 @@ def train(inputs, outputs, ops, opt, data):
 
             # TODO save binvox
 
-
 def main(_):
     opt = {}
     """Main loop"""
@@ -613,9 +633,9 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 16
-    opt['n_epochs'] = 400
-    opt['lr_schedule'] = [390]
-    opt['lr'] = 1e-3
+    opt['n_epochs'] = 100
+    opt['lr_schedule'] = [90]
+    opt['lr'] = 1e-4
 
     opt['vol_size'] = [32,32,32]
     pad_size = 0#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
@@ -628,9 +648,10 @@ def main(_):
     opt['num_latents'] = opt['f_params_dim']*100
 
 
-    opt['flag'] = 'modelnet'
+    opt['flag'] = 'modelnet_cont'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
-    opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/model.ckpt'.format(opt['flag'])
+    opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
+    opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet/'
     
     #check and clear directories
     checkFolder(opt['summary_path'])
@@ -645,11 +666,14 @@ def main(_):
     # Placeholders
     # batch_size, depth, height, width, in_channels
     x = tf.placeholder(tf.float32, [opt['mb_size'],opt['vol_size'][0],opt['vol_size'][1],opt['vol_size'][2], opt['color_chn']], name='x')
+    y_true = tf.placeholder(tf.float32, [opt['mb_size']], name='y_true')
+
     stl_params_in  = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_size'],opt['stl_size']], name='stl_params_in')
     stl_params_trg = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_size'],opt['stl_size']], name='stl_params_trg')
     f_params = tf.placeholder(tf.float32, [opt['mb_size'], opt['f_params_dim'], opt['f_params_dim']], name='f_params')
 
     test_x = tf.placeholder(tf.float32, [1,opt['vol_size'][0],opt['vol_size'][1],opt['vol_size'][2],opt['color_chn']], name='test_x')
+    test_y_true = tf.placeholder(tf.float32, [1], name='test_y_true')
     test_stl_params_in  = tf.placeholder(tf.float32, [1,opt['stl_size'],opt['stl_size']], name='test_stl_params_in')
     val_f_params = tf.placeholder(tf.float32, [1, opt['f_params_dim'], opt['f_params_dim']], name='val_f_params') 
     paddings = tf.convert_to_tensor(np.array([[0,0], [pad_size,pad_size], [pad_size,pad_size], [pad_size, pad_size], [0,0]]), dtype=tf.int32)
@@ -666,9 +690,11 @@ def main(_):
     # Test model
     test_x_in = spatial_transform(stl, test_x, test_stl_params_in, paddings)
     test_recon, __, _ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
+
+    y_logits = classifier(codes, is_training)
     
     # LOSS
-    loss = bernoulli_xentropy(x_trg, recons)
+    loss = bernoulli_xentropy(x_trg, recons) + classifier_loss(y_true, y_logits)
     #loss = bernoulli_xentropy(x_trg, recons_logits)
     
     # Summaries
@@ -690,7 +716,8 @@ def main(_):
     ops = [train_op]
     
     # Train
-    return train(inputs, outputs, ops, opt, data)
+    return train(inputs, outputs, ops, opt, data, True)
+
 
 if __name__ == '__main__':
     tf.app.run()
