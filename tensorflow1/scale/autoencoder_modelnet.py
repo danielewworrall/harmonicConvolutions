@@ -277,7 +277,7 @@ def classifier(codes, f_params_dim, is_training, reuse=False):
     print('classifier')
     print(codes)
     batch_size = codes.get_shape().as_list()[0]
-    codes = tf.reshape(codes, [batch_size, 20, -1, f_params_dim])
+    codes = tf.reshape(codes, [batch_size, 5, -1, f_params_dim])
     #inv_codes = tf.reduce_sum(tf.square(codes), axis=2)
     inv_codes_mat = tf.matmul(codes, tf.transpose(codes, [0, 1, 3, 2]))
     print(inv_codes_mat)
@@ -288,7 +288,7 @@ def classifier(codes, f_params_dim, is_training, reuse=False):
     inpdim = feats.get_shape().as_list()[1]
     print(feats)
 
-    def mlplayer(i, inp, inpdim, outdim, reuse=False, nonlin=tf.nn.elu, dobn=False):
+    def mlplayer(i, inp, inpdim, outdim, reuse=False, nonlin=tf.nn.elu):
         scopename = 'classifier_' + str(i)
         print(scopename)
         print(' input:', inp)
@@ -299,11 +299,7 @@ def classifier(codes, f_params_dim, is_training, reuse=False):
             bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
             linout = tf.matmul(inp, kernel)
             linout = tf.nn.bias_add(linout, bias)
-            if dobn:
-                bnout = bn5d(linout, is_training, reuse=reuse)
-            else:
-                bnout = linout
-            out = nonlin(bnout, name=scopename + '_nonlin')
+            out = nonlin(linout, name=scopename + '_nonlin')
         print(' out:', out)
         return out
     l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse)
@@ -311,10 +307,12 @@ def classifier(codes, f_params_dim, is_training, reuse=False):
     return y_logits
 
 
-def classifier_loss(y_true, y_logits):
+def classifier_loss(y_true, y_logits, class_weight):
     print('classifier_loss')
+    print(class_weight)
     print(y_true)
     print(y_logits)
+    y_logits = y_logits/class_weight
     return tf.nn.softmax_cross_entropy_with_logits(labels=y_true, logits=y_logits)
 
 def bernoulli_xentropy(target, output):
@@ -640,7 +638,7 @@ def train(inputs, outputs, ops, opt, data):
         current_lr = opt['lr']*np.power(0.1, exponent)
         
 
-        if opt['do_classify']:
+        if opt['do_classify'] and epoch%2==0:
             # check validation accuracy
             num_steps = data.validation.num_steps(opt['mb_size'])-1
             val_acc = 0
@@ -793,9 +791,9 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 16
-    opt['n_epochs'] = 50
-    opt['lr_schedule'] = [15, 30, 40]
-    opt['lr'] = 1e-4
+    opt['n_epochs'] = 200
+    opt['lr_schedule'] = [2, 50,150]
+    opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
     pad_size = 0#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
@@ -806,7 +804,6 @@ def main(_):
     # TODO
     opt['f_params_dim'] = 2# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
     opt['num_latents'] = opt['f_params_dim']*100
-
 
     opt['flag'] = 'modelnet_cont_classify'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
@@ -861,7 +858,7 @@ def main(_):
     if opt['do_classify']:
         y_logits = classifier(codes, opt['f_params_dim'], is_training) 
         test_y_logits = classifier(test_codes, opt['f_params_dim'], is_training, reuse=True)
-        c_loss = 10000*classifier_loss(y_true, y_logits)
+        c_loss = 1000*classifier_loss(y_true, y_logits, data.train.class_balance)
     loss = tf.reduce_mean(rec_loss + c_loss)
     
     # Summaries
@@ -873,7 +870,7 @@ def main(_):
     merged = tf.summary.merge_all()
     
     # Build optimizer
-    optim = tf.train.AdamOptimizer(lr, beta1=0.5)
+    optim = tf.train.AdamOptimizer(lr)
     #optim = tf.train.MomentumOptimizer(lr, momentum=0.1, use_nesterov=True)
     train_op = optim.minimize(loss, global_step=global_step)
     
