@@ -35,10 +35,11 @@ def run(n_trials):
 			
 			opt['lr'] = np.power(10.,-3. + 0.2*np.random.rand())
 			opt['equivariant_weight'] = 0.6 + 0.25*(2.*(np.random.rand()-0.5))
-			opt['n_mid'] = int(10 + 2*np.random.randint(3))
+			opt['n_mid'] = int(20 + 2*np.random.randint(3))
 			opt['n_mid_class'] = opt['n_mid']
 			opt['n_layers_deconv'] = int(3 + 2*np.random.randint(2))
 			opt['n_layers_class'] = int(2 + 2*np.random.randint(2))
+			opt['dropout'] = 0.25*np.random.rand()
 			
 			opt['summary_path'] = dir_ + 'hyperopt/invariant/summaries/conv_rot_mnist_{:.0e}_{:s}'.format(opt['equivariant_weight'], 'hp')
 			opt['save_path'] = dir_ + 'hyperopt/invariant/checkpoints/conv_rot_mnist_{:.0e}_{:s}/model.ckpt'.format(opt['equivariant_weight'], 'hp')
@@ -55,8 +56,8 @@ def run(n_trials):
 		
 		# Save
 		test_accs.append(test_acc)
-		np.save('./hyperopt/invariant/test_accs1.npy', test_acc)
-		with open('./hyperopt/invariant/test_options1.pkl','w') as fp:
+		np.save('./hyperopt/invariant/test_accs3.npy', test_acc)
+		with open('./hyperopt/invariant/test_options3.pkl','w') as fp:
 			pkl.dump(options, fp, protocol=pkl.HIGHEST_PROTOCOL)
 		
 		# Best

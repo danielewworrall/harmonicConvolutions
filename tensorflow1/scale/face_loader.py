@@ -80,8 +80,10 @@ def read_my_file_format(filename_queue, im_size, opt):
 	img2 = tf.image.resize_images(img2, opt['im_size'], method=tf.image.ResizeMethod.AREA)
 	img1.set_shape([opt['im_size'][0],opt['im_size'][1],opt['color']])
 	img2.set_shape([opt['im_size'][0],opt['im_size'][1],opt['color']])
+	
+	id_ = tf.string_split([split_address.values[5]], delimiter='face').values[0]
 			
-	return img1, img2, geometry, lighting, d_params
+	return img1, img2, geometry, lighting, d_params, id_
 
 
 def get_batches(files, shuffle, opt, min_after_dequeue=1000, num_epochs=None):
@@ -91,16 +93,16 @@ def get_batches(files, shuffle, opt, min_after_dequeue=1000, num_epochs=None):
 	with tf.name_scope('Queue_runners'):
 		filename_queue = tf.train.string_input_producer(files, shuffle=shuffle,
 																		num_epochs=num_epochs)
-		img1, img2, geometry, lighting, d_params = read_my_file_format(filename_queue, im_size, opt)
+		img1, img2, geometry, lighting, d_params, paired_id = read_my_file_format(filename_queue, im_size, opt)
 		
 		num_threads = 4
 		capacity = min_after_dequeue + (num_threads+1)*batch_size
 		
-		img1_batch, img2_batch, geometry_batch, lighting_batch, d_params_batch = tf.train.shuffle_batch_join(
-			[[img1, img2, geometry, lighting, d_params]], batch_size=batch_size,
+		img1_batch, img2_batch, geometry_batch, lighting_batch, d_params_batch, paired_id_batch = tf.train.shuffle_batch_join(
+			[[img1, img2, geometry, lighting, d_params, paired_id]], batch_size=batch_size,
 			capacity=capacity, min_after_dequeue=min_after_dequeue)
 		
-	return img1_batch, img2_batch, geometry_batch, lighting_batch, d_params_batch
+	return img1_batch, img2_batch, geometry_batch, lighting_batch, d_params_batch, paired_id_batch
 
 
 def rot3d(phi, theta):
@@ -129,7 +131,7 @@ if __name__ == '__main__':
 	
 	data_folder = '/home/dworrall/Data/faces15'
 	train_files = get_files(data_folder)
-	img1, img2, geometry, lighting = get_batches(train_files, True, opt)
+	img1, img2, geometry, lighting, d_params, ids = get_batches(train_files, True, opt)
 	
 	with tf.Session() as sess:
 		# Threading and queueing
@@ -137,9 +139,8 @@ if __name__ == '__main__':
 		threads = tf.train.start_queue_runners(coord=coord)
 		try:
 			while not coord.should_stop():
-				m1, m2 = sess.run([address, paired_address])
-				if m1.split('/')[6] != m2.split('/')[6]:
-					print m1.split('/')[6], m2.split('/')[6]
+				Ids = sess.run([ids])
+				print Ids
 		finally:
 			# When done, ask the threads to stop.
 			coord.request_stop()
