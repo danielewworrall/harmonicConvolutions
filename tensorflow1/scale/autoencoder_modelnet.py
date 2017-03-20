@@ -27,7 +27,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_boolean('ANALYSE', False, 'runs model analysis')
 flags.DEFINE_integer('eq_dim', -1, 'number of latent units to rotate')
 flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on latents')
-flags.DEFINE_integer('save_step', 10, 'Interval (epoch) for which to save')
+flags.DEFINE_integer('save_step', 2, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
@@ -277,7 +277,7 @@ def classifier(codes, f_params_dim, is_training, reuse=False):
     print('classifier')
     print(codes)
     batch_size = codes.get_shape().as_list()[0]
-    codes = tf.reshape(codes, [batch_size, 5, -1, f_params_dim])
+    codes = tf.reshape(codes, [batch_size, 1, -1, f_params_dim])
     #inv_codes = tf.reduce_sum(tf.square(codes), axis=2)
     inv_codes_mat = tf.matmul(codes, tf.transpose(codes, [0, 1, 3, 2]))
     print(inv_codes_mat)
@@ -702,19 +702,20 @@ def train(inputs, outputs, ops, opt, data):
             train_writer.add_summary(summary, gs)
 
 
-        if epoch % FLAGS.save_step == 0:
-            cur_recons = sess.run(recons, feed_dict=feed_dict)
-            tile_size = int(np.floor(np.sqrt(cur_recons.shape[0])))
-            cur_recons = cur_recons[0:tile_size*tile_size, :,:,:,:]
-            tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(cur_recons, tile_size, tile_size)
-            save_name = './samples/' + opt['flag'] + '/train_image_%04d' % epoch
-            imsave(save_name + '_d.png', tile_image_d) 
-            imsave(save_name + '_h.png', tile_image_h) 
-            imsave(save_name + '_w.png', tile_image_w) 
+        #if epoch % FLAGS.save_step == 0:
+        #    cur_recons = sess.run(recons, feed_dict=feed_dict)
+        #    tile_size = int(np.floor(np.sqrt(cur_recons.shape[0])))
+        #    cur_recons = cur_recons[0:tile_size*tile_size, :,:,:,:]
+        #    tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(cur_recons, tile_size, tile_size)
+        #    save_name = './samples/' + opt['flag'] + '/train_image_%04d' % epoch
+        #    imsave(save_name + '_d.png', tile_image_d) 
+        #    imsave(save_name + '_h.png', tile_image_h) 
+        #    imsave(save_name + '_w.png', tile_image_w) 
 
         train_loss /= num_steps
         train_rec_loss /= num_steps
         train_c_loss /= num_steps
+
         print('[{:03d}]: train_loss: {:03f}. rec_loss: {:03f}. c_loss: {:03f}.'.format(epoch, train_loss, train_rec_loss, train_c_loss))
 
         # Save model
@@ -723,48 +724,48 @@ def train(inputs, outputs, ops, opt, data):
             print('Saved model to ' + path)
         
         # Validation
-        if epoch % 2 == 0:
-            val_recons = []
-            max_angles = 20
-            #pick a random initial transformation
-            cur_stl_params_in, _, cur_f_params = random_transmats(1)
-            cur_x, cur_y_true = data.validation.next_batch(1)
-            fangles = np.linspace(0., np.pi, num=max_angles)
-            fscales = np.linspace(0.8, 1.0, num=max_angles)
+        #if epoch % 2 == 0:
+        #    val_recons = []
+        #    max_angles = 20
+        #    #pick a random initial transformation
+        #    cur_stl_params_in, _, cur_f_params = random_transmats(1)
+        #    cur_x, cur_y_true = data.validation.next_batch(1)
+        #    fangles = np.linspace(0., np.pi, num=max_angles)
+        #    fscales = np.linspace(0.8, 1.0, num=max_angles)
 
-            rot_ax = 0#np.random.randint(0, 3)
-            for j in xrange(max_angles):
-                cur_f_params_j = update_f_params(cur_f_params, 0, rot_ax, fangles[j])
-                do_scale_ax = np.random.rand(3)>0.5
-                for i in xrange(max_angles):
-                    cur_f_params_ji = cur_f_params_j
-                    # TODO
-                    #for scale_ax in xrange(3):
-                    #    if do_scale_ax[scale_ax]:
-                    #        cur_f_params_ji = update_f_params(cur_f_params_ji, 1, scale_ax, fscales[i])
+        #    rot_ax = 0#np.random.randint(0, 3)
+        #    for j in xrange(max_angles):
+        #        cur_f_params_j = update_f_params(cur_f_params, 0, rot_ax, fangles[j])
+        #        do_scale_ax = np.random.rand(3)>0.5
+        #        for i in xrange(max_angles):
+        #            cur_f_params_ji = cur_f_params_j
+        #            # TODO
+        #            #for scale_ax in xrange(3):
+        #            #    if do_scale_ax[scale_ax]:
+        #            #        cur_f_params_ji = update_f_params(cur_f_params_ji, 1, scale_ax, fscales[i])
 
-                    feed_dict = {
-                                test_x : cur_x,
-                                test_stl_params_in : cur_stl_params_in, 
-                                val_f_params: cur_f_params_ji,
-                                is_training : False
-                            }
+        #            feed_dict = {
+        #                        test_x : cur_x,
+        #                        test_stl_params_in : cur_stl_params_in, 
+        #                        val_f_params: cur_f_params_ji,
+        #                        is_training : False
+        #                    }
 
-                    y = sess.run(test_recon, feed_dict=feed_dict)
-                    val_recons.append(y[0,:,:,:,:].copy())
-            
-            samples_ = np.stack(val_recons)
+        #            y = sess.run(test_recon, feed_dict=feed_dict)
+        #            val_recons.append(y[0,:,:,:,:].copy())
+        #    
+        #    samples_ = np.stack(val_recons)
 
-            tile_image = np.reshape(samples_, [max_angles*max_angles, opt['outsize'][0], opt['outsize'][1], opt['outsize'][2], opt['color_chn']])
+        #    tile_image = np.reshape(samples_, [max_angles*max_angles, opt['outsize'][0], opt['outsize'][1], opt['outsize'][2], opt['color_chn']])
 
-            tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(tile_image, max_angles, max_angles)
+        #    tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(tile_image, max_angles, max_angles)
 
-            save_name = './samples/' + opt['flag'] + '/image_%04d' % epoch
-            imsave(save_name + '_d.png', tile_image_d) 
-            imsave(save_name + '_h.png', tile_image_h) 
-            imsave(save_name + '_w.png', tile_image_w) 
+        #    save_name = './samples/' + opt['flag'] + '/image_%04d' % epoch
+        #    imsave(save_name + '_d.png', tile_image_d) 
+        #    imsave(save_name + '_h.png', tile_image_h) 
+        #    imsave(save_name + '_w.png', tile_image_w) 
 
-            # TODO save binvox
+        #    # TODO save binvox
 
 def main(_):
     opt = {}
@@ -805,18 +806,20 @@ def main(_):
     opt['f_params_dim'] = 2# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
     opt['num_latents'] = opt['f_params_dim']*100
 
-    #opt['flag'] = 'modelnet_classify100_cont'
-    opt['flag'] = 'modelnet_classify1000_scratch'
-    #opt['flag'] = 'modelnet_classify10000_scratch'
+    #opt['flag'] = 'modelnet_classify100_cont2'
+    #opt['flag'] = 'modelnet_classify1000_cont2'
+    opt['flag'] = 'modelnet_classify100_ae'
+    #opt['flag'] = 'modelnet_classify1000_scratch'
+    #opt['flag'] = 'modelnet_classify10000_cont2'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
     ###
-    opt['load_path'] = ''
-    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
-    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify100_scratch/'
+    #opt['load_path'] = ''
+    opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify100_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_cont/'
-    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_scratch/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify10000_cont/'
     opt['do_classify'] = True
     
     #check and clear directories
@@ -864,7 +867,7 @@ def main(_):
     if opt['do_classify']:
         y_logits = classifier(codes, opt['f_params_dim'], is_training) 
         test_y_logits = classifier(test_codes, opt['f_params_dim'], is_training, reuse=True)
-        c_loss = 10000*classifier_loss(y_true, y_logits, data.train.class_balance)
+        c_loss = 100*classifier_loss(y_true, y_logits, data.train.class_balance)
     loss = tf.reduce_mean(rec_loss + c_loss)
     
     # Summaries
