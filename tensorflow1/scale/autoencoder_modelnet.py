@@ -8,6 +8,7 @@ import tensorflow as tf
 import scipy.linalg as splin
 #import skimage.io as skio
 import scipy.misc
+import binvox_rw
 
 ### local files ######
 
@@ -33,6 +34,7 @@ flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
 flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
 flags.DEFINE_boolean('TEST', False, 'Evaluate model on the test set')
+flags.DEFINE_boolean('VIS', False, 'Visualize feature space transformations')
 
 ##---------------------
 
@@ -58,6 +60,15 @@ def tf_vol_summary(prefix, vols):
     tf_im_summary(prefix + '_h', vols_h)
     tf_im_summary(prefix + '_w', vols_w)
 
+def save_binvox(cur_vol, name):
+    cur_model = binvox_rw.Voxels(
+            data=cur_vol, 
+            dims=list(cur_vol.shape), 
+            translate=[0,0,0], 
+            scale=1.0, 
+            axis_order='xyz')
+    with open(name + '.binvox', 'wb') as f:
+        cur_model.write(f)
 
 def imsave(path, img):
     if img.shape[-1]==1:
@@ -514,6 +525,113 @@ def bn5d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 ############################################
 
+def vis(inputs, outputs, ops, opt, data):
+    print('in vis')
+    """Training loop"""
+    # Unpack inputs, outputs and ops
+    x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true = inputs
+    loss, merged, test_recon, x_in, test_x_in = outputs
+    train_op = ops
+    
+    # For checkpoints
+    gs = 0
+    start = time.time()
+    
+    saver = tf.train.Saver()
+    sess = tf.Session()
+
+    # TODO
+    #init = tf.global_variables_initializer()
+    #sess.run(init)
+
+    # Initialize variables
+    if len(opt['load_path'])>0:
+        ckpt = tf.train.get_checkpoint_state(opt['load_path'])
+        print('loading from', opt['load_path'])
+
+        if ckpt and ckpt.model_checkpoint_path:
+            vars_to_restore = tf.global_variables()
+            res_saver = tf.train.Saver(vars_to_restore)
+            vars_to_pop = [var for var in vars_to_restore if 'classifier' in var.name]
+            for var in vars_to_pop:
+                vars_to_restore.remove(var)
+            # Restores from checkpoint
+            model_checkpoint_path = os.path.abspath(ckpt.model_checkpoint_path)
+            print(model_checkpoint_path)
+            res_saver.restore(sess, model_checkpoint_path)
+            
+            # Restores from checkpoint
+            model_checkpoint_path = os.path.abspath(ckpt.model_checkpoint_path)
+            print(model_checkpoint_path)
+            res_saver.restore(sess, model_checkpoint_path)
+        else:
+            print('No checkpoint file found')
+            return
+    else:
+        return
+    
+    # check test set
+    num_steps = 50#data.test.num_steps(1)
+    for step_i in xrange(num_steps):
+        print(step_i)
+        val_recons = []
+        val_vox = []
+        #pick a random initial transformation
+        cur_stl_params_in, _, cur_f_params = random_transmats(1)
+
+        max_angles = 5
+        
+        cur_x, cur_y_true = data.test.next_batch(1)
+        fangles = np.linspace(-np.pi, np.pi, num=max_angles*max_angles)
+        rot_ax = 0
+
+        for i in xrange(max_angles):
+            for j in xrange(max_angles):
+                cur_f_params_j = update_f_params(cur_f_params, 0, rot_ax, fangles[i*max_angles + j])
+                feed_dict = {
+                            test_x : cur_x,
+                            test_stl_params_in : cur_stl_params_in, 
+                            val_f_params: cur_f_params_j,
+                            is_training : False
+                        }
+
+                y = sess.run(test_recon, feed_dict=feed_dict)
+                val_recons.append(y[0,:,:,:,:].copy())
+                val_vox.append(y[0,:,:,:,0].copy()>0.5)
+
+                if j==0:
+                    cur_x_in = sess.run(test_x_in, feed_dict=feed_dict)
+                    val_vox_in = cur_x_in[0,:,:,:,0].copy()>0.5
+        
+        samples_ = np.stack(val_recons)
+        print(samples_.shape)
+
+        tile_image = np.reshape(samples_, [max_angles*max_angles, opt['outsize'][0], opt['outsize'][1], opt['outsize'][2], opt['color_chn']])
+        tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(tile_image, max_angles, max_angles)
+
+        save_folder = './vis/' + opt['flag'] + '/'
+        checkFolder(save_folder)
+        save_name = save_folder + '/image_%04d' % step_i
+        imsave(save_name + '_d.png', tile_image_d) 
+        imsave(save_name + '_h.png', tile_image_h) 
+        imsave(save_name + '_w.png', tile_image_w) 
+
+        for i, v in enumerate(val_vox):
+            save_name = save_folder + '/binvox_%04d_%004d' % (step_i, i)
+            save_binvox(v, save_name)
+        save_name = save_folder + '/inp_binvox_%04d' % step_i
+        save_binvox(val_vox_in, save_name)
+
+        tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(cur_x_in, 1, 1)
+        save_name = save_folder + '/input_%04d' % step_i
+        imsave(save_name + '_d.png', tile_image_d) 
+        imsave(save_name + '_h.png', tile_image_h) 
+        imsave(save_name + '_w.png', tile_image_w) 
+
+        # TODO save binvox
+
+
+
 def test(inputs, outputs, ops, opt, data):
     """Training loop"""
     # Unpack inputs, outputs and ops
@@ -808,19 +926,28 @@ def main(_):
 
     #opt['flag'] = 'modelnet_classify100_cont2'
     #opt['flag'] = 'modelnet_classify1000_cont2'
-    opt['flag'] = 'modelnet_classify100_ae'
+    #opt['flag'] = 'modelnet_classify100_ae'
     #opt['flag'] = 'modelnet_classify1000_scratch'
     #opt['flag'] = 'modelnet_classify10000_cont2'
+    opt['flag'] = 'modelnet_vis'
+    #opt['flag'] = 'modelnet_classify100_cont'
+    #opt['flag'] = 'modelnet_classify1000_scratch'
+    #opt['flag'] = 'modelnet_classify10000_scratch'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
     ###
     #opt['load_path'] = ''
-    opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify100_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify10000_cont/'
-    opt['do_classify'] = True
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify100_scratch/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_cont/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_scratch/'
+    opt['do_classify'] = False
     
     #check and clear directories
     checkFolder(opt['summary_path'])
@@ -887,9 +1014,15 @@ def main(_):
     
     # Set inputs, outputs, and training ops
     inputs = [x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true]
-    outputs = [loss, merged, test_recon, recons, rec_loss, c_loss, y_logits, test_y_logits]
     ops = [train_op]
     
+    print(FLAGS.VIS)
+    if FLAGS.VIS:
+        outputs = [loss, merged, test_recon, x_in, test_x_in]
+        return vis(inputs, outputs, ops, opt, data)
+
+    outputs = [loss, merged, test_recon, recons, rec_loss, c_loss, y_logits, test_y_logits]
+
     print(FLAGS.TEST)
     if FLAGS.TEST:
         return test(inputs, outputs, ops, opt, data)
