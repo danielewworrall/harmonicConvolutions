@@ -117,30 +117,12 @@ def decoder(codes, is_training, reuse=False):
 
 def classifier(codes, f_params_dim, is_training, reuse=False):
 
-    def get_utr(inp):
-        print('get_utr')
-        print(inp)
-        batch_size = inp.get_shape().as_list()[0] 
-        m_size = inp.get_shape().as_list()[-1]
-        inp = tf.reshape(inp, [-1, m_size, m_size])
-        bc_size = inp.get_shape().as_list()[0]
-        utr_i = np.triu(np.ones([m_size, m_size]), k=0).astype(np.bool)
-        utr_i = np.expand_dims(utr_i, axis=0)
-        utr_i = np.tile(utr_i, [bc_size, 1, 1])
-        print(utr_i.shape)
-        print(inp)
-        out = tf.boolean_mask(inp, utr_i)
-        out = tf.reshape(out, [bc_size, m_size*(m_size+1)/2])
-        print(out)
-        out = tf.reshape(out, [batch_size, -1])
-        print(out)
-        return out
     print('classifier')
     print(codes)
     batch_size = codes.get_shape().as_list()[0]
     codes = tf.reshape(codes, [batch_size, 1, -1, f_params_dim])
     inv_codes_mat = tf.matmul(codes, tf.transpose(codes, [0, 1, 3, 2]))
-    inv_codes_mat = get_utr(inv_codes_mat)
+    inv_codes_mat = el.get_utr(inv_codes_mat)
     print(inv_codes_mat)
     #inv_codes_mat = tf.reshape(inv_codes_mat, [batch_size, -1])
     feats = inv_codes_mat
