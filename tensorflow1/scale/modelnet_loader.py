@@ -149,7 +149,7 @@ def read_data_sets(basedir, one_hot=False):
   basedir = os.path.realpath(os.path.expanduser(basedir))
   print('Reading', basedir)
 
-  data_sets.train = DataSet(os.path.join(basedir, 'shapenet10_train_nr.tar'), one_hot, 0.05)
+  data_sets.train = DataSet(os.path.join(basedir, 'shapenet10_train_nr.tar'), one_hot, 0.02)
   data_sets.validation = DataSet(os.path.join(basedir, 'shapenet10_train_nr.tar'), one_hot, 0.0, data_sets.train.sel)
   #data_sets.validation = data_sets.test # no decision based on validation sets
 
