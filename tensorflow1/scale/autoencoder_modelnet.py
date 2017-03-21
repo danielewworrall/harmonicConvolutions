@@ -90,7 +90,6 @@ def autoencoder(x, num_latents, f_params, is_training, reuse=False):
 
 def encoder(x, num_latents, is_training, reuse=False):
     """Encoder with conv3d"""
-
     l0 = convlayer(0, x,  3, 1,     8,  1, reuse, is_training=is_training) # 32
     l1 = convlayer(1, l0, 3, 8,     16,  2, reuse, is_training=is_training) # 16
     l2 = convlayer(2, l1, 3, 16,    32,  1, reuse, is_training=is_training) # 16
@@ -108,52 +107,41 @@ def decoder(codes, is_training, reuse=False):
     l1 = upconvlayer(1,     codes, 1, num_latents, 512, 1, reuse, is_training=is_training) 
     l2 = upconvlayer_tr(2,  l1,    8, 512,         128,  8, 8, reuse, is_training=is_training) # 8
     l22= upconvlayer(3,     l2,    3, 128,         64,    8, reuse, is_training=is_training) # 8
-    l3 = upconvlayer(4,     l22,   3, 64,          32,   16, reuse, is_training=is_training) # 8->16
-    l4 = upconvlayer(5,     l3,    3, 32,          16,   16, reuse, is_training=is_training)
-    l5 = upconvlayer(6,     l4,    3, 16,          16,   32, reuse, is_training=is_training)
-    recons_logits = upconvlayer(7, l5,3,16,         1,   32, reuse, is_training=is_training, nonlin=tf.identity, dobn=False)
+    l3 = upconvlayer(4,     l22,   3, 64,          64,   16, reuse, is_training=is_training) # 8->16
+    l4 = upconvlayer(5,     l3,    3, 64,          32,   16, reuse, is_training=is_training)
+    l5 = upconvlayer(6,     l4,    3, 32,          32,   32, reuse, is_training=is_training)
+    recons_logits = upconvlayer(7, l5,3,32,         1,   32, reuse, is_training=is_training, nonlin=tf.identity, dobn=False)
     recons = tf.sigmoid(recons_logits)
     return recons, recons_logits
 
 def classifier(codes, f_params_dim, is_training, reuse=False):
-
-    def get_utr(inp):
-        print('get_utr')
-        print(inp)
-        batch_size = inp.get_shape().as_list()[0] 
-        m_size = inp.get_shape().as_list()[-1]
-        inp = tf.reshape(inp, [-1, m_size, m_size])
-        bc_size = inp.get_shape().as_list()[0]
-        utr_i = np.triu(np.ones([m_size, m_size]), k=0).astype(np.bool)
-        utr_i = np.expand_dims(utr_i, axis=0)
-        utr_i = np.tile(utr_i, [bc_size, 1, 1])
-        print(utr_i.shape)
-        print(inp)
-        out = tf.boolean_mask(inp, utr_i)
-        out = tf.reshape(out, [bc_size, m_size*(m_size+1)/2])
-        print(out)
-        out = tf.reshape(out, [batch_size, -1])
-        print(out)
-        return out
     print('classifier')
     print(codes)
     batch_size = codes.get_shape().as_list()[0]
     codes = tf.reshape(codes, [batch_size, 1, -1, f_params_dim])
     inv_codes_mat = tf.matmul(codes, tf.transpose(codes, [0, 1, 3, 2]))
-    inv_codes_mat = get_utr(inv_codes_mat)
+    inv_codes_mat = el.get_utr(inv_codes_mat)
     print(inv_codes_mat)
     #inv_codes_mat = tf.reshape(inv_codes_mat, [batch_size, -1])
     feats = inv_codes_mat
     inpdim = feats.get_shape().as_list()[1]
     print(feats)
 
-    l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse)
-    y_logits = mlplayer(1, l1, 256, 10, nonlin=tf.identity, reuse=reuse)
+    def add_noise(inp, is_training, stddev=0.1):
+        switch = tf.cast(is_training, tf.float32)
+        noise = tf.random_normal(inp.get_shape(), stddev=stddev)
+        out = inp + switch*noise
+        return out
+
+    feats = add_noise(feats, is_training)
+    l1 = mlplayer(0, feats, inpdim, 128, reuse=reuse)
+    l1 = add_noise(l1, is_training)
+    y_logits = mlplayer(1, l1, 128, 10, nonlin=tf.identity, reuse=reuse)
     return y_logits
 
 
 def classifier_loss(y_true, y_logits, class_weight):
-    y_logits = y_logits/(0.001 + class_weight)
+    #y_logits = y_logits/(0.001 + class_weight)
     return tf.nn.softmax_cross_entropy_with_logits(labels=y_true, logits=y_logits)
 
 def bernoulli_xentropy(target, output):
@@ -407,13 +395,12 @@ def test(inputs, outputs, ops, opt, data):
                     is_training : False
                 }
         cur_y_pred = sess.run(test_y_pred, feed_dict=feed_dict)
-        test_y = (np.argmax(cur_y_pred, axis=1))
-        test_y_pred = (np.argmax(cur_y_true, axis=1))
+        cur_test_y = (np.argmax(cur_y_pred, axis=1))
+        cur_test_y_pred = (np.argmax(cur_y_true, axis=1))
         #if step_i==0:
-        print(test_y)
-        print(test_y_pred)
+        print((cur_test_y, cur_test_y_pred))
 
-        diff = (test_y - test_y_pred)==0
+        diff = (cur_test_y - cur_test_y_pred)==0
         diff = diff.astype(np.float32)
         test_acc += np.sum(diff)
 
@@ -454,7 +441,7 @@ def train(inputs, outputs, ops, opt, data):
         current_lr = opt['lr']*np.power(0.1, exponent)
         
 
-        if opt['do_classify'] and epoch%2==0:
+        if opt['do_classify'] and epoch%1==0:
             # check validation accuracy
             num_steps = data.validation.num_steps(opt['mb_size'])-1
             val_acc = 0
@@ -485,6 +472,8 @@ def train(inputs, outputs, ops, opt, data):
         train_loss = 0.
         train_rec_loss = 0.
         train_c_loss = 0.
+        train_acc = 0.
+        train_acc10 = 0.
 
         # Run training steps
         num_steps = data.train.num_steps(opt['mb_size'])
@@ -511,10 +500,20 @@ def train(inputs, outputs, ops, opt, data):
                 c_ops = [c_loss, y_pred]
                 c_l, cur_y_pred = sess.run(c_ops, feed_dict=feed_dict)
                 train_c_loss += c_l
-                print('[{:03f}]: train_loss: {:03f}. rec_loss: {:03f}. c_loss: {:03f}.'.format(float(step_i)/num_steps, l, rec_l, c_l))
-            else:
-                print('[{:03f}]: train_loss: {:03f}.'.format(float(step_i)/num_steps, l))
+                diff = (cur_y_pred*cur_y_true)
+                diff = diff.astype(np.float32)
+                cur_acc = np.sum(diff)/opt['mb_size']
+                train_acc += cur_acc
+                train_acc10 += cur_acc
 
+                if step_i % 10==9:
+                    train_acc10 /= 10
+                    print('[{:03f}]: train_loss: {:03f}. rec_loss: {:03f}. c_loss: {:03f}. train_acc: {:03f}.'.format(float(step_i)/num_steps, l, rec_l, c_l, train_acc10))
+
+                    train_acc10 = 0.
+            else:
+                if step_i % 10==0:
+                    print('[{:03f}]: train_loss: {:03f}.'.format(float(step_i)/num_steps, l))
 
             assert not np.isnan(l), 'Model diverged with loss = NaN'
 
@@ -525,8 +524,9 @@ def train(inputs, outputs, ops, opt, data):
         train_loss /= num_steps
         train_rec_loss /= num_steps
         train_c_loss /= num_steps
+        train_acc /= num_steps
 
-        print('[{:03d}]: train_loss: {:03f}. rec_loss: {:03f}. c_loss: {:03f}.'.format(epoch, train_loss, train_rec_loss, train_c_loss))
+        print('[{:03d}]: train_loss: {:03f}. rec_loss: {:03f}. c_loss: {:03f}. train_acc: {:03f}.'.format(epoch, train_loss, train_rec_loss, train_c_loss, train_acc))
 
         # Save model
         if epoch % FLAGS.save_step == 0 or epoch+1==opt['n_epochs']:
@@ -558,9 +558,9 @@ def main(_):
         opt['root'] = '/home/sgarbin'
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
-    opt['mb_size'] = 16
-    opt['n_epochs'] = 200
-    opt['lr_schedule'] = [50, 150]
+    opt['mb_size'] = 32
+    opt['n_epochs'] = 100
+    opt['lr_schedule'] = [10, 80]
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
@@ -574,7 +574,7 @@ def main(_):
     opt['num_latents'] = opt['f_params_dim']*100
 
     #opt['flag'] = 'modelnet_classify100_cont2'
-    #opt['flag'] = 'modelnet_classify1000_cont2'
+    #opt['flag'] = 'modelnet_classify1000_unbalanced'
     #opt['flag'] = 'modelnet_classify100_ae'
     #opt['flag'] = 'modelnet_classify1000_scratch'
     #opt['flag'] = 'modelnet_classify10000_cont2'
@@ -582,12 +582,16 @@ def main(_):
     #opt['flag'] = 'modelnet_classify100_cont'
     #opt['flag'] = 'modelnet_classify1000_scratch'
     #opt['flag'] = 'modelnet_classify10000_scratch'
-    opt['flag'] = 'modelnet2'
+    #opt['flag'] = 'modelnet2_test'
+    opt['flag'] = 'modelnet2_classify1000'
+    #opt['flag'] = 'modelnet2_classify100'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
     ###
     opt['load_path'] = ''
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1000/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify100_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_cont/'
