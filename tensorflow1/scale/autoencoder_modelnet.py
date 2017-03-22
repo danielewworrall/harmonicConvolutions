@@ -78,10 +78,7 @@ def autoencoder(x, num_latents, f_params, is_training, reuse=False):
             code_shape = codes.get_shape()
             batch_size = code_shape.as_list()[0]
             codes = tf.reshape(codes, [batch_size, -1])
-            print(f_params)
-            print(codes)
             codes_transformed = el.feature_transform_matrix_n(codes, codes.get_shape(), f_params)
-            print(codes_transformed)
             codes_transformed = tf.reshape(codes_transformed, code_shape)
         with tf.variable_scope("decoder", reuse=reuse) as scope:
             recons, recons_logits = decoder(codes_transformed, is_training, reuse=reuse)
@@ -104,39 +101,55 @@ def encoder(x, num_latents, is_training, reuse=False):
 def decoder(codes, is_training, reuse=False):
     num_latents = codes.get_shape()[-1]
 
-    l1 = upconvlayer(1,     codes, 1, num_latents, 512, 1, reuse, is_training=is_training) 
-    l2 = upconvlayer_tr(2,  l1,    8, 512,         128,  8, 8, reuse, is_training=is_training) # 8
-    l22= upconvlayer(3,     l2,    3, 128,         64,    8, reuse, is_training=is_training) # 8
-    l3 = upconvlayer(4,     l22,   3, 64,          64,   16, reuse, is_training=is_training) # 8->16
-    l4 = upconvlayer(5,     l3,    3, 64,          32,   16, reuse, is_training=is_training)
-    l5 = upconvlayer(6,     l4,    3, 32,          32,   32, reuse, is_training=is_training)
-    recons_logits = upconvlayer(7, l5,3,32,         1,   32, reuse, is_training=is_training, nonlin=tf.identity, dobn=False)
+    # Submission architecture
+    #l1 = upconvlayer(1,     codes, 1,   num_latents, 512,   1, reuse, is_training=is_training) 
+    #l2 = upconvlayer_tr(2,  l1,    8,   512,         128,   8, 8, reuse, is_training=is_training) # 8
+    #l22= upconvlayer(3,     l2,    3,   128,         64,    8, reuse, is_training=is_training) # 8
+    #l3 = upconvlayer(4,     l22,   3,   64,          32,   16, reuse, is_training=is_training) # 8->16
+    #l4 = upconvlayer(5,     l3,    3,   32,          16,   16, reuse, is_training=is_training)
+    #l5 = upconvlayer(6,     l4,    3,   16,          16,   32, reuse, is_training=is_training)
+    #recons_logits = upconvlayer(7, l5,3,16,          1,    32, reuse, is_training=is_training, nonlin=tf.identity, dobn=False)
+
+    l1 = upconvlayer(1,     codes, 1,   num_latents, 512,   1, reuse, is_training=is_training) 
+    l2 = upconvlayer_tr(2,  l1,    8,   512,         128,   8, 8, reuse, is_training=is_training) # 8
+    l22= upconvlayer(3,     l2,    3,   128,         64,    8, reuse, is_training=is_training) # 8
+    l3 = upconvlayer(4,     l22,   3,   64,          64,   16, reuse, is_training=is_training) # 8->16
+    l4 = upconvlayer(5,     l3,    3,   64,          32,   16, reuse, is_training=is_training)
+    l5 = upconvlayer(6,     l4,    3,   32,          32,   32, reuse, is_training=is_training)
+    l55= upconvlayer(7,     l5,    3,   32,          16,   32, reuse, is_training=is_training)
+    recons_logits = upconvlayer(8,l55,3,16,          1,    32, reuse, is_training=is_training, nonlin=tf.identity, dobn=False)
     recons = tf.sigmoid(recons_logits)
     return recons, recons_logits
 
 def classifier(codes, f_params_dim, is_training, reuse=False):
     print('classifier')
-    print(codes)
     batch_size = codes.get_shape().as_list()[0]
     codes = tf.reshape(codes, [batch_size, 1, -1, f_params_dim])
     inv_codes_mat = tf.matmul(codes, tf.transpose(codes, [0, 1, 3, 2]))
     inv_codes_mat = el.get_utr(inv_codes_mat)
-    print(inv_codes_mat)
     #inv_codes_mat = tf.reshape(inv_codes_mat, [batch_size, -1])
     feats = inv_codes_mat
     inpdim = feats.get_shape().as_list()[1]
     print(feats)
 
-    def add_noise(inp, is_training, stddev=0.1):
+    def mul_noise(inp, is_training, stddev=0.5):
         switch = tf.cast(is_training, tf.float32)
-        noise = tf.random_normal(inp.get_shape(), stddev=stddev)
+        noise = 1.0 + switch*tf.truncated_normal(inp.get_shape(), stddev=stddev)
+        out = inp*noise
+        return out
+
+    def add_noise(inp, is_training, stddev=0.5):
+        switch = tf.cast(is_training, tf.float32)
+        noise = tf.truncated_normal(inp.get_shape(), stddev=stddev)
         out = inp + switch*noise
         return out
 
-    feats = add_noise(feats, is_training)
-    l1 = mlplayer(0, feats, inpdim, 128, reuse=reuse)
-    l1 = add_noise(l1, is_training)
-    y_logits = mlplayer(1, l1, 128, 10, nonlin=tf.identity, reuse=reuse)
+    #feats = add_noise(feats, is_training)
+    #feats = mul_noise(feats, is_training)
+    l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse, is_training=is_training, dobn=True)
+    #l1 = add_noise(l1, is_training)
+    #l1 = mul_noise(l1, is_training)
+    y_logits = mlplayer(1, l1, 256, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
     return y_logits
 
 
@@ -153,13 +166,11 @@ def bernoulli_xentropy(target, output):
 
 
 def identity_stl_transmats(batch_size):
-    stl_transmat_inp, _, _ = random_transmats(batch_size)
-    print(stl_transmat_inp.shape)
+    _, stl_transmat_inp, _, _ = random_transmats(batch_size)
     stl_transmat_inp[:,:,:] = 0.0
     stl_transmat_inp[:,0,0] = 1.0
     stl_transmat_inp[:,1,1] = 1.0
     stl_transmat_inp[:,2,2] = 1.0
-    print(stl_transmat_inp[0,:,:])
     return stl_transmat_inp.astype(np.float32)
 
 
@@ -168,6 +179,20 @@ def random_transmats(batch_size):
     """
     min_scale = 1.0
     max_scale = 1.0
+
+    aug_scale_step = 1./32
+    aug_shift_step = 1./32
+    aug_max_scale = 2.000001
+    aug_max_shift = 2.000001
+
+    #params_aug_scale = aug_shift_step*np.random.random_integers(-aug_max_scale, aug_max_scale, size=(batch_size, 3))
+    params_aug_scale = aug_scale_step*aug_max_scale*2*(np.random.rand(batch_size, 3)-1)
+    params_aug_scale[:,:] += 1.0
+    #params_aug_scale[:,[1,2]] = 1.0
+    #aug_3dshift = aug_shift_step*np.random.random_integers(-aug_max_shift, aug_max_shift, size=(batch_size, 3, 1))
+    aug_3dshift = aug_shift_step*aug_max_shift*2*(np.random.rand(batch_size, 3, 1)-1)
+    aug_3dscalemat = get_3dscalemat(params_aug_scale)
+    stl_transmat_aug = np.concatenate([aug_3dscalemat, aug_3dshift], axis=2)
 
     if True:
         params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
@@ -179,12 +204,13 @@ def random_transmats(batch_size):
         params_trg_scale = 1.0 + 0.0*np.random.rand(batch_size, 3)
     else:
         params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-        params_inp_rot[:,1] = params_inp_rot[:,1]/2
+        #params_inp_rot[:,1] = params_inp_rot[:,1]/2
         params_inp_scale = min_scale + (max_scale-min_scale)*np.random.rand(batch_size, 3)
 
         params_trg_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
-        params_trg_rot[:,1] = params_trg_rot[:,1]/2
+        #params_trg_rot[:,1] = params_trg_rot[:,1]/2
         params_trg_scale = min_scale + (max_scale-min_scale)*np.random.rand(batch_size, 3)
+
 
     inp_3drotmat = get_3drotmat(params_inp_rot)
     inp_3dscalemat = get_3dscalemat(params_inp_scale)
@@ -200,16 +226,13 @@ def random_transmats(batch_size):
     # was like this:
     #cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
     cur_rotmat = np.matmul(trg_3drotmat.transpose([0,2,1]), inp_3drotmat)
-    #print(cur_rotmat[0,:,:])
     f_params_inp = set_f_params_rot(f_params_inp, cur_rotmat)
-    #print(f_params_inp[0,:,:])
     
     #f_params_inp = np.zeros([batch_size, 3, 3])
     ## was like this:
     ##cur_rotmat = np.matmul(trg_3drotmat, inp_3drotmat.transpose([0,2,1]))
     #cur_rotmat = np.matmul(trg_3drotmat.transpose([0,2,1]), inp_3drotmat)
     #f_params_inp = set_f_params_rot(f_params_inp, cur_rotmat)
-    ##print(f_params_inp[0,:,:])
 
     # TODO
     #for i in xrange(3):
@@ -218,7 +241,11 @@ def random_transmats(batch_size):
     #    cur_f_scalemat = np.matmul(trg_f_2dscalemat, inp_f_2dscalemat.transpose([0,2,1]))
     #    f_params_inp = set_f_params_scale(f_params_inp, i, cur_f_scalemat)
 
-    return stl_transmat_inp.astype(np.float32), stl_transmat_trg.astype(np.float32), f_params_inp.astype(np.float32)
+    stl_transmat_aug = stl_transmat_aug.astype(np.float32)
+    stl_transmat_inp = stl_transmat_inp.astype(np.float32)
+    stl_transmat_trg = stl_transmat_trg.astype(np.float32)
+    f_params_inp = f_params_inp.astype(np.float32)
+    return stl_transmat_aug, stl_transmat_inp, stl_transmat_trg, f_params_inp
 
 def set_f_params_rot(f_params, rotmat):
     f_params[:,0:2,0:2] = rotmat[:,1:3,1:3]
@@ -284,7 +311,7 @@ def vis(inputs, outputs, ops, opt, data):
     print('in vis')
     """Training loop"""
     # Unpack inputs, outputs and ops
-    x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true = inputs
+    x, global_step, stl_params_aug, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true = inputs
     loss, merged, test_recon, x_in, test_x_in = outputs
     train_op = ops
     
@@ -309,7 +336,7 @@ def vis(inputs, outputs, ops, opt, data):
         val_recons = []
         val_vox = []
         #pick a random initial transformation
-        cur_stl_params_in, _, cur_f_params = random_transmats(1)
+        _, cur_stl_params_in, _, cur_f_params = random_transmats(1)
 
         max_angles = 5
         
@@ -365,7 +392,7 @@ def vis(inputs, outputs, ops, opt, data):
 def test(inputs, outputs, ops, opt, data):
     """Training loop"""
     # Unpack inputs, outputs and ops
-    x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true = inputs
+    x, global_step, stl_params_aug, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true = inputs
     loss, merged, test_recon, recons, rec_loss, c_loss, y_logits, test_y_logits, y_pred, test_y_pred = outputs
     train_op = ops
     
@@ -412,7 +439,7 @@ def test(inputs, outputs, ops, opt, data):
 def train(inputs, outputs, ops, opt, data):
     """Training loop"""
     # Unpack inputs, outputs and ops
-    x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true = inputs
+    x, global_step, stl_params_aug, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true = inputs
     loss, merged, test_recon, recons, rec_loss, c_loss, y_logits, test_y_logits, y_pred, test_y_pred = outputs
     train_op = ops
     
@@ -446,11 +473,12 @@ def train(inputs, outputs, ops, opt, data):
             num_steps = data.validation.num_steps(opt['mb_size'])-1
             val_acc = 0
             for step_i in xrange(num_steps):
-                cur_stl_params_in, _, _ = random_transmats(opt['mb_size'])
+                cur_stl_params_aug, cur_stl_params_in, _, _ = random_transmats(opt['mb_size'])
                 cur_x, cur_y_true = data.validation.next_batch(opt['mb_size'])
                 feed_dict = {
                             x: cur_x,
                             y_true: cur_y_true,
+                            stl_params_aug: cur_stl_params_aug, 
                             stl_params_in: cur_stl_params_in, 
                             is_training : False
                         }
@@ -478,16 +506,16 @@ def train(inputs, outputs, ops, opt, data):
         # Run training steps
         num_steps = data.train.num_steps(opt['mb_size'])
         for step_i in xrange(num_steps):
-            cur_stl_params_in, cur_stl_params_trg, cur_f_params = random_transmats(opt['mb_size'])
-            # TODO depends if doing classification
+            cur_stl_params_aug, cur_stl_params_in, cur_stl_params_trg, cur_f_params = random_transmats(opt['mb_size'])
             ops = [global_step, loss, merged, train_op, rec_loss]
             cur_x, cur_y_true = data.train.next_batch(opt['mb_size'])
             
             feed_dict = {
                         x: cur_x,
                         y_true: cur_y_true,
-                        stl_params_trg: cur_stl_params_trg, 
+                        stl_params_aug: cur_stl_params_aug,
                         stl_params_in: cur_stl_params_in, 
+                        stl_params_trg: cur_stl_params_trg, 
                         f_params : cur_f_params, 
                         lr : current_lr,
                         is_training : True
@@ -559,8 +587,8 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 32
-    opt['n_epochs'] = 100
-    opt['lr_schedule'] = [10, 80]
+    opt['n_epochs'] = 300
+    opt['lr_schedule'] = [20, 110, 220]
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
@@ -568,10 +596,10 @@ def main(_):
     opt['outsize'] = [i + 2*pad_size for i in opt['vol_size']]
     stl = AffineVolumeTransformer(opt['outsize'])
     opt['color_chn'] = 1
-    opt['stl_size'] = 3 # no translation
-    # TODO
     opt['f_params_dim'] = 2# + 2*3 # rotation matrix is 3x3 and we have 3 axis scalings implemented as 2x2 rotations
     opt['num_latents'] = opt['f_params_dim']*100
+    # TODO
+    opt['stl_size'] = 3 # no translation
 
     #opt['flag'] = 'modelnet_classify100_cont2'
     #opt['flag'] = 'modelnet_classify1000_unbalanced'
@@ -618,6 +646,7 @@ def main(_):
     x = tf.placeholder(tf.float32, [opt['mb_size'],opt['vol_size'][0],opt['vol_size'][1],opt['vol_size'][2], opt['color_chn']], name='x')
     y_true = tf.placeholder(tf.int32, [opt['mb_size'],10], name='y_true')
 
+    stl_params_aug = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_size'],1+opt['stl_size']], name='stl_params_aug')
     stl_params_in  = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_size'],opt['stl_size']], name='stl_params_in')
     stl_params_trg = tf.placeholder(tf.float32, [opt['mb_size'],opt['stl_size'],opt['stl_size']], name='stl_params_trg')
     f_params = tf.placeholder(tf.float32, [opt['mb_size'], opt['f_params_dim'], opt['f_params_dim']], name='f_params')
@@ -632,13 +661,22 @@ def main(_):
     lr = tf.placeholder(tf.float32, [], name='lr')
     is_training = tf.placeholder(tf.bool, [], name='is_training')
     
+    # augment training volume
+    flip_dim = tf.random_uniform([1], minval=1, maxval=3, dtype=tf.int32) # maxval is not inclusive
+    x_flip = tf.reverse(x, axis=flip_dim) # can flip axis = 1 or 2
+    x_aug = spatial_transform(stl, x_flip, stl_params_aug, paddings, threshold=False)
+    
+    # generate input and target volumes
+    x_in = spatial_transform(stl, x_aug, stl_params_in)
+    x_trg = spatial_transform(stl, x_aug, stl_params_trg)
+
     # Build the training model
-    x_in = spatial_transform(stl, x, stl_params_in, paddings)
-    x_trg = spatial_transform(stl, x, stl_params_trg, paddings)
     recons, codes, recons_logits = autoencoder(x_in, opt['num_latents'], f_params, is_training)
     
     # Test model
-    test_x_in = spatial_transform(stl, test_x, test_stl_params_in, paddings)
+    test_x_pad = spatial_pad(test_x, paddings)
+    #test_x_in = spatial_transform(stl, test_x_pad, test_stl_params_in)
+    test_x_in = test_x_pad
     test_recon, test_codes, _ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
 
     # LOSS
@@ -674,7 +712,7 @@ def main(_):
     train_op = optim.minimize(loss, global_step=global_step)
     
     # Set inputs, outputs, and training ops
-    inputs = [x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true]
+    inputs = [x, global_step, stl_params_aug, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true]
     ops = [train_op]
     
     print(FLAGS.VIS)
