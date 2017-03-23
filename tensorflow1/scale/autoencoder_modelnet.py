@@ -8,7 +8,6 @@ import tensorflow as tf
 import scipy.linalg as splin
 #import skimage.io as skio
 import scipy.misc
-import binvox_rw
 
 ### local files ######
 
