@@ -115,8 +115,8 @@ def encoder(x, num_latents, is_training, reuse=False):
     l4 = convlayer(4, l3, 3, 32,    32,  1, reuse, is_training=is_training)                   #  12-12
     l5 = convlayer(5, l4, 3, 32,    64,  2, reuse, is_training=is_training)                   #  12-6
     l6 = convlayer(6, l5, 3, 64,    64,  1, reuse, is_training=is_training)                   #  6-6
-    l7 = convlayer(7, l6, 6, 64,   512,  1, reuse, is_training=is_training, padding='VALID')  #  6-1 
-    codes = convlayer(8, l7, 1, 512, num_latents, 1, reuse, nonlin=tf.identity, is_training=is_training, dobn=False) # 1 -> 1
+    l7 = convlayer(7, l6, 6, 64,   1024,  1, reuse, is_training=is_training, padding='VALID')  #  6-1 
+    codes = convlayer(8, l7, 1, 1024, num_latents, 1, reuse, nonlin=tf.identity, is_training=is_training, dobn=False) # 1 -> 1
     return codes
 
 
@@ -124,8 +124,8 @@ def decoder(codes, is_training, reuse=False):
     num_latents = codes.get_shape()[-1]
 
 
-    l1 = upconvlayer(1,             codes, 1, num_latents, 512,   1, reuse, is_training=is_training) 
-    l2 = upconvlayer_tr(2,          l1,    6, 512,         128,   6, 6, reuse, is_training=is_training)
+    l1 = upconvlayer(1,             codes, 1, num_latents, 1024,   1, reuse, is_training=is_training) 
+    l2 = upconvlayer_tr(2,          l1,    6, 1024,         128,   6, 6, reuse, is_training=is_training)
     l3 = upconvlayer(3,             l2,    3, 128,         64,    6, reuse, is_training=is_training)
     l4 = upconvlayer(4,             l3,    3, 64,          64,   12, reuse, is_training=is_training)
     l5 = upconvlayer(5,             l4,    3, 64,          32,   12, reuse, is_training=is_training)
@@ -169,7 +169,11 @@ def random_transmats(batch_size):
     stl_transmat_aug = np.concatenate([aug_3dscalemat, aug_3dshift], axis=2)
 
     params_inp_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+    params_inp_rot[:, 1] = params_inp_rot[:, 1]/2
+    params_inp_rot[:, 2] = 0.0
     params_trg_rot = np.pi*2*(np.random.rand(batch_size, 3)-0.5)
+    params_trg_rot[:, 1] = params_trg_rot[:, 1]/2
+    params_trg_rot[:, 2] = 0.0
     inp_3drotmat = get_3drotmat(params_inp_rot)
     trg_3drotmat = get_3drotmat(params_trg_rot)
 
@@ -507,17 +511,17 @@ def main(_):
         opt['root'] = '/home/sgarbin'
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
-    opt['mb_size'] = 32
-    opt['n_epochs'] = 300
-    opt['lr_schedule'] = [10, 50, 150, 200, 250]
-    opt['lr'] = 1e-3
+    opt['mb_size'] = 16
+    opt['n_epochs'] = 3000
+    opt['lr_schedule'] = [2000]
+    opt['lr'] = 1e-4
     opt['vol_size'] = [32,32,32]
     pad_size = 8#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
     opt['outsize'] = [i + 2*pad_size for i in opt['vol_size']]
     stl = AffineVolumeTransformer(opt['outsize'])
     opt['color_chn'] = 1
     opt['f_params_dim'] = 3
-    opt['num_latents'] = opt['f_params_dim']*100
+    opt['num_latents'] = opt['f_params_dim']*200
     opt['stl_size'] = 3 # no translation
 
     opt['flag'] = 'mnet3d'
@@ -526,7 +530,7 @@ def main(_):
     
     ###
     opt['load_path'] = ''
-    opt['do_classify'] = True
+    opt['do_classify'] = False
     
     #check and clear directories
     checkFolder(opt['summary_path'])
