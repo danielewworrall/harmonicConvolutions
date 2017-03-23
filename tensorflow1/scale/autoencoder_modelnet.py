@@ -588,7 +588,7 @@ def main(_):
     
     opt['mb_size'] = 32
     opt['n_epochs'] = 300
-    opt['lr_schedule'] = [20, 110, 220]
+    opt['lr_schedule'] = [10, 50, 150, 200, 250]
     opt['lr'] = 1e-3
 
     opt['vol_size'] = [32,32,32]
@@ -611,7 +611,8 @@ def main(_):
     #opt['flag'] = 'modelnet_classify1000_scratch'
     #opt['flag'] = 'modelnet_classify10000_scratch'
     #opt['flag'] = 'modelnet2_test'
-    opt['flag'] = 'modelnet2_classify1000'
+    #opt['flag'] = 'modelnet2_classify1000'
+    opt['flag'] = 'modelnet2_classify1000_ta' # threshold augmentation
     #opt['flag'] = 'modelnet2_classify100'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
@@ -664,7 +665,7 @@ def main(_):
     # augment training volume
     flip_dim = tf.random_uniform([1], minval=1, maxval=3, dtype=tf.int32) # maxval is not inclusive
     x_flip = tf.reverse(x, axis=flip_dim) # can flip axis = 1 or 2
-    x_aug = spatial_transform(stl, x_flip, stl_params_aug, paddings, threshold=False)
+    x_aug = spatial_transform(stl, x_flip, stl_params_aug, paddings, threshold=True)
     
     # generate input and target volumes
     x_in = spatial_transform(stl, x_aug, stl_params_in)
