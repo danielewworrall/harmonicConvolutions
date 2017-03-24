@@ -189,7 +189,7 @@ def upconvlayer_tr(i, inp, ksize, inpdim, outdim, outshape, stride, reuse, nonli
     return out
 
 
-def mlplayer(i, inp, inpdim, outdim, reuse=False, nonlin=tf.nn.elu):
+def mlplayer(i, inp, inpdim, outdim, is_training, reuse=False, nonlin=tf.nn.elu, dobn=True):
     scopename = 'classifier_' + str(i)
     print(scopename)
     print(' input:', inp)
@@ -200,20 +200,37 @@ def mlplayer(i, inp, inpdim, outdim, reuse=False, nonlin=tf.nn.elu):
         bias = variable(scopename + '_bias', [outdim], tf.constant_initializer(0.0))
         linout = tf.matmul(inp, kernel)
         linout = tf.nn.bias_add(linout, bias)
-        out = nonlin(linout, name=scopename + '_nonlin')
+        if dobn:
+            bnout = bn2d(linout, is_training, reuse=reuse)
+        else:
+            bnout = linout
+        out = nonlin(bnout, name=scopename + '_nonlin')
     print(' out:', out)
     return out
 
-
-def spatial_transform(stl, x, transmat, paddings):
+def spatial_pad(x, paddings):
     x_padded = tf.pad(x, paddings, mode='CONSTANT')
+    return x_padded
+
+def spatial_transform(stl, x, transmat, paddings=None, threshold=True):
+    if not paddings is None:
+        x_padded = spatial_pad(x, paddings)
+    else:
+        x_padded = x
+
     batch_size = transmat.get_shape().as_list()[0]
-    shiftmat = tf.zeros([batch_size,3,1], dtype=tf.float32)
-    transmat_full = tf.concat([transmat, shiftmat], axis=2)
+
+    if transmat.get_shape().as_list()[2]==3:
+        shiftmat = tf.zeros([batch_size,3,1], dtype=tf.float32)
+        transmat_full = tf.concat([transmat, shiftmat], axis=2)
+    else:
+        transmat_full = transmat
+        
     transmat_full = tf.reshape(transmat_full, [batch_size, -1])
     x_in = stl.transform(x_padded, transmat_full)
-    # thresholding
-    x_in = tf.floor(0.5 + x_in)
+    if threshold:
+        # thresholding
+        x_in = tf.floor(0.5 + x_in)
     return x_in
 
 def get_3drotmat(xyzrot):
@@ -259,6 +276,38 @@ def get_2drotscalemat(theta, min_scale, max_scale):
     Rot[:,1,0] = np.sin(theta)
     Rot[:,1,1] = np.cos(theta)
     return Rot
+
+def bn2d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
+    assert len(X.get_shape().as_list())==2, 'input to bn2d must be 2d tensor'
+
+    n_out = X.get_shape().as_list()[-1]
+    
+    beta = tf.get_variable('beta_'+name, dtype=tf.float32, shape=n_out, initializer=tf.constant_initializer(0.0))
+    gamma = tf.get_variable('gamma_'+name, dtype=tf.float32, shape=n_out, initializer=tf.constant_initializer(1.0))
+    pop_mean = tf.get_variable('pop_mean_'+name, dtype=tf.float32, shape=n_out, trainable=False)
+    pop_var = tf.get_variable('pop_var_'+name, dtype=tf.float32, shape=n_out, trainable=False)
+
+    batch_mean, batch_var = tf.nn.moments(X, [0], name='moments_'+name)
+    
+    if not reuse:
+    	ema = tf.train.ExponentialMovingAverage(decay=decay)
+    
+    	def mean_var_with_update():
+    		ema_apply_op = ema.apply([batch_mean, batch_var])
+    		pop_mean_op = tf.assign(pop_mean, ema.average(batch_mean))
+    		pop_var_op = tf.assign(pop_var, ema.average(batch_var))
+    
+    		with tf.control_dependencies([ema_apply_op, pop_mean_op, pop_var_op]):
+    			return tf.identity(batch_mean), tf.identity(batch_var)
+    	
+    	mean, var = tf.cond(train_phase, mean_var_with_update,
+    				lambda: (pop_mean, pop_var))
+    else:
+    	mean, var = tf.cond(train_phase, lambda: (batch_mean, batch_var),
+    			lambda: (pop_mean, pop_var))
+    	
+    return tf.nn.batch_normalization(X, mean, var, beta, gamma, 1e-5)
+
 
 
 def bn5d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
