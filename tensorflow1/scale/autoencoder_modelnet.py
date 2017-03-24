@@ -586,9 +586,9 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 32
-    opt['n_epochs'] = 300
-    opt['lr_schedule'] = [10, 50, 150, 200, 250]
-    opt['lr'] = 1e-3
+    opt['n_epochs'] = 500
+    opt['lr_schedule'] = [400]
+    opt['lr'] = 1e-4
 
     opt['vol_size'] = [32,32,32]
     pad_size = 0#int(np.ceil(np.sqrt(3)*opt['vol_size'][0]/2)-opt['vol_size'][0]/2)
@@ -609,16 +609,18 @@ def main(_):
     #opt['flag'] = 'modelnet_classify100_cont'
     #opt['flag'] = 'modelnet_classify1000_scratch'
     #opt['flag'] = 'modelnet_classify10000_scratch'
-    #opt['flag'] = 'modelnet2_test'
     #opt['flag'] = 'modelnet2_classify1000'
-    opt['flag'] = 'modelnet2_classify1000_ta' # threshold augmentation
+    #opt['flag'] = 'modelnet2_classify100_ta' # threshold augmentation
+    opt['flag'] = 'modelnet2_classify1_ta' # threshold augmentation
     #opt['flag'] = 'modelnet2_classify100'
+    #opt['flag'] = 'modelnet2_test'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
     ###
     opt['load_path'] = ''
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify100_ta/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1000/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify100_cont/'
@@ -692,8 +694,8 @@ def main(_):
         y_pred = tf.nn.softmax(y_logits)
         test_y_logits = classifier(test_codes, opt['f_params_dim'], is_training, reuse=True)
         test_y_pred = tf.nn.softmax(test_y_logits)
-        c_loss = 1000*classifier_loss(y_true, y_logits, data.train.class_balance)
-        c_loss = tf.reduce_mean(c_loss)
+        c_loss = classifier_loss(y_true, y_logits, data.train.class_balance)
+        c_loss = 1*tf.reduce_mean(c_loss)
     loss = rec_loss + c_loss
     
     # Summaries
