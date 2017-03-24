@@ -31,8 +31,8 @@ flags.DEFINE_integer('save_step', 2, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
-flags.DEFINE_boolean('DaniyarSleepy', False, 'Dopey execution environment')
-flags.DEFINE_boolean('Mac', True, 'Mac execution environment')
+flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
+flags.DEFINE_boolean('Mac', False, 'Mac execution environment')
 flags.DEFINE_boolean('TEST', False, 'Evaluate model on the test set')
 flags.DEFINE_boolean('VIS', False, 'Visualize feature space transformations')
 
@@ -116,8 +116,8 @@ def random_transmats(batch_size):
     """
 
     if True:
-        params_inp_rot = np.pi*2*(np.random.rand(batch_size, 1)-0.5)
-        params_trg_rot = np.pi*2*(np.random.rand(batch_size, 1)-0.5)
+        params_inp_rot = np.pi*2*(np.random.rand(batch_size)-0.5)
+        params_trg_rot = np.pi*2*(np.random.rand(batch_size)-0.5)
 
     inp_2drotmat = get_2drotscalemat(params_inp_rot, 1.0, 1.0)
     trg_2drotmat = get_2drotscalemat(params_trg_rot, 1.0, 1.0)
@@ -272,7 +272,7 @@ def train(inputs, outputs, ops, opt, data):
         # Train
         train_loss = 0.
         # Run training steps
-        num_steps = data.train.num_steps(opt['mb_size'])
+        num_steps = data.train.num_examples/opt['mb_size']
         for step_i in xrange(num_steps):
             cur_stl_params_aug, cur_stl_params_in, cur_stl_params_trg, cur_f_params = random_transmats(opt['mb_size'])
             ops = [global_step, loss, merged, train_op]
@@ -336,14 +336,14 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 32
-    opt['n_epochs'] = 300
-    opt['lr_schedule'] = [200]
-    opt['lr'] = 1e-4
+    opt['n_epochs'] = 100
+    opt['lr_schedule'] = [25, 50, 75]
+    opt['lr'] = 1e-3
     opt['f_params_dim'] = 2
-    opt['num_latents'] = opt['f_params_dim']*16
+    opt['num_latents'] = opt['f_params_dim']*32
     opt['stl_size'] = 2 # no translation
 
-    opt['flag'] = 'mnist'
+    opt['flag'] = 'rotmnist'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
@@ -389,7 +389,7 @@ def main(_):
     test_recon, test_codes, _ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
 
     # LOSS
-    loss = bernoulli_xentropy(x_trg, recons)
+    loss = bernoulli_xentropy(x_trg, recons_logits)
     
     # Summaries
     tf_im_summary('recons', tf.reshape(recons, [-1, 28, 28, 1])) 
