@@ -473,46 +473,109 @@ def validate(inputs, outputs, opt):
 	recon = outputs[0]
 	
 	save_dir = '{:s}/Code/harmonicConvolutions/tensorflow1/scale'.format(opt['root'])
-	DOF = ['az_light', 'az_rot', 'el_light', 'el_rot']
 	
-	save_folder = '{:s}/movie_faces/comparison/'.format(save_dir)
+	save_folder = '{:s}/movie_faces/supp_mat/'.format(save_dir)
+	#DOF = ['az_light','az_rot','el_light','el_rot']
+	DOF = ['joint']
+	faces = ['face010','face009','face008','face007','face006']
 	saver = tf.train.Saver()
 	with tf.Session() as sess:
 		# Load variables from stored model
 		saver.restore(sess, opt['save_path'])
-		X = skio.imread('{:s}/az_rot/face010/045_000_014_014.png'.format(opt['data_folder']))[np.newaxis,...]
-		X = X.astype(np.float32)
-
-		# Angular limits
-		lo = np.asarray([-114,-86,-114,-30]) * (np.pi/180.)
-		hi = np.asarray([114,86,114,30]) * (np.pi/180.)
+		for j, dof in enumerate(DOF):
+			for l, face in enumerate(faces):
+				X = skio.imread('{:s}/az_rot/{:s}/-01_000_014_014.png'.format(opt['data_folder'],face))[np.newaxis,...]
+				#X = skio.imread('/home/dworrall/Data/obama.png'.format(opt['data_folder']))
+				#X = X[np.newaxis,...,:3]
+				X = X.astype(np.float32)
+				#canvas = []
+				#canvas.append(sktr.resize(np.squeeze(X)/255., (300,300), order=0))
 		
-		# loop
-		for i, var in enumerate(np.linspace(lo[j], hi[j], num=16)):
-			# Defaults
-			phi = -29 * (np.pi/180.)
-			theta = 0. * (np.pi/180.)
-			phi_light = 14 * (np.pi/180.)
-			theta_light = 14 * (np.pi/180.)
-			# Assign var
-			#if j == 0:
-			#	phi_light = var
-			#elif j == 1:
-			#	phi = var
-			#elif j == 2:
-			#	theta_light = var
-			#elif j == 3:
-			#	theta = var
-			Geometry = rot3d(phi, theta)[np.newaxis,...].astype(np.float32)
-			Lighting = rot3d(phi_light, theta_light)[np.newaxis,...].astype(np.float32)
+				# Angular limits
+				#lo = np.asarray([-114,-86,-114,-30]) * (np.pi/180.)
+				#hi = np.asarray([114,86,114,30]) * (np.pi/180.)
+				
+				# Create folder
+				path = '{:s}{:s}/{:s}'.format(save_folder, dof, face)
+				if not os.path.exists(path):
+					os.mkdir(path)
+				# loop
+				#for i, var in enumerate(np.linspace(lo[j], hi[j], num=300)):
+				#for i, var in enumerate(np.linspace(0,135*(np.pi/180.), num=6)):
+				for i, var in enumerate(np.linspace(0.,2*np.pi, num=300)):
+					# Defaults
+					#phi = 0. #-29 * (np.pi/180.)
+					#theta = 0. * (np.pi/180.)
+					phi_light = 14 * (np.pi/180.)
+					theta_light = 14 * (np.pi/180.)
+					phi = 50*np.cos(var) * (np.pi/180.)
+					theta = 20*np.sin(var) * (np.pi/180.)
+					# Assign var
+					#if j == 0:
+					#	phi_light = var
+					#elif j == 1:
+					#	phi = -var
+					#elif j == 2:
+					#	theta_light = var
+					#elif j == 3:
+					#	theta = var
+					Geometry = rot3d(phi, theta)[np.newaxis,...].astype(np.float32)
+					Lighting = rot3d(phi_light, theta_light)[np.newaxis,...].astype(np.float32)
+					
+					feed_dict = {x: X,
+									 geometry: Geometry,
+									 lighting: Lighting,
+									 is_training: False}
+					Recon = sess.run(recon, feed_dict=feed_dict)
+					Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
+					skio.imsave('{:s}{:s}/{:s}/{:04d}.png'.format(save_folder, dof, face, i), Recon_)
+					#canvas.append(np.hstack((np.zeros((300,5,3)),Recon_)))
+	#canvas = np.hstack(canvas)
+	#canvas = skco.rgb2gray(canvas)
+	#skio.imsave('{:s}/canvas.png'.format(save_folder), canvas)
+	#skio.imsave('/home/dworrall/Data/real_faces_light.png', canvas)
+
+
+def trajectory(inputs, outputs, opt):
+	"""Validate network"""
+	# Unpack inputs, outputs and ops
+	x, geometry, lighting, is_training = inputs
+	recon = outputs[0]
+	
+	save_dir = '{:s}/Code/harmonicConvolutions/tensorflow1/scale'.format(opt['root'])
+	
+	save_folder = '{:s}/movie_faces/supp_mat/'.format(save_dir)
+	faces = ['face004']
+	saver = tf.train.Saver()
+	with tf.Session() as sess:
+		# Load variables from stored model
+		saver.restore(sess, opt['save_path'])
+		print('Hello')
+		for l, face in enumerate(faces):
+			X = skio.imread('{:s}/az_rot/{:s}/000_000_014_014.png'.format(opt['data_folder'],face))[np.newaxis,...]
+			X = X.astype(np.float32)
 			
-			feed_dict = {x: X,
-							 geometry: Geometry,
-							 lighting: Lighting,
-							 is_training: False}
-			Recon = sess.run(recon, feed_dict=feed_dict)
-			Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
-			skio.imsave('{:s}/{:04d}.png'.format(save_folder, i), Recon_)
+			# Create folder
+			path = '{:s}{:s}/{:s}'.format(save_folder, dof, face)
+			if not os.path.exists(path):
+				os.mkdir(path)
+			for i, var in enumerate(np.linspace(0.,2*np.pi, num=300)):
+				# Defaults
+				phi_light = 14 * (np.pi/180.)
+				theta_light = 14 * (np.pi/180.)
+				phi = 50*np.cos(var) * (np.pi/180.)
+				theta = 20*np.sin(var) * (np.pi/180.)
+				Geometry = rot3d(phi, theta)[np.newaxis,...].astype(np.float32)
+				Lighting = rot3d(phi_light, theta_light)[np.newaxis,...].astype(np.float32)
+				
+				feed_dict = {x: X,
+								 geometry: Geometry,
+								 lighting: Lighting,
+								 is_training: False}
+				Recon = sess.run(recon, feed_dict=feed_dict)
+				Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
+				print i
+				skio.imsave('{:s}traj/{:s}/{:04d}.png'.format(save_folder, face, i), Recon_)
 
 
 def feature_stability(inputs, outputs, opt):
@@ -752,7 +815,8 @@ def main(_):
 	outputs = [recon, latents]
 	
 	# Train
-	validate(inputs, outputs, opt)
+	#validate(inputs, outputs, opt)
+	trajectory(inputs, outputs, opt)
 	#feature_stability(inputs, outputs, opt)
 	#L2_distance(opt)
 
