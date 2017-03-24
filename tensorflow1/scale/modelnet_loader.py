@@ -158,12 +158,13 @@ def read_data_sets(basedir, one_hot=False):
   return data_sets
   
 def test():
-  #dataset = read_data_sets('~/Documents/Datasets/ModelNet/')
+  print(class_id)
+  dataset = read_data_sets('~/Documents/Datasets/ModelNet/')
   #dataset = read_data_sets('~/ShapeNet/shapenetvox/ShapeNetVox32')
-  dataset = read_data_sets('~/scratch/Datasets/ModelNet/', True)
+  #dataset = read_data_sets('~/scratch/Datasets/ModelNet/', True)
   tmp1, tmp2 = dataset.train.next_batch(2)
   print(dataset.train.volumes.shape)
-  print(dataset.validation.volumes.shape)
+  #print(dataset.validation.volumes.shape)
   print(dataset.test.volumes.shape)
   print(tmp1.shape)
   print(np.amax(tmp1))
