@@ -353,15 +353,15 @@ def main(_):
 	opt['im_size'] = (28,28)
 	opt['train_size'] = 55000
 	opt['equivariant_weight'] = 1 
-	flag = 'vae'
-	opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(flag)
-	opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/model.ckpt'.format(flag)
+	flag = 'vae_text'
+	opt['summary_path'] = dir_ + '/summaries/mnist_train_{:s}'.format(flag)
+	opt['save_path'] = dir_ + '/checkpoints/mnist_train_{:s}/model.ckpt'.format(flag)
 
 	#check and clear directories
 	checkFolder(opt['summary_path'])
 	checkFolder(opt['save_path'])
-	removeAllFilesInDirectory(opt['summary_path'], '.*')
-	removeAllFilesInDirectory(opt['save_path'], '.*')
+	#removeAllFilesInDirectory(opt['summary_path'], '.*')
+	#removeAllFilesInDirectory(opt['save_path'], '.*')
 	
 	# Load data
 	data = load_data()
