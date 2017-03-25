@@ -80,7 +80,7 @@ def encoder(x, num_latents, is_training, reuse=False):
     """Encoder MLP"""
     l1 = mlplayer(0, x, 784, 512, is_training=is_training, reuse=reuse, dobn=True)
     l2 = mlplayer(1, l1, 512, 512, is_training=is_training, reuse=reuse, dobn=True)
-    codes = mlplayer(2, l2, 512, num_latents, is_training=is_training, reuse=reuse, dobn=False)
+    codes = mlplayer(2, l2, 512, num_latents, is_training=is_training, reuse=reuse, dobn=False, nonlin=tf.identity)
     return codes
 
 
@@ -106,7 +106,7 @@ def autoencoder(x, num_latents, f_params, is_training, reuse=False):
             codes_transformed = tf.reshape(codes_transformed, code_shape)
         with tf.variable_scope("decoder", reuse=reuse) as scope:
             recons, recons_logits = decoder(codes_transformed, is_training, reuse=reuse)
-    return recons, codes, recons_logits
+    return recons, codes, recons_logits, codes_transformed
 
 
 def bernoulli_xentropy(x, recon_test):
@@ -165,7 +165,7 @@ def vis(inputs, outputs, ops, opt, data):
     """Training loop"""
     # Unpack inputs, outputs and ops
     x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training = inputs
-    loss, merged, test_recon, recons, test_x_in = outputs
+    loss, merged, test_recon, recons, test_x_in, test_codes, test_codes_trans = outputs
     train_op = ops
     
     # For checkpoints
@@ -189,42 +189,53 @@ def vis(inputs, outputs, ops, opt, data):
         return
     
     # check test set
-    num_steps = 2#data.test.num_steps(1)
+    num_steps = 10#data.test.num_steps(1)
+    max_angles_i = 72
+    max_angles_j = 36
+    fangles_i = np.linspace(0, 2*np.pi, num=max_angles_i)
+    fangles_j = np.linspace(0, 2*np.pi, num=max_angles_j)
+    
+    save_folder = './vis/' + opt['flag'] + '/'
+    checkFolder(save_folder)
     for step_i in xrange(num_steps):
+        cur_save_folder = save_folder + '%04d/' % step_i
+        checkFolder(cur_save_folder)
         print(step_i)
-        val_recons = []
-        val_vox = []
         #pick a random initial transformation
         _, cur_stl_params_in, _, cur_f_params = random_transmats(1)
 
-        max_angles = 36
         cur_x, cur_y_true = data.test.next_batch(1)
-        fangles = np.linspace(0, 2*np.pi, num=max_angles)
-        
-        save_folder = './vis/' + opt['flag'] + '/'
-        checkFolder(save_folder)
-        j = 0
-        for i in xrange(max_angles):
-            cur_stl_params_j = update_f_params(cur_stl_params_in, fangles[j])
-            cur_f_params_i = update_f_params(cur_f_params, fangles[i])
-            print(i, cur_f_params_i)
-            feed_dict = {
-                        test_x : cur_x,
-                        test_stl_params_in : cur_stl_params_j, 
-                        val_f_params: cur_f_params_i,
-                        is_training : False
-                    }
+        for j in xrange(max_angles_j):
+            cur_stl_params_j = update_f_params(cur_stl_params_in, fangles_j[j])
+            for i in xrange(max_angles_i):
+                cur_f_params_i = update_f_params(cur_f_params, fangles_i[i])
+                feed_dict = {
+                            test_x : cur_x,
+                            test_stl_params_in : cur_stl_params_j, 
+                            val_f_params: cur_f_params_i,
+                            is_training : False
+                        }
 
-            cur_y = sess.run(test_recon, feed_dict=feed_dict)
-            val_recons.append(np.reshape(cur_y[0,:].copy(), [28, 28]))
-            save_name = save_folder + '/image_%04d_%03d' % (step_i, i)
-            imsave(save_name + '.png', val_recons[i]) 
+                cur_y = sess.run(test_recon, feed_dict=feed_dict)
+                cur_y = np.reshape(cur_y[0,:].copy(), [28, 28])
+                save_name = cur_save_folder + '/image_%04d_%04d' % (j, i)
+                imsave(save_name + '.png', cur_y) 
 
-            if i==0:
+                fcodes_trans = open(cur_save_folder + 'codes_trans_%04d_%04d.txt' % (j, i), 'wa')
+                cur_codes_trans = sess.run(test_codes_trans, feed_dict=feed_dict)
+                np.savetxt(fcodes_trans, cur_codes_trans, fmt='%.6e')
+                fcodes_trans.close()
+
+                fcodes_inp = open(cur_save_folder + 'codes_inp_%04d_%04d.txt' % (j, i), 'wa')
+                cur_codes = sess.run(test_codes, feed_dict=feed_dict)
+                np.savetxt(fcodes_inp, cur_codes, fmt='%.6e')
+                fcodes_inp.close()
+
                 cur_x_in = sess.run(test_x_in, feed_dict=feed_dict)
                 cur_x_in = np.reshape(cur_x_in[0,:].copy(), [28, 28])
-                save_name = save_folder + '/input_%04d' % step_i
+                save_name = cur_save_folder + '/input_%04d_%04d' % (j, i)
                 imsave(save_name + '.png', cur_x_in) 
+
 
 
 
@@ -232,7 +243,7 @@ def train(inputs, outputs, ops, opt, data):
     """Training loop"""
     # Unpack inputs, outputs and ops
     x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training = inputs
-    loss, merged, test_recon, recons, test_x_in = outputs
+    loss, merged, test_recon, recons, test_x_in, test_codes, test_codes_trans = outputs
     train_op = ops
     
     # For checkpoints
@@ -371,12 +382,12 @@ def main(_):
     x_trg = tf.reshape(spatial_transform(x_img, stl_params_trg, outshape), [-1, 28*28])
 
     # Build the training model
-    recons, codes, recons_logits = autoencoder(x_in, opt['num_latents'], f_params, is_training)
+    recons, codes, recons_logits, _ = autoencoder(x_in, opt['num_latents'], f_params, is_training)
     
     # Test model
     test_x_img = tf.reshape(test_x, [-1, 28, 28, 1])
     test_x_in = tf.reshape(spatial_transform(test_x_img, test_stl_params_in, outshape), [-1, 28*28])
-    test_recon, test_codes, _ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
+    test_recon, test_codes, _, test_codes_trans = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
 
     # LOSS
     loss = bernoulli_xentropy(x_trg, recons_logits)
@@ -397,7 +408,7 @@ def main(_):
     # Set inputs, outputs, and training ops
     inputs = [x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training]
     ops = [train_op]
-    outputs = [loss, merged, test_recon, recons, test_x_in]
+    outputs = [loss, merged, test_recon, recons, test_x_in, test_codes, test_codes_trans]
 
     if FLAGS.VIS:
         return vis(inputs, outputs, ops, opt, data)
