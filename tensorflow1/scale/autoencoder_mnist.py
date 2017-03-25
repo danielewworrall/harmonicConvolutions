@@ -31,9 +31,8 @@ flags.DEFINE_integer('save_step', 2, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
-flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
-flags.DEFINE_boolean('Mac', False, 'Mac execution environment')
-flags.DEFINE_boolean('TEST', False, 'Evaluate model on the test set')
+flags.DEFINE_boolean('DaniyarSleepy', False, 'Dopey execution environment')
+flags.DEFINE_boolean('Mac', True, 'Mac execution environment')
 flags.DEFINE_boolean('VIS', False, 'Visualize feature space transformations')
 
 ##---------------------
@@ -56,6 +55,11 @@ def checkFolder(dir):
 
 ############## MODEL ####################
 
+def variable(name, shape=None, initializer=tf.contrib.layers.xavier_initializer_conv2d(uniform=False), trainable=True):
+    #tf.constant_initializer(0.0)
+    with tf.device('/cpu:0'):
+        var = tf.get_variable(name, shape, initializer=initializer, trainable=trainable)
+    return var
 
 def spatial_transform(x, t_params, imsh):
     """Spatial transformer wtih shapes sets"""
@@ -119,8 +123,8 @@ def random_transmats(batch_size):
         params_inp_rot = np.pi*2*(np.random.rand(batch_size)-0.5)
         params_trg_rot = np.pi*2*(np.random.rand(batch_size)-0.5)
 
-    inp_2drotmat = get_2drotscalemat(params_inp_rot, 1.0, 1.0)
-    trg_2drotmat = get_2drotscalemat(params_trg_rot, 1.0, 1.0)
+    inp_2drotmat = get_2drotmat(params_inp_rot)
+    trg_2drotmat = get_2drotmat(params_trg_rot)
 
     f_params_inp = np.matmul(trg_2drotmat.transpose([0,2,1]), inp_2drotmat)
     
@@ -130,27 +134,26 @@ def random_transmats(batch_size):
 
     return None, stl_transmat_inp, stl_transmat_trg, f_params_inp
 
+def update_f_params(f_params, theta):
+    # do 2x2 rotation
+    angles = np.zeros([1])
+    angles[:] = theta
+    inp_2drotmat = get_2drotmat(angles)
+    f_params = inp_2drotmat
+    return f_params
+
 ############################################
 
-def load_sess(sess, load_path, load_classifier=False):
+def load_sess(sess, load_path):
     ckpt = tf.train.get_checkpoint_state(load_path)
     print('loading from', load_path)
     
     if ckpt and ckpt.model_checkpoint_path:
         vars_to_restore = tf.global_variables()
         res_saver = tf.train.Saver(vars_to_restore)
-        if not load_classifier:
-            vars_to_pop = [var for var in vars_to_restore if 'classifier' in var.name]
-            for var in vars_to_pop:
-                vars_to_restore.remove(var)
+
         # Restores from checkpoint
-        model_checkpoint_path = os.path.abspath(ckpt.model_checkpoint_path)
-        print(model_checkpoint_path)
-        res_saver.restore(sess, model_checkpoint_path)
-        
-        # Restores from checkpoint
-        model_checkpoint_path = os.path.abspath(ckpt.model_checkpoint_path)
-        print(model_checkpoint_path)
+        model_checkpoint_path = load_path + ckpt.model_checkpoint_path[-13:]
         res_saver.restore(sess, model_checkpoint_path)
     else:
         print('No checkpoint file found')
@@ -161,8 +164,8 @@ def vis(inputs, outputs, ops, opt, data):
     print('in vis')
     """Training loop"""
     # Unpack inputs, outputs and ops
-    x, global_step, stl_params_aug, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training, y_true, test_y_true = inputs
-    loss, merged, test_recon, x_in, test_x_in = outputs
+    x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training = inputs
+    loss, merged, test_recon, recons, test_x_in = outputs
     train_op = ops
     
     # For checkpoints
@@ -170,17 +173,23 @@ def vis(inputs, outputs, ops, opt, data):
     start = time.time()
     
     saver = tf.train.Saver()
-    sess = tf.Session()
+
+    config = tf.ConfigProto(
+        device_count = {'GPU': 0},
+        allow_soft_placement=True,
+        log_device_placement=True
+    )
+    sess = tf.Session(config=config)
 
     # Initialize variables
     if len(opt['load_path'])>0:
-        sess = load_sess(sess, opt['load_path'], False)
+        sess = load_sess(sess, opt['load_path'])
     else:
         print('No model to load')
         return
     
     # check test set
-    num_steps = 50#data.test.num_steps(1)
+    num_steps = 2#data.test.num_steps(1)
     for step_i in xrange(num_steps):
         print(step_i)
         val_recons = []
@@ -188,61 +197,42 @@ def vis(inputs, outputs, ops, opt, data):
         #pick a random initial transformation
         _, cur_stl_params_in, _, cur_f_params = random_transmats(1)
 
-        max_angles = 5
-        
+        max_angles = 36
         cur_x, cur_y_true = data.test.next_batch(1)
-        fangles = np.linspace(-np.pi, np.pi, num=max_angles*max_angles)
-        rot_ax = 0
-
-        for i in xrange(max_angles):
-            for j in xrange(max_angles):
-                cur_f_params_j = update_f_params(cur_f_params, 0, rot_ax, fangles[i*max_angles + j])
-                feed_dict = {
-                            test_x : cur_x,
-                            test_stl_params_in : cur_stl_params_in, 
-                            val_f_params: cur_f_params_j,
-                            is_training : False
-                        }
-
-                y = sess.run(test_recon, feed_dict=feed_dict)
-                val_recons.append(y[0,:,:,:,:].copy())
-                val_vox.append(y[0,:,:,:,0].copy()>0.5)
-
-                if j==0:
-                    cur_x_in = sess.run(test_x_in, feed_dict=feed_dict)
-                    val_vox_in = cur_x_in[0,:,:,:,0].copy()>0.5
+        fangles = np.linspace(0, 2*np.pi, num=max_angles)
         
-        samples_ = np.stack(val_recons)
-        print(samples_.shape)
-
-        tile_image = np.reshape(samples_, [max_angles*max_angles, opt['outsize'][0], opt['outsize'][1], opt['outsize'][2], opt['color_chn']])
-        tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(tile_image, max_angles, max_angles)
-
         save_folder = './vis/' + opt['flag'] + '/'
         checkFolder(save_folder)
-        save_name = save_folder + '/image_%04d' % step_i
-        imsave(save_name + '_d.png', tile_image_d) 
-        imsave(save_name + '_h.png', tile_image_h) 
-        imsave(save_name + '_w.png', tile_image_w) 
+        j = 0
+        for i in xrange(max_angles):
+            cur_stl_params_j = update_f_params(cur_stl_params_in, fangles[j])
+            cur_f_params_i = update_f_params(cur_f_params, fangles[i])
+            print(i, cur_f_params_i)
+            feed_dict = {
+                        test_x : cur_x,
+                        test_stl_params_in : cur_stl_params_j, 
+                        val_f_params: cur_f_params_i,
+                        is_training : False
+                    }
 
-        for i, v in enumerate(val_vox):
-            save_name = save_folder + '/binvox_%04d_%004d' % (step_i, i)
-            save_binvox(v, save_name)
-        save_name = save_folder + '/inp_binvox_%04d' % step_i
-        save_binvox(val_vox_in, save_name)
+            cur_y = sess.run(test_recon, feed_dict=feed_dict)
+            val_recons.append(np.reshape(cur_y[0,:].copy(), [28, 28]))
+            save_name = save_folder + '/image_%04d_%03d' % (step_i, i)
+            imsave(save_name + '.png', val_recons[i]) 
 
-        tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(cur_x_in, 1, 1)
-        save_name = save_folder + '/input_%04d' % step_i
-        imsave(save_name + '_d.png', tile_image_d) 
-        imsave(save_name + '_h.png', tile_image_h) 
-        imsave(save_name + '_w.png', tile_image_w) 
+            if i==0:
+                cur_x_in = sess.run(test_x_in, feed_dict=feed_dict)
+                cur_x_in = np.reshape(cur_x_in[0,:].copy(), [28, 28])
+                save_name = save_folder + '/input_%04d' % step_i
+                imsave(save_name + '.png', cur_x_in) 
+
 
 
 def train(inputs, outputs, ops, opt, data):
     """Training loop"""
     # Unpack inputs, outputs and ops
     x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training = inputs
-    loss, merged, test_recon, recons = outputs
+    loss, merged, test_recon, recons, test_x_in = outputs
     train_op = ops
     
     # For checkpoints
@@ -257,7 +247,7 @@ def train(inputs, outputs, ops, opt, data):
     sess.run(init)
 
     if len(opt['load_path'])>0:
-        sess = load_sess(sess, opt['load_path'], True)
+        sess = load_sess(sess, opt['load_path'])
     else:
         print('Training from scratch')
     
@@ -340,16 +330,16 @@ def main(_):
     opt['lr_schedule'] = [25, 50, 75]
     opt['lr'] = 1e-3
     opt['f_params_dim'] = 2
-    opt['num_latents'] = opt['f_params_dim']*32
+    opt['num_latents'] = opt['f_params_dim']*16
     opt['stl_size'] = 2 # no translation
 
-    opt['flag'] = 'rotmnist'
+    opt['flag'] = 'rotmnist_vis'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
     ###
-    opt['load_path'] = ''
-    #opt['load_path'] = dir_ + '/checkpoints/autotrain_mnist/'
+    #opt['load_path'] = ''
+    opt['load_path'] = dir_ + '/checkpoints/autotrain_rotmnist/'
     
     #check and clear directories
     checkFolder(opt['summary_path'])
@@ -407,10 +397,10 @@ def main(_):
     # Set inputs, outputs, and training ops
     inputs = [x, global_step, stl_params_in, stl_params_trg, f_params, lr, test_x, test_stl_params_in, val_f_params, is_training]
     ops = [train_op]
-    outputs = [loss, merged, test_recon, recons]
+    outputs = [loss, merged, test_recon, recons, test_x_in]
 
-    if FLAGS.TEST:
-        return test(inputs, outputs, ops, opt, data)
+    if FLAGS.VIS:
+        return vis(inputs, outputs, ops, opt, data)
     # Train
     return train(inputs, outputs, ops, opt, data)
 

@@ -263,6 +263,15 @@ def get_3dscalemat(xyzfactor):
     scalemat[:,2,2] = xyzfactor[:,2]
     return scalemat
 
+def get_2drotmat(theta):
+    batch_size = theta.shape[0]
+    Rot = np.zeros([batch_size, 2, 2])
+    Rot[:,0,0] = np.cos(theta)
+    Rot[:,0,1] = -np.sin(theta)
+    Rot[:,1,0] = np.sin(theta)
+    Rot[:,1,1] = np.cos(theta)
+    return Rot
+
 def get_2drotscalemat(theta, min_scale, max_scale):
     batch_size = theta.shape[0]
     Rot = np.zeros([batch_size, 2, 2])
