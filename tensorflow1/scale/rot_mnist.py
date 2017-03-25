@@ -179,6 +179,7 @@ def encoder_conv(x, is_training, opt, reuse=False):
 			x = bn4d(x, is_training, name='bn_e{:d}'.format(i), reuse=reuse)
 			x = leaky_relu(x)
 			nl_ = nl
+	print x
 	
 	with tf.variable_scope('Encoder_out', reuse=reuse) as scope:
 		return conv(x, [3,3,nl_,n_mid*2**((n_layers-1)/2)], name='e_out', padding='VALID')
@@ -197,8 +198,10 @@ def decoder_conv(z, is_training, opt, reuse=False):
 	with tf.variable_scope('decoder_in', reuse=reuse) as scope:
 		out_shape = get_outshape(k,28,n_layers,n_layers)
 		nl = int(np.power(nl_mult, n_layers-1)*n_mid)
+		print z
 		z = deconv(z, [5,5,zsh[3],nl], out_shape, name='d_in')
 		z = bn4d(z, is_training, name='bn_d_in', reuse=reuse)
+		print z
 
 	nl_ = nl
 	for i in xrange(n_layers-2,0,-1):
@@ -209,8 +212,8 @@ def decoder_conv(z, is_training, opt, reuse=False):
 			z = deconv(leaky_relu(z),  [5,5,nl_,nl], out_shape, name='d{:d}'.format(i))
 			z = bn4d(z, is_training, name='bn_d{:d}'.format(i), reuse=reuse)
 			z = leaky_relu(z)
+			print z
 			nl_ = nl
-	print nl
 	with tf.variable_scope('decoder_1', reuse=reuse) as scope:
 		return deconv(leaky_relu(z), [3,3,nl_,1], [28,28], name='d0')
 
@@ -295,7 +298,7 @@ def bn4d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 def train(inputs, outputs, ops, opt):
 	"""Training loop"""
-	x, global_step, t_params_initial, t_params, f_params, lr, labels, vacc, fs_params, ts_params, xs, t_params_initial, is_training, annealer = inputs
+	x, global_step, t_params_initial, t_params, f_params, lr, labels, vacc, fs_params, ts_params, xs, t_params_initial, is_training = inputs
 	loss, merged, acc, vacc_summary = outputs
 	train_op = ops
 
@@ -332,7 +335,6 @@ def train(inputs, outputs, ops, opt):
 			train_acc = 0.
 			# Run training steps
 			mb_list = random_sampler(n_train, opt)
-			current_anneal = np.minimum(0.95,0.0025*epoch)
 			for i, mb in enumerate(mb_list):
 				#initial random transform
 				tp_init, fp_init = el.random_transform(opt['mb_size'], opt['im_size'])
@@ -345,8 +347,7 @@ def train(inputs, outputs, ops, opt):
 								 t_params_initial: tp_init,
 								 lr: current_lr,
 								 labels: data['Y']['train'][mb],
-								 is_training: True,
-								 annealer: current_anneal}
+								 is_training: True}
 				gs, l, summary, __, c = sess.run(ops, feed_dict=feed_dict)
 				train_loss += l
 				train_acc += c
@@ -381,7 +382,7 @@ def train(inputs, outputs, ops, opt):
 			valid_acc /= (i+1)
 			vs = sess.run(vacc_summary, feed_dict={vacc: valid_acc})
 			train_writer.add_summary(vs, gs)
-			print('[{:03d}]: Train Loss {:03f}, Train Acc {:03f}, Valid Acc {:03f}, Anneal: {:03f}'.format(epoch, train_loss, train_acc, valid_acc, current_anneal))
+			print('[{:03d}]: Train Loss {:03f}, Train Acc {:03f}, Valid Acc {:03f}'.format(epoch, train_loss, train_acc, valid_acc))
 
 		
 		# Test
@@ -420,11 +421,11 @@ def main(opt=None):
 		opt['train_size'] = 10000
 		opt['equivariant_weight'] = 0.1
 		
-		opt['n_mid'] = 10
-		opt['n_hid'] = 10
+		opt['n_mid'] = 24
+		#opt['n_hid'] = 10
 		opt['n_layers'] = 8
-		opt['n_layers_deconv'] = 4
-		opt['n_mid_class'] = 10
+		opt['n_layers_deconv'] = 5
+		opt['n_mid_class'] = 124
 		opt['n_layers_class'] = 4
 	
 		flag = 'bn'
@@ -455,7 +456,6 @@ def main(opt=None):
 	#fs_params = tf.placeholder(tf.float32, [1,2,2], name='fs_params') #latents
 	lr = tf.placeholder(tf.float32, [], name='lr')
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
-	annealer = tf.placeholder(tf.float32, [], name='annealer')
 	
 	# Build the model
 	# Input -- initial transformation
@@ -476,7 +476,7 @@ def main(opt=None):
 	#logits = classifier_conv(latents, n_mid=opt['n_mid_class'], layer_in=opt['n_layers'], n_layers=opt['n_layers_class'])
 	class_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
 	
-	loss = annealer*(1-opt['equivariant_weight'])*tf.reduce_mean(class_loss) + (1-annealer)*opt['equivariant_weight']*recon_loss
+	loss = (1-opt['equivariant_weight'])*tf.reduce_mean(class_loss) + opt['equivariant_weight']*recon_loss
 	acc = tf.reduce_mean(tf.to_float(tf.equal(tf.argmax(logits, axis=1), labels)))
 	
 	# Summaries
@@ -491,7 +491,7 @@ def main(opt=None):
 	optim = tf.train.AdamOptimizer(lr)
 	train_op = optim.minimize(loss, global_step=global_step)
 	
-	inputs = [x, global_step, t_params_initial, t_params, f_params, lr, labels, vacc, fs_params, ts_params, xs, t_params_initial, is_training, annealer]
+	inputs = [x, global_step, t_params_initial, t_params, f_params, lr, labels, vacc, fs_params, ts_params, xs, t_params_initial, is_training]
 	outputs = [loss, merged, acc, vacc_summary]
 	ops = train_op
 	

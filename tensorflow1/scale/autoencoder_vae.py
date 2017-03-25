@@ -391,14 +391,14 @@ def main(_):
 	
 	# LOSS
 	# KL-divergence of posterior from prior
-	kl_loss = gaussian_kl(mu, sigma)
+	#kl_loss = gaussian_kl(mu, sigma)
 	# Negative log-likelihood
 	nll = bernoulli_xentropy(tf.to_float(target > 0.5), recon)
 	loss = nll #+ kl_loss
 	
 	# Summaries
 	tf.summary.scalar('Loss', loss)
-	tf.summary.scalar('Loss_KL', kl_loss)
+	#tf.summary.scalar('Loss_KL', kl_loss)
 	tf.summary.scalar('Loss_Img', nll)
 	tf.summary.scalar('LearningRate', lr)
 	merged = tf.summary.merge_all()

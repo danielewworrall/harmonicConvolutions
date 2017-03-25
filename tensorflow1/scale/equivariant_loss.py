@@ -11,6 +11,22 @@ import tensorflow as tf
 
 from spatial_transformer import transformer
 
+def get_utr(inp):
+    print('get_utr')
+    print(inp)
+    assert len(inp.get_shape().as_list())==4, 'input must be 4 dimensional: batch_size, chunk_num, rel_phase_dim, rel_phase_dim'
+    assert inp.get_shape().as_list()[2]==inp.get_shape().as_list()[3], "last two dimensions must be the same because A'A"
+    batch_size = inp.get_shape().as_list()[0] 
+    m_size = inp.get_shape().as_list()[-1]
+    inp = tf.reshape(inp, [-1, m_size, m_size])
+    bc_size = inp.get_shape().as_list()[0]
+    utr_i = np.triu(np.ones([m_size, m_size]), k=0).astype(np.bool)
+    utr_i = np.expand_dims(utr_i, axis=0)
+    utr_i = np.tile(utr_i, [bc_size, 1, 1])
+    out = tf.boolean_mask(inp, utr_i)
+    out = tf.reshape(out, [bc_size, m_size*(m_size+1)/2])
+    out = tf.reshape(out, [batch_size, -1])
+    return out
 
 def feature_space_transform2d(x, xsh, f_params):
 	x = tf.reshape(x, tf.stack([xsh[0],xsh[1]/2,2]))

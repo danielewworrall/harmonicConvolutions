@@ -473,37 +473,98 @@ def validate(inputs, outputs, opt):
 	recon = outputs[0]
 	
 	save_dir = '{:s}/Code/harmonicConvolutions/tensorflow1/scale'.format(opt['root'])
-	DOF = ['az_light', 'az_rot', 'el_light', 'el_rot']
 	
-	for j in xrange(4):
-		save_folder = '{:s}/movie_faces_rectify/{:s}'.format(save_dir, DOF[j])
-		saver = tf.train.Saver()
-		with tf.Session() as sess:
-			# Load variables from stored model
-			saver.restore(sess, opt['save_path'])
-			X = skio.imread('{:s}/az_rot/face{:03d}/-01_000_045_045.png'.format(opt['data_folder'],j))[np.newaxis,...]
-			X = X.astype(np.float32)
+	save_folder = '{:s}/movie_faces/supp_mat/'.format(save_dir)
+	#DOF = ['az_light','az_rot','el_light','el_rot']
+	DOF = ['joint']
+	faces = ['face010','face009','face008','face007','face006']
+	saver = tf.train.Saver()
+	with tf.Session() as sess:
+		# Load variables from stored model
+		saver.restore(sess, opt['save_path'])
+		for j, dof in enumerate(DOF):
+			for l, face in enumerate(faces):
+				X = skio.imread('{:s}/az_rot/{:s}/-01_000_014_014.png'.format(opt['data_folder'],face))[np.newaxis,...]
+				#X = skio.imread('/home/dworrall/Data/obama.png'.format(opt['data_folder']))
+				#X = X[np.newaxis,...,:3]
+				X = X.astype(np.float32)
+				#canvas = []
+				#canvas.append(sktr.resize(np.squeeze(X)/255., (300,300), order=0))
+		
+				# Angular limits
+				#lo = np.asarray([-114,-86,-114,-30]) * (np.pi/180.)
+				#hi = np.asarray([114,86,114,30]) * (np.pi/180.)
+				
+				# Create folder
+				path = '{:s}{:s}/{:s}'.format(save_folder, dof, face)
+				if not os.path.exists(path):
+					os.mkdir(path)
+				# loop
+				#for i, var in enumerate(np.linspace(lo[j], hi[j], num=300)):
+				#for i, var in enumerate(np.linspace(0,135*(np.pi/180.), num=6)):
+				for i, var in enumerate(np.linspace(0.,2*np.pi, num=300)):
+					# Defaults
+					#phi = 0. #-29 * (np.pi/180.)
+					#theta = 0. * (np.pi/180.)
+					phi_light = 14 * (np.pi/180.)
+					theta_light = 14 * (np.pi/180.)
+					phi = 50*np.cos(var) * (np.pi/180.)
+					theta = 20*np.sin(var) * (np.pi/180.)
+					# Assign var
+					#if j == 0:
+					#	phi_light = var
+					#elif j == 1:
+					#	phi = -var
+					#elif j == 2:
+					#	theta_light = var
+					#elif j == 3:
+					#	theta = var
+					Geometry = rot3d(phi, theta)[np.newaxis,...].astype(np.float32)
+					Lighting = rot3d(phi_light, theta_light)[np.newaxis,...].astype(np.float32)
+					
+					feed_dict = {x: X,
+									 geometry: Geometry,
+									 lighting: Lighting,
+									 is_training: False}
+					Recon = sess.run(recon, feed_dict=feed_dict)
+					Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
+					skio.imsave('{:s}{:s}/{:s}/{:04d}.png'.format(save_folder, dof, face, i), Recon_)
+					#canvas.append(np.hstack((np.zeros((300,5,3)),Recon_)))
+	#canvas = np.hstack(canvas)
+	#canvas = skco.rgb2gray(canvas)
+	#skio.imsave('{:s}/canvas.png'.format(save_folder), canvas)
+	#skio.imsave('/home/dworrall/Data/real_faces_light.png', canvas)
 
-			# Angular limits
-			lo = np.asarray([-114,-86,-114,-30]) * (np.pi/180.)
-			hi = np.asarray([114,86,114,30]) * (np.pi/180.)
+
+def trajectory(inputs, outputs, opt):
+	"""Validate network"""
+	# Unpack inputs, outputs and ops
+	x, geometry, lighting, is_training = inputs
+	recon = outputs[0]
+	
+	save_dir = '{:s}/Code/harmonicConvolutions/tensorflow1/scale'.format(opt['root'])
+	
+	save_folder = '{:s}/movie_faces/supp_mat/'.format(save_dir)
+	faces = ['face004']
+	saver = tf.train.Saver()
+	with tf.Session() as sess:
+		# Load variables from stored model
+		saver.restore(sess, opt['save_path'])
+		print('Hello')
+		for l, face in enumerate(faces):
+			X = skio.imread('{:s}/az_rot/{:s}/000_000_014_014.png'.format(opt['data_folder'],face))[np.newaxis,...]
+			X = X.astype(np.float32)
 			
-			# loop
-			for i, var in enumerate(np.linspace(lo[j], hi[j], num=16)):
+			# Create folder
+			path = '{:s}{:s}/{:s}'.format(save_folder, dof, face)
+			if not os.path.exists(path):
+				os.mkdir(path)
+			for i, var in enumerate(np.linspace(0.,2*np.pi, num=300)):
 				# Defaults
-				phi = -29 * (np.pi/180.)
-				theta = 0. * (np.pi/180.)
-				phi_light = -60 * (np.pi/180.)
-				theta_light = -60 * (np.pi/180.)
-				# Assign var
-				if j == 0:
-					phi_light = var
-				elif j == 1:
-					phi = var
-				elif j == 2:
-					theta_light = var
-				elif j == 3:
-					theta = var
+				phi_light = 14 * (np.pi/180.)
+				theta_light = 14 * (np.pi/180.)
+				phi = 50*np.cos(var) * (np.pi/180.)
+				theta = 20*np.sin(var) * (np.pi/180.)
 				Geometry = rot3d(phi, theta)[np.newaxis,...].astype(np.float32)
 				Lighting = rot3d(phi_light, theta_light)[np.newaxis,...].astype(np.float32)
 				
@@ -513,7 +574,8 @@ def validate(inputs, outputs, opt):
 								 is_training: False}
 				Recon = sess.run(recon, feed_dict=feed_dict)
 				Recon_ = sktr.resize(Recon[0,...], (300,300), order=0)
-				skio.imsave('{:s}/{:04d}.png'.format(save_folder, i), Recon_)
+				print i
+				skio.imsave('{:s}traj/{:s}/{:04d}.png'.format(save_folder, face, i), Recon_)
 
 
 def feature_stability(inputs, outputs, opt):
@@ -524,9 +586,10 @@ def feature_stability(inputs, outputs, opt):
 	
 	dataset = ['az_rot', 'el_rot', 'az_light', 'el_light']
 	labels = ['Azimuth (degrees)','Elevation (degrees)','Lighting azimuth (degrees)','Lighting elevation (degrees)']
+	limit = [43,15,57,57]
 	
-	#template = skio.imread('{:s}/az_rot/face001/041_000_014_014.png'.format(opt['data_folder']))[np.newaxis,...]
-	template = skio.imread('{:s}/el_light/face000/000_000_000_001.png'.format(opt['data_folder']))[np.newaxis,...]
+	template = skio.imread('{:s}/az_rot/face001/041_000_014_014.png'.format(opt['data_folder']))[np.newaxis,...]
+	#template = skio.imread('{:s}/el_light/face000/000_000_000_001.png'.format(opt['data_folder']))[np.newaxis,...]
 	Geometry = np.eye(3)[np.newaxis,...].astype(np.float32)
 	Lighting = np.eye(3)[np.newaxis,...].astype(np.float32)
 	feed_dict = {x: template, geometry: Geometry, lighting: Lighting, is_training: False}
@@ -573,23 +636,30 @@ def feature_stability(inputs, outputs, opt):
 				L_canon = get_invariant(Latents_list[len(Latents_list)/2])
 				for L in Latents_list:
 					L = get_invariant(L)
-					#error = np.dot(L,L_canon) / np.sqrt(np.sum(L_canon**2)*np.sum(L**2))
-					#terror = np.dot(L,Template) / np.sqrt(np.sum(Template**2)*np.sum(L**2))
-					error = np.sqrt(np.mean((L - L_canon)**2))
-					terror = np.sqrt(np.mean((L - Template)**2))
+					error = np.dot(L,L_canon) / np.sqrt(np.sum(L_canon**2)*np.sum(L**2))
+					terror = np.dot(L,Template) / np.sqrt(np.sum(Template**2)*np.sum(L**2))
+					#error = np.sqrt(np.mean((L - L_canon)**2))
+					#terror = np.sqrt(np.mean((L - Template)**2))
 					errors.append(error)
 					Terrors.append(terror)
 				plt.plot(angle, errors, c=next(colorB))
 				plt.plot(angle, Terrors, c=next(colorR))
 				
-			plt.tick_params(axis='both', which='major', labelsize=16)
+			# Plot training limits
+			plt.plot((-limit[d],-limit[d]),(0.8,1.002),'k--')
+			plt.plot((limit[d],limit[d]),(0.8,1.002),'k--')
+				
+			plt.tick_params(axis='both', which='major', labelsize=30)
 			plt.xlim([np.amin(angle),np.amax(angle)])
-			plt.ylim([0.,0.9])
-			plt.xlabel(labels[d], fontsize=16)
-			#plt.ylabel('Cosine similarity', fontsize=16)
-			plt.ylabel('L2 distance on matrix features', fontsize=16)
+			plt.ylim([0.8,1.002])
+			plt.xlabel(labels[d], fontsize=30)
+			if d > 0:
+				plt.yticks([], [])
+			else:
+				plt.ylabel('Cosine similarity', fontsize=16)
+				#plt.ylabel('L2 distance', fontsize=30)
 			plt.tight_layout()
-			plt.savefig('{:s}/mixed_face/mf_L2mfeat_{:s}_.pdf'.format(opt['movie_faces'], dataset[d]))
+			plt.savefig('{:s}/mixed_face/mf_{:s}_.pdf'.format(opt['movie_faces'], dataset[d]))
 			plt.clf()
 
 
@@ -632,6 +702,7 @@ def L2_distance(opt):
 
 
 def get_invariant(x):
+	'''Implied batch size 1'''
 	n = np.prod(x.shape)
 	x1 = np.reshape(x, (n/6,1,6))
 	x2 = np.reshape(x, (1,n/6,6))
@@ -744,7 +815,8 @@ def main(_):
 	outputs = [recon, latents]
 	
 	# Train
-	validate(inputs, outputs, opt)
+	#validate(inputs, outputs, opt)
+	trajectory(inputs, outputs, opt)
 	#feature_stability(inputs, outputs, opt)
 	#L2_distance(opt)
 
