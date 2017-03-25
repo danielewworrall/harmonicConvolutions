@@ -143,12 +143,30 @@ def classifier(codes, f_params_dim, is_training, reuse=False):
         out = inp + switch*noise
         return out
 
+    ##feats = add_noise(feats, is_training)
+    ##feats = mul_noise(feats, is_training)
+    #l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse, is_training=is_training, dobn=True)
+    ##l1 = add_noise(l1, is_training)
+    ##l1 = mul_noise(l1, is_training)
+    #y_logits = mlplayer(1, l1, 256, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
+
+    ### TODO retraining 10_ta 
     #feats = add_noise(feats, is_training)
+    ##feats = mul_noise(feats, is_training)
+    #l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse, is_training=is_training, dobn=True)
+    #l1 = add_noise(l1, is_training)
+    #l2 = mlplayer(1, l1, 256, 128, reuse=reuse, is_training=is_training, dobn=True)
+    #l2 = add_noise(l2, is_training)
+    #y_logits = mlplayer(2, l2, 128, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
+
+    ## TODO retraining 10_2m
+    feats = mul_noise(feats, is_training)
     #feats = mul_noise(feats, is_training)
     l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse, is_training=is_training, dobn=True)
-    #l1 = add_noise(l1, is_training)
-    #l1 = mul_noise(l1, is_training)
-    y_logits = mlplayer(1, l1, 256, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
+    l1 = mul_noise(l1, is_training)
+    l2 = mlplayer(1, l1, 256, 128, reuse=reuse, is_training=is_training, dobn=True)
+    y_logits = mlplayer(2, l2, 128, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
+
     return y_logits
 
 
@@ -585,9 +603,9 @@ def main(_):
         opt['root'] = '/home/sgarbin'
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
-    opt['mb_size'] = 32
+    opt['mb_size'] = 16
     opt['n_epochs'] = 500
-    opt['lr_schedule'] = [400]
+    opt['lr_schedule'] = [400, 485, 495]
     opt['lr'] = 1e-4
 
     opt['vol_size'] = [32,32,32]
@@ -611,7 +629,9 @@ def main(_):
     #opt['flag'] = 'modelnet_classify10000_scratch'
     #opt['flag'] = 'modelnet2_classify1000'
     #opt['flag'] = 'modelnet2_classify100_ta' # threshold augmentation
-    opt['flag'] = 'modelnet2_classify1_ta' # threshold augmentation
+    #opt['flag'] = 'modelnet2_classify10_2' # threshold augmentation, 2-layer mlp 256-128 with additive noise
+    opt['flag'] = 'modelnet2_classify10_2m' # threshold augmentation, 2-layer mlp 256-128 with multiplicative noise
+    #opt['flag'] = 'modelnet2_classify1_ta' # threshold augmentation
     #opt['flag'] = 'modelnet2_classify100'
     #opt['flag'] = 'modelnet2_test'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
@@ -619,7 +639,9 @@ def main(_):
     
     ###
     opt['load_path'] = ''
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify10_2/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1_ta/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify100_ta/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1000/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
@@ -695,7 +717,7 @@ def main(_):
         test_y_logits = classifier(test_codes, opt['f_params_dim'], is_training, reuse=True)
         test_y_pred = tf.nn.softmax(test_y_logits)
         c_loss = classifier_loss(y_true, y_logits, data.train.class_balance)
-        c_loss = 1*tf.reduce_mean(c_loss)
+        c_loss = 10.*tf.reduce_mean(c_loss)
     loss = rec_loss + c_loss
     
     # Summaries

@@ -31,8 +31,8 @@ flags.DEFINE_integer('save_step', 2, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
-flags.DEFINE_boolean('DaniyarSleepy', False, 'Dopey execution environment')
-flags.DEFINE_boolean('Mac', True, 'Mac execution environment')
+flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
+flags.DEFINE_boolean('Mac', False, 'Mac execution environment')
 flags.DEFINE_boolean('VIS', False, 'Visualize feature space transformations')
 
 ##---------------------
@@ -54,12 +54,6 @@ def checkFolder(dir):
 
 
 ############## MODEL ####################
-
-def variable(name, shape=None, initializer=tf.contrib.layers.xavier_initializer_conv2d(uniform=False), trainable=True):
-    #tf.constant_initializer(0.0)
-    with tf.device('/cpu:0'):
-        var = tf.get_variable(name, shape, initializer=initializer, trainable=trainable)
-    return var
 
 def spatial_transform(x, t_params, imsh):
     """Spatial transformer wtih shapes sets"""
@@ -290,12 +284,12 @@ def train(inputs, outputs, ops, opt, data):
 
             gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
             train_loss += l
-            if step_i % 10==0:
+            if step_i % 50==0:
                 print('[{:03f}]: train_loss: {:03f}.'.format(float(step_i)/num_steps, l))
 
             assert not np.isnan(l), 'Model diverged with loss = NaN'
 
-            if step_i % 10==0:
+            if step_i % 50==0:
                 # Summary writers
                 train_writer.add_summary(summary, gs)
 
@@ -337,20 +331,21 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 32
-    opt['n_epochs'] = 100
-    opt['lr_schedule'] = [25, 50, 75]
+    opt['n_epochs'] = 80
+    opt['lr_schedule'] = [20, 40, 60]
     opt['lr'] = 1e-3
     opt['f_params_dim'] = 2
     opt['num_latents'] = opt['f_params_dim']*16
     opt['stl_size'] = 2 # no translation
 
-    opt['flag'] = 'rotmnist_vis'
+    opt['flag'] = 'rotmnist'
+    #opt['flag'] = 'rotmnist_vis'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
     ###
-    #opt['load_path'] = ''
-    opt['load_path'] = dir_ + '/checkpoints/autotrain_rotmnist/'
+    opt['load_path'] = ''
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_rotmnist/'
     
     #check and clear directories
     checkFolder(opt['summary_path'])
