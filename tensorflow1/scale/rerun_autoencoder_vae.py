@@ -8,6 +8,7 @@ sys.path.append('../')
 
 #import cv2
 #import input_data
+import matplotlib as mpl
 import numpy as np
 import skimage.io as skio
 import tensorflow as tf
@@ -115,14 +116,16 @@ def autoencoder(x, f_params, is_training, reuse=False):
 	with tf.variable_scope('mainModel', reuse=reuse) as scope:
 		x = tf.reshape(x, tf.stack([xsh[0],784]))
 		with tf.variable_scope("encoder", reuse=reuse) as scope:
-			mu, sigma = encoder(x, is_training, reuse=reuse)
-			z = sampler(mu, sigma, sample=False) #(not reuse))
+			#mu, sigma = encoder(x, is_training, reuse=reuse)
+			#z = sampler(mu, sigma, sample=False) #(not reuse))
+			mu = encoder(x, is_training, reuse=reuse)
+			z = mu
 		with tf.variable_scope("feature_transformer", reuse=reuse) as scope:
 			matrix_shape = [xsh[0], z.get_shape()[1]]
 			z = el.feature_transform_matrix_n(z, matrix_shape, f_params)
 		with tf.variable_scope("decoder", reuse=reuse) as scope:
 			r = decoder(z, is_training, reuse=reuse)
-	return r, z, mu, sigma
+	return r, z, mu, 1#sigma
 
 
 def sampler(mu, sigma, sample=True):
@@ -140,9 +143,9 @@ def encoder(x, is_training, reuse=False):
 	l2 = linear(tf.nn.elu(l1), [512,512], name='e1')
 	l2 = bn2d(l2, is_training, reuse=reuse, name='b2')
 	mu = linear(tf.nn.elu(l2), [512,FLAGS.num_latents], name='mu')
-	rho = linear(tf.nn.elu(l2), [512,FLAGS.num_latents], name='rho')
-	sigma = tf.nn.softplus(rho)
-	return mu, sigma
+	#rho = linear(tf.nn.elu(l2), [512,FLAGS.num_latents], name='rho')
+	#sigma = tf.nn.softplus(rho)
+	return mu #, sigma
 
 
 def decoder(z, is_training, reuse=False):
@@ -234,101 +237,124 @@ def bn2d(X, train_phase, decay=0.99, name='batchNorm', reuse=False):
 
 
 ############################################
-def train(inputs, outputs, ops, opt, data):
+def validate(inputs, outputs, opt, data):
 	"""Training loop"""
 	# Unpack inputs, outputs and ops
-	x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val, is_training = inputs
-	loss, merged, recon_test = outputs
-	train_op = ops
+	xs, f_params_val, t_params_val, is_training = inputs
+	recon_test = outputs[0]
 	
-	# For checkpoints
-	gs = 0
-	start = time.time()
 	n_train = data['X']['train'].shape[0]
 	n_valid = data['X']['valid'].shape[0]
 	n_test = data['X']['test'].shape[0]
 	
 	saver = tf.train.Saver()
 	sess = tf.Session()
-
 	# Initialize variables
-	init = tf.global_variables_initializer()
-	sess.run(init)
+	saver.restore(sess, opt['save_path'])
 	
-	train_writer = tf.summary.FileWriter(opt['summary_path'], sess.graph)
-	# Training loop
-	for epoch in xrange(opt['n_epochs']):
-		# Learning rate
-		exponent = sum([epoch > i for i in opt['lr_schedule']])
-		current_lr = opt['lr']*np.power(0.1, exponent)	
+	# Validation
+	Recon = []
+	max_angles = 20
+	#pick a random initial transformation
+	tp_in, fp_in = el.random_transform(opt['mb_size'], opt['im_size'])
+	fv = np.linspace(0.5, np.pi, num=max_angles)
+	fr = np.linspace(0, 2.*np.pi, num=max_angles)
+	for j in xrange(8):
+		sample = data['X']['train'][np.newaxis,11,...]
+		r0 = j % 2 == 0
+		r1 = (j/2)%2 == 0
+		r2 = (j/4)%2 == 0
+		print r2*1, r1*1, r0*1
+		fv_ = np.vstack([r0*fr, r1*fv+(1-r1)*0.5, r2*fv+(1-r2)*0.5]).T
 		
-		# Train
-		train_loss = 0.
-		train_acc = 0.
-		# Run training steps
-		mb_list = random_sampler(n_train, opt)
-		for i, mb in enumerate(mb_list):
-			#initial random transform
-			tp_in, fp_in = el.random_transform(opt['mb_size'], opt['im_size'])
-			#tp, fp = el.random_transform(opt['mb_size'], opt['im_size'])
-			tp, fp = random_rss(opt['mb_size'], opt['im_size'])
-			ops = [global_step, loss, merged, train_op]
-			feed_dict = {x: data['X']['train'][mb,...],
-								t_params: tp,
-								f_params: fp,
-								t_params_in: tp_in,
-								lr: current_lr,
-								is_training: True}
-			gs, l, summary, __ = sess.run(ops, feed_dict=feed_dict)
-			train_loss += l
-			# Summary writers
-			train_writer.add_summary(summary, gs)
-		train_loss /= (i+1.)
-		print('[{:03d}]: {:03f}'.format(epoch, train_loss))
-		
-		# Save model
-		if epoch % FLAGS.save_step == 0:
-			path = saver.save(sess, opt['save_path'], epoch)
-			print('Saved model to ' + path)
-		
-		# Validation
-		if epoch % 10 == 0:
-			Recon = []
-			max_angles = 20
-			#pick a random initial transformation
-			tp_in, fp_in = el.random_transform(opt['mb_size'], opt['im_size'])
-			fv = np.linspace(0., np.pi, num=max_angles)
-			for j in xrange(max_angles):
-				sample = data['X']['valid'][np.newaxis,np.random.randint(5000),...]
-				r0 = np.random.rand() > 0.5
-				r1 = np.random.rand() > 0.5
-				r2 = np.random.rand() > 0.5
-				fv_ = np.vstack([2.*r0*fv, r1*fv, r2*fv]).T
-				
-				Recon.append(np.reshape(sample, (1,784)))
-				for i in xrange(max_angles):
-					tp, fp = random_rss(1, opt['im_size'], fv_[np.newaxis,i,:])
-					ops = recon_test
-					feed_dict = {xs: sample,
-									 f_params_val: fp,
-									 t_params_val: tp,
-									 t_params_in: tp_in,
-									 is_training: False}
-					y= sess.run(ops, feed_dict=feed_dict)
-					Recon.append(sess.run(ops, feed_dict=feed_dict))
-			
-			samples_ = np.reshape(Recon, (-1,28,28))
-			
-			ns = max_angles
-			sh = 28
-			tile_image = np.zeros((ns*sh,(ns+1)*sh))
-			for j in xrange((ns+1)*ns):
-				m = sh*(j/(ns+1)) 
-				n = sh*(j%(ns+1))
-				tile_image[m:m+sh,n:n+sh] = 1.-samples_[j,...]
-			save_name = './samples/vae/image_%04d.png' % epoch
-			skio.imsave(save_name, tile_image)
+		Recon.append(np.reshape(sample, (1,28,28)))
+		for i in xrange(max_angles):
+			tp, fp = random_rss(1, opt['im_size'], fv_[np.newaxis,i,:])
+			ops = recon_test
+			feed_dict = {xs: sample,
+							 f_params_val: fp,
+							 t_params_val: tp,
+							 is_training: False}
+			#y= sess.run(ops, feed_dict=feed_dict)
+			Recon.append(np.reshape(sess.run(ops, feed_dict=feed_dict), (1,28,28)))
+	
+	samples_ = np.reshape(Recon, (-1,28,28))
+	print samples_.shape
+	ns = max_angles
+	sh = 28
+	tile_image = np.zeros((8*sh,(ns+1)*sh))
+	for j in xrange((ns+1)*8):
+		m = sh*(j/(ns+1)) 
+		n = sh*(j%(ns+1))
+		tile_image[m:m+sh,n:n+sh] = 1.-samples_[j,...]
+	save_name = './samples/vae/aa.png'
+	skio.imsave(save_name, tile_image)
 
+
+def my_colors(N):
+	"""Generate my colors"""
+	colors = []
+	color = np.linspace(0,1.,num=N)
+	for c in color:
+		colors.append((float((19 + 236*c)/255.), float((7 + 232*c)/255.), float((33 + 33*c)/255.)))
+	return colors
+
+
+def video(inputs, outputs, opt, data):
+	"""Training loop"""
+	
+	cm = mpl.colors.ListedColormap(my_colors(256))
+	
+	# Unpack inputs, outputs and ops
+	xs, f_params_val, t_params_val, is_training = inputs
+	recon_test = outputs[0]
+	
+	n_train = data['X']['train'].shape[0]
+	n_valid = data['X']['valid'].shape[0]
+	n_test = data['X']['test'].shape[0]
+	
+	saver = tf.train.Saver()
+	sess = tf.Session()
+	# Initialize variables
+	saver.restore(sess, opt['save_path'])
+	
+	# Validation
+	#pick a random initial transformation
+	max_ang = 100
+	tp_in, fp_in = el.random_transform(opt['mb_size'], opt['im_size'])
+	#fv = np.linspace(0.5, np.pi, num=max_angles)
+	ang = np.linspace(0,2.*np.pi,num=max_ang)
+	fv = (np.pi-0.8)*(0.5-np.cos(ang)/2.) + 0.8
+	fv2 = (np.pi-0.8)*(0.5-np.cos(1.*ang)/2.) + 0.8
+	print np.amin(fv), np.amax(fv)
+	fr = np.linspace(0, 2.*np.pi, num=max_ang)
+		
+	sample = data['X']['train'][np.newaxis,11,...]
+	r0 = 0
+	r1 = 0
+	r2 = 1
+	fv_ = np.vstack([r0*fr, r1*fv+(1-r1)*0.5, r2*fv2+(1-r2)*0.5]).T
+	
+	for i in xrange(max_ang):
+		tp, fp = random_rss(1, opt['im_size'], fv_[np.newaxis,i,:])
+		ops = recon_test
+		feed_dict = {xs: sample,
+						 f_params_val: fp,
+						 t_params_val: tp,
+						 is_training: False}
+		y = np.reshape(sess.run(ops, feed_dict=feed_dict), (1,28,28))
+		y = np.squeeze(y)
+		plt.clf()
+		fig = plt.figure(1)
+		fig.set_size_inches(1,1,forward=False)
+		ax = plt.Axes(fig, [0.,0.,1.,1.])
+		ax.set_axis_off()
+		fig.add_axes(ax)
+		
+		ax.imshow(y, cmap=cm)
+		#plt.axis('off')
+		plt.savefig('{:s}/Code/harmonicConvolutions/tensorflow1/scale/samples/vids/vert/{:04d}'.format(opt['root'],i))
+		plt.close()
 
 def main(_):
 	opt = {}
@@ -353,67 +379,34 @@ def main(_):
 	opt['im_size'] = (28,28)
 	opt['train_size'] = 55000
 	opt['equivariant_weight'] = 1 
-	flag = 'vae_text'
-	opt['summary_path'] = dir_ + '/summaries/mnist_train_{:s}'.format(flag)
-	opt['save_path'] = dir_ + '/checkpoints/mnist_train_{:s}/model.ckpt'.format(flag)
+	flag = 'vae'
+	opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(flag)
+	opt['save_path'] = dir_ + '/checkpoints/autotrain_vae/model.ckpt-400'
 
-	#check and clear directories
-	checkFolder(opt['summary_path'])
-	checkFolder(opt['save_path'])
-	#removeAllFilesInDirectory(opt['summary_path'], '.*')
-	#removeAllFilesInDirectory(opt['save_path'], '.*')
-	
 	# Load data
 	data = load_data()
 	data['X']['train'] = data['X']['train'][:opt['train_size'],:]
 	data['Y']['train'] = data['Y']['train'][:opt['train_size'],:]
 
 	# Placeholders
-	x = tf.placeholder(tf.float32, [opt['mb_size'],28,28,1], name='x')
 	xs = tf.placeholder(tf.float32, [1,28,28,1], name='xs')
-	t_params_in = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params_in')
-	t_params = tf.placeholder(tf.float32, [opt['mb_size'],6], name='t_params')
-	f_params = tf.placeholder(tf.float32, [opt['mb_size'],6,6], name='f_params')
 	t_params_val = tf.placeholder(tf.float32, [1,6], name='t_params_val') 
 	f_params_val = tf.placeholder(tf.float32, [1,6,6], name='f_params_val') 
-	global_step = tf.Variable(0, name='global_step', trainable=False)
 	lr = tf.placeholder(tf.float32, [], name='lr')
 	is_training = tf.placeholder(tf.bool, [], name='is_training')
-	
-	# Build the training model
-	x_in = transformer_layer(x, t_params_in, opt['im_size'])
-	target = transformer_layer(x_in, t_params, opt['im_size'])
-	recon, latents, mu, sigma = autoencoder(x_in, f_params, is_training)
-	recon = tf.reshape(recon, x.get_shape())
+
 	# Test model
-	recon_test_, __, __, __ = autoencoder(xs, f_params_val, is_training, reuse=True)
+	recon_test_, __, __, __ = autoencoder(xs, f_params_val, is_training, reuse=False)
 	recon_test = tf.nn.sigmoid(recon_test_)
 	
-	# LOSS
-	# KL-divergence of posterior from prior
-	#kl_loss = gaussian_kl(mu, sigma)
-	# Negative log-likelihood
-	nll = bernoulli_xentropy(tf.to_float(target > 0.5), recon)
-	loss = nll #+ kl_loss
-	
-	# Summaries
-	tf.summary.scalar('Loss', loss)
-	#tf.summary.scalar('Loss_KL', kl_loss)
-	tf.summary.scalar('Loss_Img', nll)
-	tf.summary.scalar('LearningRate', lr)
-	merged = tf.summary.merge_all()
-	
-	# Build optimizer
-	optim = tf.train.AdamOptimizer(lr)
-	train_op = optim.minimize(loss, global_step=global_step)
 	
 	# Set inputs, outputs, and training ops
-	inputs = [x, global_step, t_params_in, t_params, f_params, lr, xs, f_params_val, t_params_val, is_training]
-	outputs = [loss, merged, recon_test]
-	ops = [train_op]
+	inputs = [xs, f_params_val, t_params_val, is_training]
+	outputs = [recon_test]
 	
 	# Train
-	return train(inputs, outputs, ops, opt, data)
+	#return validate(inputs, outputs, opt, data)
+	return video(inputs, outputs, opt, data)
 
 if __name__ == '__main__':
 	tf.app.run()

@@ -149,7 +149,7 @@ def read_data_sets(basedir, one_hot=False):
   basedir = os.path.realpath(os.path.expanduser(basedir))
   print('Reading', basedir)
 
-  data_sets.train = DataSet(os.path.join(basedir, 'shapenet10_train_nr.tar'), one_hot, 0.015)
+  data_sets.train = DataSet(os.path.join(basedir, 'shapenet10_train_nr.tar'), one_hot, 0.01)
   data_sets.validation = DataSet(os.path.join(basedir, 'shapenet10_train_nr.tar'), one_hot, 0.0, data_sets.train.sel)
   #data_sets.validation = data_sets.test # no decision based on validation sets
 
@@ -158,12 +158,13 @@ def read_data_sets(basedir, one_hot=False):
   return data_sets
   
 def test():
-  #dataset = read_data_sets('~/Documents/Datasets/ModelNet/')
+  print(class_id)
+  dataset = read_data_sets('~/Documents/Datasets/ModelNet/')
   #dataset = read_data_sets('~/ShapeNet/shapenetvox/ShapeNetVox32')
-  dataset = read_data_sets('~/scratch/Datasets/ModelNet/', True)
+  #dataset = read_data_sets('~/scratch/Datasets/ModelNet/', True)
   tmp1, tmp2 = dataset.train.next_batch(2)
   print(dataset.train.volumes.shape)
-  print(dataset.validation.volumes.shape)
+  #print(dataset.validation.volumes.shape)
   print(dataset.test.volumes.shape)
   print(tmp1.shape)
   print(np.amax(tmp1))
