@@ -150,22 +150,22 @@ def classifier(codes, f_params_dim, is_training, reuse=False):
     ##l1 = mul_noise(l1, is_training)
     #y_logits = mlplayer(1, l1, 256, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
 
-    ### TODO retraining 10_ta 
-    #feats = add_noise(feats, is_training)
-    ##feats = mul_noise(feats, is_training)
-    #l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse, is_training=is_training, dobn=True)
-    #l1 = add_noise(l1, is_training)
-    #l2 = mlplayer(1, l1, 256, 128, reuse=reuse, is_training=is_training, dobn=True)
-    #l2 = add_noise(l2, is_training)
-    #y_logits = mlplayer(2, l2, 128, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
-
-    ## TODO retraining 10_2m
-    feats = mul_noise(feats, is_training)
+    ## TODO retraining 10_2
+    feats = add_noise(feats, is_training, 0.1)
     #feats = mul_noise(feats, is_training)
     l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse, is_training=is_training, dobn=True)
-    l1 = mul_noise(l1, is_training)
+    l1 = add_noise(l1, is_training, 0.1)
     l2 = mlplayer(1, l1, 256, 128, reuse=reuse, is_training=is_training, dobn=True)
+    l2 = add_noise(l2, is_training, 0.1)
     y_logits = mlplayer(2, l2, 128, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
+
+    ### TODO retraining 10_2m
+    #feats = mul_noise(feats, is_training)
+    ##feats = mul_noise(feats, is_training)
+    #l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse, is_training=is_training, dobn=True)
+    #l1 = mul_noise(l1, is_training)
+    #l2 = mlplayer(1, l1, 256, 128, reuse=reuse, is_training=is_training, dobn=True)
+    #y_logits = mlplayer(2, l2, 128, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
 
     return y_logits
 
@@ -199,8 +199,8 @@ def random_transmats(batch_size):
 
     aug_scale_step = 1./32
     aug_shift_step = 1./32
-    aug_max_scale = 2.000001
-    aug_max_shift = 2.000001
+    aug_max_scale = 2.500001
+    aug_max_shift = 2.500001
 
     #params_aug_scale = aug_shift_step*np.random.random_integers(-aug_max_scale, aug_max_scale, size=(batch_size, 3))
     params_aug_scale = aug_scale_step*aug_max_scale*2*(np.random.rand(batch_size, 3)-1)
@@ -430,7 +430,8 @@ def test(inputs, outputs, ops, opt, data):
     # check test set
     num_steps = data.test.num_steps(1)
     test_acc = 0
-    cur_stl_params_in = identity_stl_transmats(1)
+    #cur_stl_params_in = identity_stl_transmats(1)
+    _, cur_stl_params_in, _, cur_f_params = random_transmats(1)
     for step_i in xrange(num_steps):
         cur_x, cur_y_true = data.test.next_batch(1)
         feed_dict = {
@@ -485,33 +486,33 @@ def train(inputs, outputs, ops, opt, data):
         current_lr = opt['lr']*np.power(0.1, exponent)
         
 
-        if opt['do_classify'] and epoch%1==0:
-            # check validation accuracy
-            num_steps = data.validation.num_steps(opt['mb_size'])-1
-            val_acc = 0
-            for step_i in xrange(num_steps):
-                cur_stl_params_aug, cur_stl_params_in, _, _ = random_transmats(opt['mb_size'])
-                cur_x, cur_y_true = data.validation.next_batch(opt['mb_size'])
-                feed_dict = {
-                            x: cur_x,
-                            y_true: cur_y_true,
-                            stl_params_aug: cur_stl_params_aug, 
-                            stl_params_in: cur_stl_params_in, 
-                            is_training : False
-                        }
-                cur_y_pred = sess.run(y_pred, feed_dict=feed_dict)
-                val_y = (np.argmax(cur_y_pred, axis=1))
-                val_y_pred = (np.argmax(cur_y_true, axis=1))
-                if step_i==0:
-                    print(val_y)
-                    print(val_y_pred)
+        #if opt['do_classify'] and epoch%1==0:
+        #    # check validation accuracy
+        #    num_steps = data.validation.num_steps(opt['mb_size'])-1
+        #    val_acc = 0
+        #    for step_i in xrange(num_steps):
+        #        cur_stl_params_aug, cur_stl_params_in, _, _ = random_transmats(opt['mb_size'])
+        #        cur_x, cur_y_true = data.validation.next_batch(opt['mb_size'])
+        #        feed_dict = {
+        #                    x: cur_x,
+        #                    y_true: cur_y_true,
+        #                    stl_params_aug: cur_stl_params_aug, 
+        #                    stl_params_in: cur_stl_params_in, 
+        #                    is_training : False
+        #                }
+        #        cur_y_pred = sess.run(y_pred, feed_dict=feed_dict)
+        #        val_y = (np.argmax(cur_y_pred, axis=1))
+        #        val_y_pred = (np.argmax(cur_y_true, axis=1))
+        #        if step_i==0:
+        #            print(val_y)
+        #            print(val_y_pred)
 
-                diff = (val_y - val_y_pred)==0
-                diff = diff.astype(np.float32)
-                val_acc += np.sum(diff)/opt['mb_size']
+        #        diff = (val_y - val_y_pred)==0
+        #        diff = diff.astype(np.float32)
+        #        val_acc += np.sum(diff)/opt['mb_size']
 
-            val_acc /= num_steps
-            print('validation accuracy', val_acc)
+        #    val_acc /= num_steps
+        #    print('validation accuracy', val_acc)
         
         # Train
         train_loss = 0.
@@ -604,8 +605,8 @@ def main(_):
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
     opt['mb_size'] = 16
-    opt['n_epochs'] = 500
-    opt['lr_schedule'] = [400, 485, 495]
+    opt['n_epochs'] = 2000
+    opt['lr_schedule'] = [1900]
     opt['lr'] = 1e-4
 
     opt['vol_size'] = [32,32,32]
@@ -630,16 +631,19 @@ def main(_):
     #opt['flag'] = 'modelnet2_classify1000'
     #opt['flag'] = 'modelnet2_classify100_ta' # threshold augmentation
     #opt['flag'] = 'modelnet2_classify10_2' # threshold augmentation, 2-layer mlp 256-128 with additive noise
-    opt['flag'] = 'modelnet2_classify10_2m' # threshold augmentation, 2-layer mlp 256-128 with multiplicative noise
+    #opt['flag'] = 'modelnet2_classify1_2' # threshold augmentation, 2-layer mlp 256-128 with additive noise of 0.1
+    #opt['flag'] = 'modelnet2_classify10_2m' # threshold augmentation, 2-layer mlp 256-128 with multiplicative noise
     #opt['flag'] = 'modelnet2_classify1_ta' # threshold augmentation
     #opt['flag'] = 'modelnet2_classify100'
-    #opt['flag'] = 'modelnet2_test'
+    opt['flag'] = 'modelnet2_test'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
     ###
-    opt['load_path'] = ''
+    #opt['load_path'] = ''
+    opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1_2/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify10_2/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify10_2m/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1_ta/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify100_ta/'
@@ -699,8 +703,8 @@ def main(_):
     
     # Test model
     test_x_pad = spatial_pad(test_x, paddings)
-    #test_x_in = spatial_transform(stl, test_x_pad, test_stl_params_in)
-    test_x_in = test_x_pad
+    test_x_in = spatial_transform(stl, test_x_pad, test_stl_params_in)
+    #test_x_in = test_x_pad
     test_recon, test_codes, _ = autoencoder(test_x_in, opt['num_latents'], val_f_params, is_training, reuse=True)
 
     # LOSS
@@ -717,7 +721,7 @@ def main(_):
         test_y_logits = classifier(test_codes, opt['f_params_dim'], is_training, reuse=True)
         test_y_pred = tf.nn.softmax(test_y_logits)
         c_loss = classifier_loss(y_true, y_logits, data.train.class_balance)
-        c_loss = 10.*tf.reduce_mean(c_loss)
+        c_loss = 1.*tf.reduce_mean(c_loss)
     loss = rec_loss + c_loss
     
     # Summaries
