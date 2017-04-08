@@ -30,7 +30,7 @@ def h_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 	with tf.name_scope('hconv'+str(name)) as scope:
 		# Build data tensor: reshape it as [mbatch,h,w,order*complex*channels]
 		Xsh = X.get_shape().as_list()
-		X_ = tf.reshape(X, tf.concat(0,[Xsh[:3],[-1]]))
+		X_ = tf.reshape(X, tf.concat(axis=0,values=[Xsh[:3],[-1]]))
 		
 		# The script below constructs the stream-convolutions as one big filter
 		# W_. For each output order, run through each input order and copy-paste
@@ -54,14 +54,14 @@ def h_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='N'):
 				else:
 					Wr += [weights[0]]
 					Wi += [weights[1]]
-			W_ += [tf.concat(2, Wr), tf.concat(2, Wi)]
-		W_ = tf.concat(3, W_)
+			W_ += [tf.concat(axis=2, values=Wr), tf.concat(axis=2, values=Wi)]
+		W_ = tf.concat(axis=3, values=W_)
 		
 		# Convolve
 		Y = tf.nn.conv2d(X_, W_, strides=strides, padding=padding, name=name+'cconv')
 		# Reshape result into appropriate format
 		Ysh = Y.get_shape().as_list()
-		ns = tf.concat(0, [Ysh[:3],[max_order+1,2],[Ysh[3]/(2*(max_order+1))]])
+		ns = tf.concat(axis=0, values=[Ysh[:3],[max_order+1,2],[Ysh[3]/(2*(max_order+1))]])
 		return tf.reshape(Y, ns)
 
 
@@ -84,7 +84,7 @@ def h_range_conv(X, W, strides=(1,1,1,1), padding='VALID', in_range=(0,1),
 	with tf.name_scope('hconv'+str(name)) as scope:
 		# Build data tensor: reshape it as [mbatch,h,w,order*complex*channels]
 		Xsh = X.get_shape().as_list()
-		X_ = tf.reshape(X, tf.concat(0,[Xsh[:3],[-1]]))
+		X_ = tf.reshape(X, tf.concat(axis=0,values=[Xsh[:3],[-1]]))
 		
 		# The script below constructs the stream-convolutions as one big filter
 		# W_. For each output order, run through each input order and copy-paste
@@ -107,15 +107,15 @@ def h_range_conv(X, W, strides=(1,1,1,1), padding='VALID', in_range=(0,1),
 				else:
 					Wr += [weights[0]]
 					Wi += [weights[1]]
-			W_ += [tf.concat(2, Wr), tf.concat(2, Wi)]
-		W_ = tf.concat(3, W_)
+			W_ += [tf.concat(axis=2, values=Wr), tf.concat(axis=2, values=Wi)]
+		W_ = tf.concat(axis=3, values=W_)
 		
 		# Convolve
 		Y = tf.nn.conv2d(X_, W_, strides=strides, padding=padding, name=name+'cconv')
 		# Reshape result into appropriate format
 		Ysh = Y.get_shape().as_list()
 		diff = out_range[1] - out_range[0] + 1
-		ns = tf.concat(0, [Ysh[:3],[diff,2],[Ysh[3]/(2*diff)]])
+		ns = tf.concat(axis=0, values=[Ysh[:3],[diff,2],[Ysh[3]/(2*diff)]])
 		return tf.reshape(Y, ns)
 
 
@@ -210,11 +210,11 @@ def mean_pooling(x, ksize=(1,1,1,1), strides=(1,1,1,1)):
 	"""
 	Xsh = x.get_shape()
 	# Collapse output the order, complex, and channel dimensions
-	X_ = tf.reshape(x, tf.concat(0,[Xsh[:3],[-1]]))
+	X_ = tf.reshape(x, tf.concat(axis=0,values=[Xsh[:3],[-1]]))
 	Y = tf.nn.avg_pool(X_, ksize=ksize, strides=strides, padding='VALID',
 					   name='mean_pooling')
 	Ysh = Y.get_shape()
-	new_shape = tf.concat(0, [Ysh[:3],Xsh[3:]])
+	new_shape = tf.concat(axis=0, values=[Ysh[:3],Xsh[3:]])
 	return tf.reshape(Y, new_shape)
 
 
@@ -226,7 +226,7 @@ def stack_magnitudes(X, eps=1e-12, keep_dims=True):
 	X: dict of channels {rotation order: (real, imaginary)}
 	eps: regularization since grad |Z| is infinite at zero (default 1e-12)
 	"""
-	R = tf.reduce_sum(tf.square(X), reduction_indices=[4], keep_dims=keep_dims)
+	R = tf.reduce_sum(tf.square(X), axis=[4], keep_dims=keep_dims)
 	return tf.sqrt(tf.maximum(R,eps))
 
 
@@ -303,9 +303,9 @@ def get_filters(R, filter_size, P=None, n_rings=None):
 		cosine = tf.constant(cosine)
 		sine = tf.constant(sine)
 		# Project taps on to rotational basis
-		r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
-		ucos = tf.reshape(tf.matmul(cosine, r), tf.pack([k, k, rsh[1], rsh[2]]))
-		usin = tf.reshape(tf.matmul(sine, r), tf.pack([k, k, rsh[1], rsh[2]]))
+		r = tf.reshape(r, tf.stack([rsh[0],rsh[1]*rsh[2]]))
+		ucos = tf.reshape(tf.matmul(cosine, r), tf.stack([k, k, rsh[1], rsh[2]]))
+		usin = tf.reshape(tf.matmul(sine, r), tf.stack([k, k, rsh[1], rsh[2]]))
 		if P is not None:
 			# Rotate basis matrices
 			ucos_ = tf.cos(P[m])*ucos + tf.sin(P[m])*usin
@@ -368,9 +368,9 @@ def get_scale_filters(R, filter_size, P=None):
 		LPF_real = tf.constant(LPF_real)
 		LPF_imag = tf.constant(LPF_imag)
 		# Project taps on to log_polar basis
-		r = tf.reshape(r, tf.pack([rsh[0],rsh[1]*rsh[2]]))
-		ucos = tf.reshape(tf.matmul(LPF_real, r), tf.pack([k, k, rsh[1], rsh[2]]))
-		usin = tf.reshape(tf.matmul(LPF_imag, r), tf.pack([k, k, rsh[1], rsh[2]]))
+		r = tf.reshape(r, tf.stack([rsh[0],rsh[1]*rsh[2]]))
+		ucos = tf.reshape(tf.matmul(LPF_real, r), tf.stack([k, k, rsh[1], rsh[2]]))
+		usin = tf.reshape(tf.matmul(LPF_imag, r), tf.stack([k, k, rsh[1], rsh[2]]))
 		if P is not None:
 			# Rotate basis matrices
 			ucos_ = tf.cos(P[m])*ucos + tf.sin(P[m])*usin

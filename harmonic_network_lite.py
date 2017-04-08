@@ -76,8 +76,8 @@ def sum_magnitudes(x, eps=1e-12, keep_dims=True):
 	eps: regularization since grad |x| is infinite at zero (default 1e-4)
 	keep_dims: whether to collapse summed dimensions (default True)
 	"""
-	R = tf.reduce_sum(tf.square(x), reduction_indices=[4], keep_dims=keep_dims)
-	return tf.reduce_sum(tf.sqrt(tf.maximum(R,eps)), reduction_indices=[3], keep_dims=keep_dims)
+	R = tf.reduce_sum(tf.square(x), axis=[4], keep_dims=keep_dims)
+	return tf.reduce_sum(tf.sqrt(tf.maximum(R,eps)), axis=[3], keep_dims=keep_dims)
 
 
 @tf.contrib.framework.add_arg_scope

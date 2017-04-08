@@ -62,48 +62,8 @@ def deep_mnist(opt, x, train_phase, device='/cpu:0'):
 			cv7 = hn_lite.conv2d(cv6, ncl, fs, padding='SAME', phase=False,
 						name='7')
 			real = hn_lite.sum_magnitudes(cv7)
-			cv7 = tf.reduce_mean(real, reduction_indices=[1,2,3,4])
+			cv7 = tf.reduce_mean(real, axis=[1,2,3,4])
 			return tf.nn.bias_add(cv7, bias) 
-
-
-def deep_cifar(opt, x, train_phase, device='/cpu:0'):
-	"""High frequency convolutions are unstable, so get rid of them"""
-	# Abbreviations
-	nf = opt['n_filters']
-	fg = opt['filter_gain']
-	bs = opt['batch_size']
-	fs = opt['filter_size']
-	N = opt['resnet_block_multiplicity']
-	
-	with tf.device(device):
-		initializer = tf.contrib.layers.variance_scaling_initializer()
-		Wgap = tf.get_variable('Wfc', shape=[fg*fg*nf,opt['n_classes']],
-									  initializer=initializer)
-		bgap = tf.get_variable('bfc', shape=[opt['n_classes']],
-									  initializer=tf.constant_initializer(1e-2))
-
-		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],1,1,opt['n_channels']])
-	
-	# Convolutional Layers
-	res1 = hn_lite.conv2d(x, nf, fs, padding='SAME', name='in', device=device)
-	for i in xrange(N):
-		name = 'r1_'+str(i)
-		res1 = hn_lite.residual_block(res1, nf, fs, 2, train_phase, name=name, device=device)
-	res2 = hn_lite.mean_pool(res1, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp1')
-	
-	for i in xrange(N):
-		name = 'r2_'+str(i)
-		res2 = hn_lite.residual_block(res2, fg*nf, fs, 2, train_phase, name=name, device=device)
-	res3 = hn_lite.mean_pool(res2, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp2')
-	
-	for i in xrange(N):
-		name = 'r3_'+str(i)
-		res3 = hn_lite.residual_block(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=device)
-	res4 = hn_lite.mean_pool(res3, ksize=(1,2,2,1), strides=(1,2,2,1), name='mp3')
-
-	with tf.name_scope('gap') as scope:
-		gap = tf.reduce_mean(hn_lite.sum_magnitudes(res4), reduction_indices=[1,2,3,4])
-		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap)
 
 
 def deep_bsd(opt, x, train_phase, device='/cpu:0'):
@@ -201,89 +161,12 @@ def deep_bsd(opt, x, train_phase, device='/cpu:0'):
 	with tf.name_scope('fusion') as scope:
 		for key in fm.keys():
 			if opt['machine'] == 'grumpy':
-				fms[key] = tf.image.resize_images(fm[key], tf.pack([xsh[1], xsh[2]]))
+				fms[key] = tf.image.resize_images(fm[key], tf.stack([xsh[1], xsh[2]]))
 			else:
 				fms[key] = tf.image.resize_images(fm[key], xsh[1], xsh[2])
 			side_preds.append(fms[key])
-		side_preds = tf.concat(3, side_preds)
+		side_preds = tf.concat(axis=3, values=side_preds)
 
 		fms['fuse'] = conv2d(side_preds, side_weights['h1'], b=bias, padding='SAME')
 		return fms, out, weights, psis, cv
 
-def Zresidual_block(x, n_channels, ksize, depth, is_training, fnc=tf.nn.relu,
-						 max_order=1, phase=True, name='res', device='/cpu:0'):
-	"""Harmonic version of a residual block
-	
-	x: input tf tensor, shape [batchsize,height,width,channels,complex,order],
-	e.g. a real input tensor of rotation order 0 could have shape
-	[16,32,32,3,1,1], or a complex input tensor of rotation orders 0,1,2, could
-	have shape [32,121,121,32,2,3]
-	n_channels: number of output channels (int)
-	ksize: size of square filter (int)
-	depth: number of convolutions per block
-	is_training: tf bool indicating training status
-	fnc: nonlinearity applied to magnitudes (default tf.nn.relu)
-	max_order: maximum rotation order e.g. max_order=2 uses 0,1,2 (default 1)
-	phase: use a per-channel phase offset (default True)
-	name: (default 'res')
-	device: (default '/cpu:0')
-	"""
-	from harmonic_network_ops import Zbn
-	
-	with tf.name_scope(name) as scope:
-		y = x
-		for i in xrange(depth):
-			ysh = y.get_shape().as_list()
-			W = get_weights([ksize,ksize,ysh[3],n_channels], std_mult=1.,
-				name=name+'W_c'+str(i), device=device)
-			y = tf.nn.conv2d(y, W, (1,1,1,1), 'SAME', name=name+'_c'+str(i))
-			y = Zbn(y, is_training, decay=0.99, name=name+'_nl'+str(i),
-					 device=device)
-			if i != (depth-1):
-				y = tf.nn.relu(y)
-		xsh = x.get_shape().as_list()
-		x = tf.pad(x, [[0,0],[0,0],[0,0],[0,ysh[3]-xsh[3]]])
-		return y + x
-
-
-def wide_resnet(opt, x, train_phase, device='/cpu:0'):
-	"""High frequency convolutions are unstable, so get rid of them"""
-	# Abbreviations
-	nf = opt['n_filters']
-	fg = opt['filter_gain']
-	bs = opt['batch_size']
-	fs = opt['filter_size']
-	N = opt['resnet_block_multiplicity']
-	d = device
-	
-	with tf.device(device):
-		initializer = tf.contrib.layers.variance_scaling_initializer()
-		Win = get_weights([fs,fs,3,nf], std_mult=1., name='Win', device=device)
-		Wgap = tf.get_variable('Wfc', shape=[fg*fg*nf,opt['n_classes']],
-									  initializer=initializer)
-		bgap = tf.get_variable('bfc', shape=[opt['n_classes']],
-									  initializer=tf.constant_initializer(1e-2))
-
-		x = tf.reshape(x, shape=[bs,opt['dim'],opt['dim'],opt['n_channels']])
-	
-	# Convolutional Layers
-	with tf.device(d):
-		res1 = tf.nn.conv2d(x, Win, (1,1,1,1), 'SAME', name='Win_conv')
-	for i in xrange(N):
-		name = 'r1_'+str(i)
-		res1 = Zresidual_block(res1, nf, fs, 2, train_phase, name=name, device=d)
-	res2 =tf.nn.max_pool(res1, (1,2,2,1), (1,2,2,1), 'VALID', name='mp1')
-	
-	for i in xrange(N):
-		name = 'r2_'+str(i)
-		res2 = Zresidual_block(res2, fg*nf, fs, 2, train_phase, name=name, device=d)
-	res3 =tf.nn.max_pool(res2, (1,2,2,1), (1,2,2,1), 'VALID', name='mp2')
-	
-	for i in xrange(N):
-		name = 'r3_'+str(i)
-		res3 = Zresidual_block(res3, fg*fg*nf, fs, 2, train_phase, name=name, device=d)
-	res4 =tf.nn.max_pool(res3, (1,2,2,1), (1,2,2,1), 'VALID', name='mp3')
-
-	with tf.name_scope('gap') as scope:
-		gap = tf.reduce_mean(res4, reduction_indices=[1,2])
-		return tf.nn.bias_add(tf.matmul(gap, Wgap), bgap)

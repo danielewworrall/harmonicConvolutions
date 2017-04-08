@@ -74,7 +74,7 @@ def up_block(x, d, w1, w2, p1, p2, b, pt, name, device):
 	'''Upsampling block'''
 	with tf.name_scope(name) as scope:
 		x = tf.image.resize_bilinear(x, size, align_corners=True)
-		x = tf.concat(3, [x,d])
+		x = tf.concat(axis=3, values=[x,d])
 		cv1 = complex_input_rotated_conv(x, w1, p1, filter_size=3,
 											 output_orders=[0,1],
 											 padding='SAME', name=name+'_1')

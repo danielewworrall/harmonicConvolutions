@@ -72,7 +72,7 @@ def average_gradients(gpu_grads):
 		if len(grads) == 0:
 			continue
 		# Average over the 'gpu' dimension.
-		grad = tf.concat(0, grads)
+		grad = tf.concat(axis=0, values=grads)
 		grad = tf.reduce_mean(grad, 0)
 		# Keep in mind that the Variables are redundant because they are shared
 		# across towers. So .. we will just return the first tower's pointer to
@@ -110,7 +110,7 @@ def get_loss(opt, pred, y):
 			cost += sparsity_coefficient*sparsity_regularizer(pred_, 1-beta)
 	else:
 		if opt['is_classification']:
-			cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(pred, y))
+			cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=pred, labels=y))
 		else:
 			cost = 0.5*tf.reduce_mean(tf.pow(y - pred, 2))
 	
@@ -315,8 +315,8 @@ def construct_model_and_optimizer(opt, tf_nodes):
 
 		apply_gradient_op = optim.apply_gradients(grads)
 		train_op = tf.group(apply_gradient_op)
-		loss = tf.reduce_mean(tf.pack(lossesPerGPU, axis=0))
-		accuracy = tf.reduce_mean(tf.pack(accuracyPerGPU, axis=0))
+		loss = tf.reduce_mean(tf.stack(lossesPerGPU, axis=0))
+		accuracy = tf.reduce_mean(tf.stack(accuracyPerGPU, axis=0))
 	return loss, accuracy, train_op
 
 

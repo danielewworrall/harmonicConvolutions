@@ -83,7 +83,7 @@ def rerun_model(opt, data):
 	loss, train_op, pred = construct_model_and_optimizer(opt, io, lr, pt, sl=sl)
 	
 	# Initializing the variables
-	init = tf.initialize_all_variables()
+	init = tf.global_variables_initializer()
 	#init_var = []
 	#for var in tf.all_variables():
 	#	if 'ExponentialMovingAverage' in var.name:
@@ -100,7 +100,7 @@ def rerun_model(opt, data):
 	if n_GPUs == 1:
 		config.inter_op_parallelism_threads = 1 #prevent inter-session threads?
 	sess = tf.Session(config=config)
-	summary = tf.train.SummaryWriter(opt['log_path'], sess.graph)
+	summary = tf.summary.FileWriter(opt['log_path'], sess.graph)
 	print('Summaries constructed...')
 	
 	sess.run(init)
