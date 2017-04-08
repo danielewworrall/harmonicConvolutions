@@ -39,7 +39,7 @@ def settings(opt):
 	opt['sparsity'] = 1.
 	opt['log_path'] = './logs/deep_bsd'
 	opt['checkpoint_path'] = './checkpoints/deep_bsd'
-	opt['test_path'] = './test2'
+	opt['test_path'] = './test_mult'
 	return opt, data
 
 
@@ -92,7 +92,7 @@ def main():
 	learning_rate = tf.placeholder(tf.float32, name='learning_rate')
 	train_phase = tf.placeholder(tf.bool, name='train_phase')
 
-	## Construct model and optimizer
+	## Construct model
 	pred = deep_bsd(opt, x, train_phase)
 	loss = 0.
 	beta = 1-tf.reduce_mean(y)
@@ -102,7 +102,15 @@ def main():
 		loss += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(y, pred_, pw))
 		# Sparsity regularizer
 		loss += opt['sparsity']*sparsity_regularizer(pred_, 1-beta)
-	train_op = tf.train.AdamOptimizer(learning_rate).minimize(loss)
+	## Optimizer
+	optim = tf.train.AdamOptimizer(learning_rate=learning_rate)
+	grads_and_vars = optim.compute_gradients(loss)
+	modified_gvs = []
+	for g, v in grads_and_vars:
+		if 'psi' in v.name:
+			g = opt['psi_preconditioner']*g
+		modified_gvs.append((g, v))
+	train_op = optim.apply_gradients(modified_gvs)
 	
 	# TRAIN
 	init = tf.global_variables_initializer()
