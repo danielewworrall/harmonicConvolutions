@@ -11,7 +11,7 @@ from harmonic_network_ops import *
 
 @tf.contrib.framework.add_arg_scope
 def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
-			 max_order=1, stddev=0.4, n_rings=None, name='lconv', device='/cpu:0'):
+			 max_order=1, stddev=0.4, n_rings=None, name='lconv', device='/gpu:0'):
 	"""Harmonic Convolution lite
 	
 	x: input tf tensor, shape [batchsize,height,width,order,complex,channels],
@@ -44,14 +44,14 @@ def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
 
 @tf.contrib.framework.add_arg_scope
 def batch_norm(x, train_phase, fnc=tf.nn.relu, decay=0.99, eps=1e-4, name='hbn',
-		 device='/cpu:0'):
+		 device='/gpu:0'):
 	"""Batch normalization for the magnitudes of X"""
 	return h_batch_norm(x, fnc, train_phase, decay=decay, eps=eps, name=name,
 							  device=device)
 
 
 @tf.contrib.framework.add_arg_scope
-def non_linearity(x, fnc=tf.nn.relu, eps=1e-4, name='nl', device='/cpu:0'):
+def non_linearity(x, fnc=tf.nn.relu, eps=1e-4, name='nl', device='/gpu:0'):
 	"""Alter nonlinearity for the complex domains"""
 	return h_nonlin(x, fnc, eps=eps, name=name, device=device)
 
@@ -80,9 +80,20 @@ def sum_magnitudes(x, eps=1e-12, keep_dims=True):
 	return tf.reduce_sum(tf.sqrt(tf.maximum(R,eps)), axis=[3], keep_dims=keep_dims)
 
 
+def stack_magnitudes(X, eps=1e-12, keep_dims=True):
+	"""Stack the magnitudes of each of the complex feature maps in X.
+	
+	Output U = concat(|X_i|)
+	
+	X: dict of channels {rotation order: (real, imaginary)}
+	eps: regularization since grad |Z| is infinite at zero (default 1e-12)
+	"""
+	R = tf.reduce_sum(tf.square(X), axis=[4], keep_dims=keep_dims)
+	return tf.sqrt(tf.maximum(R,eps))
+
 @tf.contrib.framework.add_arg_scope
 def residual_block(x, out_shape, ksize, depth, train_phase, fnc=tf.nn.relu, max_order=1,
-		  phase=True, name='res', device='/cpu:0'):
+		  phase=True, name='res', device='/gpu:0'):
 	"""Residual block"""
 	with tf.name_scope(name) as scope:
 		y = x

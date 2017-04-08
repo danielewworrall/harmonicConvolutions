@@ -65,6 +65,20 @@ def minibatcher(inputs, targets, batchsize, shuffle=False):
 			excerpt = slice(start_idx, start_idx + batchsize)
 		yield inputs[excerpt], targets[excerpt]
 
+def get_learning_rate(opt, current, best, counter, learning_rate):
+	"""If have not seen accuracy improvement in delay epochs, then divide 
+	learning rate by 10
+	"""
+	if current > best:
+		best = current
+		counter = 0
+	elif counter > opt['delay']:
+		learning_rate = learning_rate / 10.
+		counter = 0
+	else:
+		counter += 1
+	return (best, counter, learning_rate)
+
 
 def main():
 	"""The magic happens here"""
@@ -127,20 +141,32 @@ def main():
 			batcher = minibatcher(data['valid_x'], data['valid_y'], opt['batch_size'])
 			valid_acc = 0.
 			for i, (X, Y) in enumerate(batcher):
-				feed_dict = {x: X, y: Y, learning_rate: lr, train_phase: True}
-				a = sess.run([accuracy], feed_dict=feed_dict)
+				feed_dict = {x: X, y: Y, train_phase: False}
+				a = sess.run(accuracy, feed_dict=feed_dict)
 				valid_acc += a
-				sys.stdout.write('Validating')
+				sys.stdout.write('Validating\r')
 				sys.stdout.flush()
-				# Update learning rate
-				#best, counter, opt['lr'] = get_learning_rate(opt, vacc_total, best, counter, opt['lr'])
 			valid_acc /= (i+1.)
 			
-			print('[{:04d}] Loss: {:04f}, Train Acc.: {:04f}, Validation Acc.: {:04d}'.format(epoch, train_loss, train_ac, valid_acc))
+			print('[{:04d} | {:0.1f}] Loss: {:04f}, Train Acc.: {:04f}, Validation Acc.: {:04f}, Learning rate: {:.2e}'.format(epoch,
+								time.time() - start, train_loss, train_acc, valid_acc, lr))
+			
+			# Updates to the training scheme
+			best, counter, lr = get_learning_rate(opt, valid_acc, best, counter, lr)
 			epoch += 1
 	
-	# TEST
-	
+		# TEST
+		batcher = minibatcher(data['test_x'], data['test_y'], opt['batch_size'])
+		test_acc = 0.
+		for i, (X, Y) in enumerate(batcher):
+			feed_dict = {x: X, y: Y, train_phase: False}
+			a = sess.run(accuracy, feed_dict=feed_dict)
+			test_acc += a
+			sys.stdout.write('Testing\r')
+			sys.stdout.flush()
+		test_acc /= (i+1.)
+		
+		print('Test Acc.: {:04f}'.format(test_acc))
 
 
 if __name__ == '__main__':

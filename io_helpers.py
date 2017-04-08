@@ -4,12 +4,13 @@ from os import path
 import sys
 import zipfile
 import urllib2
-import pickle
+import cPickle as pkl
 import ntpath
 import copy
 
 import numpy as np
 import scipy.ndimage.interpolation as sciint
+import skimage.exposure as skiex
 
 import tensorflow as tf
 
@@ -222,7 +223,7 @@ def load_pkl(dir_name, subdir_name, prepend=''):
 	return data
 
 def pklbatcher(inputs, targets, batch_size, shuffle=False, augment=False,
-				img_shape=(321,481,3), anneal=1.):
+				img_shape=(321,481,3)):
 	"""Input and target are minibatched. Returns a generator"""
 	assert len(inputs) == len(targets)
 	indices = inputs.keys()
