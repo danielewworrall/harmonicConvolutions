@@ -110,6 +110,7 @@ def main():
 		best = 0.
 		print('Starting training loop...')
 		while epoch < opt['n_epochs']:
+			# Training steps
 			batcher = minibatcher(data['train_x'], data['train_y'], opt['batch_size'], shuffle=True)
 			train_loss = 0.
 			train_acc = 0.
@@ -120,12 +121,23 @@ def main():
 				train_acc += a
 				sys.stdout.write('{:d}/{:d}\r'.format(i, data['train_x'].shape[0]/opt['batch_size']))
 				sys.stdout.flush()
-				# Update learning rate
-				#best, counter, opt['lr'] = get_learning_rate(opt, vacc_total, best, counter, opt['lr'])
-			
 			train_loss /= (i+1.)
 			train_acc /= (i+1.)
-			print('[{:04d}] Loss: {:04f}, Accuracy: {:04f}'.format(epoch, train_loss, train_acc))
+			
+			batcher = minibatcher(data['valid_x'], data['valid_y'], opt['batch_size'])
+			valid_acc = 0.
+			for i, (X, Y) in enumerate(batcher):
+				feed_dict = {x: X, y: Y, learning_rate: lr, train_phase: True}
+				a = sess.run([accuracy], feed_dict=feed_dict)
+				valid_acc += a
+				sys.stdout.write('Validating')
+				sys.stdout.flush()
+				# Update learning rate
+				#best, counter, opt['lr'] = get_learning_rate(opt, vacc_total, best, counter, opt['lr'])
+			valid_acc /= (i+1.)
+			
+			print('[{:04d}] Loss: {:04f}, Train Acc.: {:04f}, Validation Acc.: {:04d}'.format(epoch, train_loss, train_ac, valid_acc))
+			epoch += 1
 	
 	# TEST
 	
