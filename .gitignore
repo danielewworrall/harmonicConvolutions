@@ -11,5 +11,6 @@ bsd/
 *.pdf
 *.npz
 *.npy
+*.png
 rotated_mnist/
 cifar10/
