@@ -11,7 +11,7 @@ import skimage.io as skio
 import tensorflow as tf
 
 from io_helpers import download_dataset, load_pkl, pklbatcher
-from BSD_model import deep_bsd
+from BSD_model import deep_bsd, vgg_bsd
 
 def settings(opt):
 	tf.reset_default_graph()
@@ -31,15 +31,17 @@ def settings(opt):
 	opt['dim2'] = 481
 	opt['n_channels'] = 3
 	opt['n_classes'] = 10
-	opt['n_filters'] = 8
+	#opt['n_filters'] = 8
+	opt['n_filters'] = 7
 	opt['filter_size'] = 3
 	opt['filter_gain'] = 2
 	opt['augment'] = True
 	opt['lr_div'] = 10.
 	opt['sparsity'] = 1.
-	opt['log_path'] = './logs/deep_bsd'
-	opt['checkpoint_path'] = './checkpoints/deep_bsd'
-	opt['test_path'] = './test_mult'
+	opt['test_path'] = 'test_vgg'
+	opt['log_path'] = './logs/' + opt['test_path']
+	opt['checkpoint_path'] = './checkpoints/' + opt['test_path']
+	opt['test_path'] = './' + opt['test_path']
 	return opt, data
 
 
@@ -93,7 +95,15 @@ def main():
 	train_phase = tf.placeholder(tf.bool, name='train_phase')
 
 	## Construct model
-	pred = deep_bsd(opt, x, train_phase)
+	#pred = deep_bsd(opt, x, train_phase)
+	pred = vgg_bsd(opt, x, train_phase)
+	
+	# Print number of parameters
+	n_vars = 0
+	for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES):
+		n_vars += np.prod(var.get_shape().as_list())
+	print('Number of parameters: {:d}'.format(n_vars))
+	
 	loss = 0.
 	beta = 1-tf.reduce_mean(y)
 	pw = beta / (1. - beta)
@@ -122,6 +132,7 @@ def main():
 	config.log_device_placement = False
 	
 	lr = opt['learning_rate']
+	saver = tf.train.Saver()
 	with tf.Session(config=config) as sess:
 		sess.run([init, init_local], feed_dict={train_phase : True})
 		
@@ -173,6 +184,9 @@ def main():
 			if epoch % 40 == 39:
 				lr = lr / 10.
 			epoch += 1
+			
+			# Save model
+			saver.save(sess, opt['checkpoint_path'])
 
 if __name__ == '__main__':
 	main()
