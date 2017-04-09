@@ -11,37 +11,56 @@ import skimage.io as skio
 import tensorflow as tf
 
 from io_helpers import download_dataset, load_pkl, pklbatcher
-from BSD_model import deep_bsd, vgg_bsd
+from BSD_model import hnet_bsd, vgg_bsd
+
+
+#-----------ARGS----------
+flags = tf.app.flags
+FLAGS = flags.FLAGS
+#execution modes
+flags.DEFINE_string('mode', 'hnet', 'run "hnet" or "baseline"')
+flags.DEFINE_string('save_name', 'my_model', 'save directory')
 
 def settings(opt):
 	tf.reset_default_graph()
 	# Default configuration
-	opt['combine_train_val'] = False	
+	if opt['load_settings']:
+		opt['combine_train_val'] = True #False	
+		
+		opt['learning_rate'] = 1e-2
+		opt['batch_size'] = 10
+		opt['std_mult'] = 1
+		opt['psi_preconditioner'] = 3.4
+		opt['delay'] = 8
+		opt['display_step'] = 8
+		opt['save_step'] = 10
+		opt['n_epochs'] = 250
+		opt['dim'] = 321
+		opt['dim2'] = 481
+		opt['n_channels'] = 3
+		opt['n_classes'] = 10
+		#opt['n_filters'] = 8
+		opt['n_filters'] = 7
+	
+		opt['filter_size'] = 3
+		opt['n_rings'] = 2
+		opt['filter_gain'] = 2
+		opt['augment'] = True
+		opt['lr_div'] = 10.
+		opt['sparsity'] = 1.
+		opt['test_path'] = FLAGS.save_name
+		opt['log_path'] = './logs/' + opt['test_path']
+		opt['checkpoint_path'] = './checkpoints/' + opt['test_path']
+		opt['test_path'] = './' + opt['test_path']
+		
+	if not os.path.exists(opt['test_path']):
+		os.mkdir(opt['test_path'])
+	if not os.path.exists(opt['log_path']):
+		os.mkdir(opt['log_path'])
+	if not os.path.exists(opt['checkpoint_path']):
+		os.mkdir(opt['checkpoint_path'])
+		
 	data = load_pkl('./data', 'bsd_pkl_float', prepend='')
-	opt['learning_rate'] = 1e-2
-	opt['batch_size'] = 10
-	opt['std_mult'] = 1
-	opt['momentum'] = 0.95
-	opt['psi_preconditioner'] = 3.4
-	opt['delay'] = 8
-	opt['display_step'] = 8
-	opt['save_step'] = 10
-	opt['n_epochs'] = 250
-	opt['dim'] = 321
-	opt['dim2'] = 481
-	opt['n_channels'] = 3
-	opt['n_classes'] = 10
-	#opt['n_filters'] = 8
-	opt['n_filters'] = 7
-	opt['filter_size'] = 3
-	opt['filter_gain'] = 2
-	opt['augment'] = True
-	opt['lr_div'] = 10.
-	opt['sparsity'] = 1.
-	opt['test_path'] = 'test_vgg'
-	opt['log_path'] = './logs/' + opt['test_path']
-	opt['checkpoint_path'] = './checkpoints/' + opt['test_path']
-	opt['test_path'] = './' + opt['test_path']
 	return opt, data
 
 
@@ -79,12 +98,10 @@ def sparsity_regularizer(x, sparsity):
 	return -sparsity*tf.log(q) - (1-sparsity)*tf.log(1-q)
 
 
-def main():
+def main(opt):
 	"""The magic happens here"""
 	tf.reset_default_graph()
-	# SETUP AND LOAD DATA
-	opt = {}
-	opt['data_dir'] = './data'
+	# SETUP AND LOAD DATA	
 	opt, data = settings(opt)
 	
 	# BUILD MODEL
@@ -95,8 +112,13 @@ def main():
 	train_phase = tf.placeholder(tf.bool, name='train_phase')
 
 	## Construct model
-	#pred = deep_bsd(opt, x, train_phase)
-	pred = vgg_bsd(opt, x, train_phase)
+	if FLAGS.mode == 'baseline':
+		pred = vgg_bsd(opt, x, train_phase)
+	elif FLAGS.mode == 'hnet':
+		pred = hnet_bsd(opt, x, train_phase)
+	else:
+		print('Must execute script with valid --mode flag: "hnet" or "baseline"')
+		sys.exit(-1)
 	
 	# Print number of parameters
 	n_vars = 0
@@ -156,7 +178,7 @@ def main():
 								time.time() - start, train_loss, lr))
 			
 			
-			if epoch % 5 == 0:
+			if epoch % opt['save_step'] == 0:
 				# Validate
 				save_path = opt['test_path'] + '/T_' + str(epoch)
 				if not os.path.exists(save_path):
@@ -186,10 +208,14 @@ def main():
 			epoch += 1
 			
 			# Save model
-			saver.save(sess, opt['checkpoint_path'])
+			saver.save(sess, opt['checkpoint_path'] + 'model.ckpt')
+	return train_loss, n_vars
 
 if __name__ == '__main__':
-	main()
+	opt = {}
+	opt['data_dir'] = './data'
+	opt['load_settings'] = True
+	main(opt)
 
 
 

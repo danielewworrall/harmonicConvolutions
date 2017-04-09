@@ -30,26 +30,32 @@ def settings(opt):
 	data['test_y'] = test['y']
 	
 	# Other options
-	opt['aug_crop'] = 0
-	opt['n_epochs'] = 200
-	opt['batch_size'] = 46
-	opt['learning_rate'] = 0.0076
-	opt['momentum'] = 0.93
-	opt['std_mult'] = 0.7
-	opt['delay'] = 12
-	opt['psi_preconditioner'] = 7.8
-	opt['filter_gain'] = 2
-	opt['filter_size'] = 3
-	opt['n_filters'] = 8
-	opt['display_step'] = 10000/46
-	opt['is_classification'] = True
-	opt['combine_train_val'] = False
-	opt['dim'] = 28
-	opt['crop_shape'] = 0
-	opt['n_channels'] = 1
-	opt['n_classes'] = 10
-	opt['log_path'] = './logs/deep_mnist'
-	opt['checkpoint_path'] = './checkpoints/deep_mnist'
+	if opt['load_settings']:
+		opt['aug_crop'] = 0
+		opt['n_epochs'] = 200
+		opt['batch_size'] = 46
+		opt['learning_rate'] = 0.0076
+		opt['momentum'] = 0.93
+		opt['std_mult'] = 0.7
+		opt['delay'] = 12
+		opt['psi_preconditioner'] = 7.8
+		opt['filter_gain'] = 2
+		opt['filter_size'] = 5
+		opt['n_rings'] = 4
+		opt['n_filters'] = 8
+		opt['display_step'] = 10000/46
+		opt['is_classification'] = True
+		opt['combine_train_val'] = False
+		opt['dim'] = 28
+		opt['crop_shape'] = 0
+		opt['n_channels'] = 1
+		opt['n_classes'] = 10
+		opt['lr_div'] = 10.
+
+	opt['test_path'] = 'deep_mnist'
+	opt['log_path'] = './logs/' + opt['test_path']
+	opt['checkpoint_path'] = './checkpoints/' + opt['test_path']
+	opt['test_path'] = './' + opt['test_path']
 	return opt, data
 
 
@@ -73,19 +79,17 @@ def get_learning_rate(opt, current, best, counter, learning_rate):
 		best = current
 		counter = 0
 	elif counter > opt['delay']:
-		learning_rate = learning_rate / 10.
+		learning_rate = learning_rate / opt['lr_div']
 		counter = 0
 	else:
 		counter += 1
 	return (best, counter, learning_rate)
 
 
-def main():
+def main(opt):
 	"""The magic happens here"""
 	tf.reset_default_graph()
 	# SETUP AND LOAD DATA
-	opt = {}
-	opt['data_dir'] = './data'
 	opt, data = settings(opt)
 	
 	# BUILD MODEL
@@ -98,7 +102,16 @@ def main():
 	## Construct model and optimizer
 	pred = deep_mnist(opt, x, train_phase)
 	loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=pred, labels=y))
-	train_op = tf.train.AdamOptimizer(learning_rate).minimize(loss)
+
+	## Optimizer
+	optim = tf.train.AdamOptimizer(learning_rate=learning_rate)
+	grads_and_vars = optim.compute_gradients(loss)
+	modified_gvs = []
+	for g, v in grads_and_vars:
+		if 'psi' in v.name:
+			g = opt['psi_preconditioner']*g
+		modified_gvs.append((g, v))
+	train_op = optim.apply_gradients(modified_gvs)
 	
 	## Evaluation criteria
 	correct_pred = tf.equal(tf.argmax(pred, 1), y)
@@ -114,6 +127,7 @@ def main():
 	config.log_device_placement = False
 	
 	lr = opt['learning_rate']
+	saver = tf.train.Saver()
 	with tf.Session(config=config) as sess:
 		sess.run([init, init_local], feed_dict={train_phase : True})
 		
@@ -150,6 +164,11 @@ def main():
 			
 			print('[{:04d} | {:0.1f}] Loss: {:04f}, Train Acc.: {:04f}, Validation Acc.: {:04f}, Learning rate: {:.2e}'.format(epoch,
 								time.time() - start, train_loss, train_acc, valid_acc, lr))
+					
+			# Save model
+			if epoch % 10 == 0:
+				saver.save(sess, opt['checkpoint_path'])
+				print('Model saved')
 			
 			# Updates to the training scheme
 			best, counter, lr = get_learning_rate(opt, valid_acc, best, counter, lr)
@@ -167,9 +186,14 @@ def main():
 		test_acc /= (i+1.)
 		
 		print('Test Acc.: {:04f}'.format(test_acc))
-
+	
+	return valid_acc
+		
 
 if __name__ == '__main__':
+	opt = {}
+	opt['data_dir'] = './data'
+	opt['load_settings'] = True
 	main()
 
 
