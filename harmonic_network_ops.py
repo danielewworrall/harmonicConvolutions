@@ -143,7 +143,7 @@ def h_nonlin(X, fnc, eps=1e-12, name='b', device='/cpu:0'):
 
 
 def h_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-12, name='hbn',
-				 device='/cpu:0'):
+				 device='/gpu:0'):
 	"""Batch normalization for the magnitudes of X
 	
 	X: dict of channels {rotation order: (real, imaginary)}
@@ -160,7 +160,7 @@ def h_batch_norm(X, fnc, train_phase, decay=0.99, eps=1e-12, name='hbn',
 		return c*X
 
 
-def bn(X, train_phase, decay=0.99, name='batchNorm', device='/cpu:0'):
+def bn(X, train_phase, decay=0.99, name='batchNorm', device='/gpu:0'):
 	"""Batch normalization module.
 	
 	X: tf tensor
