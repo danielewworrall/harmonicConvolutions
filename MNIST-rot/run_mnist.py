@@ -224,7 +224,6 @@ def main(args):
    
    print('Test Acc.: {:04f}'.format(test_acc))
    sess.close()
-   return valid_acc
       
 
 if __name__ == '__main__':
