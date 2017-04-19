@@ -49,7 +49,7 @@ def settings(args):
    test = np.load(mnist_dir + '/rotated_test.npz')
    data = {}
    if args.combine_train_val:
-      data['train_x'] = np.hstack((train['x'], valid['x']))
+      data['train_x'] = np.vstack((train['x'], valid['x']))
       data['train_y'] = np.hstack((train['y'], valid['y']))
    else:
       data['train_x'] = train['x']
