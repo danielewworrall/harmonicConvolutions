@@ -207,7 +207,8 @@ def main(args):
          print('Model saved')
       
       # Updates to the training scheme
-      best, counter, lr = get_learning_rate(args, valid_acc, best, counter, lr)
+      #best, counter, lr = get_learning_rate(args, valid_acc, best, counter, lr)
+      lr = args.learning_rate * np.power(0.1, epoch / 50)
       epoch += 1
 
    # TEST
