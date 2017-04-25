@@ -9,11 +9,13 @@ sys.path.append('../')
 
 import cPickle as pkl
 import numpy as np
+import skimage.exposure as skiex
 import skimage.io as skio
 import tensorflow as tf
 
-from io_helpers import download_dataset, load_pkl, pklbatcher
-from BSD_model import hnet_bsd, vgg_bsd
+sess=tf.Session() # no idea why I have to do this
+sess.close()
+import BSD_model
 
 
 def make_dirs(args, directory):
@@ -28,13 +30,24 @@ def make_dirs(args, directory):
          os.makedirs(directory)
 
 
+def load_pkl(file_name):
+    """Load dataset from subdirectory"""
+    with open(file_name) as fp:
+        data = pkl.load(fp)
+    return data
+
+
 def settings(args):
    """Load the data and default settings"""
-   data = load_pkl('./data', 'bsd_pkl_float', prepend='')
+   data = {}
+   data['train_x'] = load_pkl('./data/bsd_pkl_float/train_images.pkl')
+   data['train_y'] = load_pkl('./data/bsd_pkl_float/train_labels.pkl')
+   data['valid_x'] = load_pkl('./data/bsd_pkl_float/valid_images.pkl')
+   data['valid_y'] = load_pkl('./data/bsd_pkl_float/valid_labels.pkl')
    # Default configuration
    if args.default_settings:
       args.n_epochs = 250
-      args.batch_size = 10
+      args.batch_size = 5 #10
       args.learning_rate = 1e-2
       args.std_mult = 1.
       args.delay = 8
@@ -44,8 +57,9 @@ def settings(args):
       args.n_rings = 2
       args.n_filters = 7
       args.display_step = len(data['train_x'])/46
-      args.dim = 321
-      args.dim2 = 481
+      args.save_step = 5
+      args.height = 321
+      args.width = 481
 
       args.n_channels = 3
       args.lr_div = 10.
@@ -64,17 +78,48 @@ def settings(args):
    return args, data
 
 
-def minibatcher(inputs, targets, batchsize, shuffle=False):
-   assert len(inputs) == len(targets)
-   if shuffle:
-      indices = np.arange(len(inputs))
-      np.random.shuffle(indices)
-   for start_idx in range(0, len(inputs) - batchsize + 1, batchsize):
-      if shuffle:
-         excerpt = indices[start_idx:start_idx + batchsize]
-      else:
-         excerpt = slice(start_idx, start_idx + batchsize)
-      yield inputs[excerpt], targets[excerpt]
+def pklbatcher(inputs, targets, batch_size, shuffle=False, augment=False,
+                img_shape=(321,481,3)):
+    """Input and target are minibatched. Returns a generator"""
+    assert len(inputs) == len(targets)
+    indices = inputs.keys()
+    if shuffle:
+        np.random.shuffle(indices)
+    for start_idx in range(0, len(inputs) - batch_size + 1, batch_size):
+        if shuffle:
+            excerpt = indices[start_idx:start_idx + batch_size]
+        else:
+            excerpt = indices[start_idx:start_idx+batch_size]
+        # Data augmentation
+        im = []
+        targ = []
+        for i in xrange(len(excerpt)):
+            img = inputs[excerpt[i]]['x']
+            tg = targets[excerpt[i]]['y'] > 2
+            if augment:
+                # We use shuffle as a proxy for training
+                if shuffle:
+                    img, tg = bsd_preprocess(img, tg)
+            im.append(img)
+            targ.append(tg)
+        im = np.stack(im, axis=0)
+        targ = np.stack(targ, axis=0)
+        yield im, targ, excerpt
+
+
+def bsd_preprocess(im, tg):
+    '''Data normalizations and augmentations'''
+    fliplr = (np.random.rand() > 0.5)
+    flipud = (np.random.rand() > 0.5)
+    gamma = np.minimum(np.maximum(1. + np.random.randn(), 0.5), 1.5)
+    if fliplr:
+        im = np.fliplr(im)
+        tg = np.fliplr(tg)
+    if flipud:
+        im = np.flipud(im)
+        tg = np.flipud(tg)
+    im = skiex.adjust_gamma(im, gamma)
+    return im, tg
 
 
 def get_learning_rate(opt, current, best, counter, learning_rate):
@@ -109,20 +154,21 @@ def main(args):
    # BUILD MODEL
    ## Placeholders
    print('...Creating network input')
-   x = tf.placeholder(tf.float32, [args.batch_size,None,None,3], name='x')
-   y = tf.placeholder(tf.float32, [args.batch_size,None,None,1], name='y')
+   x = tf.placeholder(tf.float32, [args.batch_size,args.height,args.width,3], name='x')
+   y = tf.placeholder(tf.float32, [args.batch_size,args.height,args.width,1], name='y')
    learning_rate = tf.placeholder(tf.float32, name='learning_rate')
    train_phase = tf.placeholder(tf.bool, name='train_phase')
 
    ## Construct model
    print('...Constructing model')
    if args.mode == 'baseline':
-      pred = vgg_bsd(args, x, train_phase)
+      pred = BSD_model.vgg_bsd(args, x, train_phase)
    elif args.mode == 'hnet':
-      pred = hnet_bsd(args, x, train_phase)
+      pred = BSD_model.hnet_bsd(args, x, train_phase)
    else:
       print('Must execute script with valid --mode flag: "hnet" or "baseline"')
       sys.exit(-1)
+   bsd_map = tf.nn.sigmoid(pred['fuse'])
 
    # Print number of parameters
    n_vars = 0
@@ -139,25 +185,19 @@ def main(args):
       loss += tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(y, pred_, pw))
       # Sparsity regularizer
       loss += args.sparsity*sparsity_regularizer(pred_, 1-beta)
+
    ## Optimizer
    print('...Building optimizer')
    optim = tf.train.AdamOptimizer(learning_rate=learning_rate)
    grads_and_vars = optim.compute_gradients(loss)
    modified_gvs = []
    for g, v in grads_and_vars:
-      print(v.name)
-      print v, g
-      if 'phase' in v.name:
-         print g
+      if ('phase' in v.name) and (g is not None):
          g = args.phase_preconditioner*g
       modified_gvs.append((g, v))
    train_op = optim.apply_gradients(modified_gvs)
 
    # TRAIN
-   print('...Initializing variables')
-   init = tf.global_variables_initializer()
-   init_local = tf.local_variables_initializer()
-
    # Configure tensorflow session
    config = tf.ConfigProto()
    config.gpu_options.allow_growth = True
@@ -166,59 +206,62 @@ def main(args):
    print('TRAINING')
    lr = args.learning_rate
    saver = tf.train.Saver()
-   with tf.Session(config=config) as sess:
-      sess.run([init, init_local], feed_dict={train_phase : True})
+   sess = tf.Session(config=config)
+   print('...Initializing variables')
+   init = tf.global_variables_initializer()
+   init_local = tf.local_variables_initializer()
+   sess.run([init, init_local], feed_dict={train_phase : True})
+   print('Beginning loop')
+   start = time.time()
+   epoch = 0
 
-      start = time.time()
-      epoch = 0
-      while epoch < args.n_epochs:
-         anneal = 0.1 + np.minimum(epoch/30.,1.)
-         # Training steps
-         batcher = pklbatcher(data['train_x'], data['train_y'], args.batch_size, shuffle=True, augment=True)
-         train_loss = 0.
-         for i, (X, Y, __) in enumerate(batcher):
-            feed_dict = {x: X, y: Y, learning_rate: lr, train_phase: True}
-            __, l = sess.run([train_op, loss], feed_dict=feed_dict)
-            train_loss += l
-            sys.stdout.write('{:d}/{:d}\r'.format(i, len(data['train_x'].keys())/args.batch_size))
-            sys.stdout.flush()
-         train_loss /= (i+1.)
+   while epoch < args.n_epochs:
+      anneal = 0.1 + np.minimum(epoch/30.,1.)
+      # Training steps
+      batcher = pklbatcher(data['train_x'], data['train_y'], args.batch_size, shuffle=True, augment=True)
+      train_loss = 0.
+      for i, (X, Y, __) in enumerate(batcher):
+         feed_dict = {x: X, y: Y, learning_rate: lr, train_phase: True}
+         __, l = sess.run([train_op, loss], feed_dict=feed_dict)
+         train_loss += l
+         sys.stdout.write('{:d}/{:d}\r'.format(i, len(data['train_x'].keys())/args.batch_size))
+         sys.stdout.flush()
+      train_loss /= (i+1.)
 
-         print('[{:04d} | {:0.1f}] Loss: {:04f}, Learning rate: {:.2e}'.format(epoch,
-            time.time() - start, train_loss, lr))
+      print('[{:04d} | {:0.1f}] Loss: {:04f}, Learning rate: {:.2e}'.format(epoch,
+         time.time() - start, train_loss, lr))
 
+      if epoch % args.save_step == 0:
+         # Validate
+         save_path = args.test_path + '/T_' + str(epoch)
+         if not os.path.exists(save_path):
+            os.mkdir(save_path)
+         generator = pklbatcher(data['valid_x'], data['valid_y'],
+                                    args.batch_size, shuffle=False,
+                                    augment=False, img_shape=(args.height, args.width))
+         # Use sigmoid to map to [0,1]
+         j = 0
+         for batch in generator:
+            batch_x, batch_y, excerpt = batch
+            output = sess.run(bsd_map, feed_dict={x: batch_x, train_phase: False})
+            for i in xrange(output.shape[0]):
+               save_name = save_path + '/' + str(excerpt[i]).replace('.jpg','.png')
+               im = output[i,:,:,0]
+               im = (255*im).astype('uint8')
+               if data['valid_x'][excerpt[i]]['transposed']:
+                  im = im.T
+               skio.imsave(save_name, im)
+               j += 1
+         print('Saved predictions to: %s' % (save_path,))
 
-         if epoch % args.save_step == 0:
-            # Validate
-            save_path = args.test_path + '/T_' + str(epoch)
-            if not os.path.exists(save_path):
-               os.mkdir(save_path)
-            generator = pklbatcher(data['valid_x'], data['valid_y'],
-                                       args.batch_size, shuffle=False,
-                                       augment=False, img_shape=(args.dim, args.dim2))
-            # Use sigmoid to map to [0,1]
-            bsd_map = tf.nn.sigmoid(pred['fuse'])
-            j = 0
-            for batch in generator:
-               batch_x, batch_y, excerpt = batch
-               output = sess.run(bsd_map, feed_dict={x: batch_x, train_phase: False})
-               for i in xrange(output.shape[0]):
-                  save_name = save_path + '/' + str(excerpt[i]).replace('.jpg','.png')
-                  im = output[i,:,:,0]
-                  im = (255*im).astype('uint8')
-                  if data['valid_x'][excerpt[i]]['transposed']:
-                     im = im.T
-                  skio.imsave(save_name, im)
-                  j += 1
-            print('Saved predictions to: %s' % (save_path,))
+      # Updates to the training scheme
+      if epoch % 40 == 39:
+         lr = lr / 10.
+      epoch += 1
 
-         # Updates to the training scheme
-         if epoch % 40 == 39:
-            lr = lr / 10.
-         epoch += 1
-
-         # Save model
-         saver.save(sess, args.checkpoint_path + 'model.ckpt')
+      # Save model
+      saver.save(sess, args.checkpoint_path + 'model.ckpt')
+   sess.close()
    return train_loss, n_vars
 
 
