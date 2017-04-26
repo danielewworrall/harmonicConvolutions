@@ -23,52 +23,61 @@ def dump(res):
 
 def optimize(n_trials):
    """Run the gp_minimize function"""
-   dimensions = [(80, 90), # batch size
-                 (200, 210), # image dims
-                 (1e-10, 1e-8, 'log-uniform'), # learning rate
-                 (1e-5, 1e-3, 'log-uniform'), # learning rate divisor
-                 (8, 15)] # jitter
+   dimensions = [(5, 25),       # batch size
+                 (1e-6, 1e-2),  # learning rate
+                 (0.1, 1.),     # std mult
+                 (3, 6),        # filter_size
+                 (2, 5),        # n_rings
+                 (1.,9.)]       # phase_preconditioner
 
-   x0 = [80, 202, 2e-10, 1e-5, 10]
 
-   print gp_minimize(wrapper_function, dimensions, x0=x0, n_calls=100, verbose=True, callback=dump)
+   print gp_minimize(wrapper_function, dimensions, n_calls=100, verbose=True, callback=dump)
 
 
 def wrapper_function(dimension):
    """Wrapper around the neural network training function"""
 
    parser = argparse.ArgumentParser()
-   parser.add_argument("--n_channels", help="number of input image channels", type=int, default=3)
-   parser.add_argument("--n_classes", help="number of output classes", type=int, default=2)
-   parser.add_argument("--n_iterations", help="number of minibatches to pass", type=int, default=3000)
-   parser.add_argument("--learning_rate_step", help="interval to divide learning rate by 10", type=int, default=1000)
-   parser.add_argument("--momentum", help="momentum rate for stochastic gradient descent", type=float, default=0.9)
-   parser.add_argument("--pretrained_path", help="path to pretrained model checkpoint", default='./pretrained/resnet_v1_50.ckpt')
-   parser.add_argument("--preprocess", help="whether to preprocess images", type=bool, default=True)
-   parser.add_argument("--min_after_dequeue", help="minimum number of images to keep in RAM", type=int, default=1000)
-   parser.add_argument("--train_file", help="location of training file", default='./sets/train_randomized/train_0_randomized.txt')
-   parser.add_argument("--valid_file", help="location of training file", default='./sets/valid_randomized/valid_0_randomized.txt')
-   parser.add_argument("--train_dir", help="directory of training examples", default="./data/")
-   parser.add_argument("--valid_dir", help="directory of validation examples", default="./data/")
-   parser.add_argument("--save_dir", help="directory to save results", default="./checkpoints")
-   parser.add_argument("--log_dir", help="directory to save results", default="./logs")
-   parser.add_argument("--save_interval", help="number of iterations between saving model", type=int, default=50)
-   parser.add_argument("--delete_existing", help="delete existing models and logs in same folders", default=True)
+   parser.add_argument("--mode", help="model to run {hnet,baseline}", default="hnet")
+   parser.add_argument("--save_name", help="name of the checkpoint path", default="my_model")
+   parser.add_argument("--data_dir", help="data directory", default='./data')
+   parser.add_argument("--default_settings", help="use default settings", type=bool, default=False)
+   parser.add_argument("--combine_train_val", help="combine the training and validation sets for testing", type=bool, default=False)
+   parser.add_argument("--delete_existing", help="delete the existing auxilliary files", type=bool, default=True)
    args = parser.parse_args()
 
+   # Default configuration
+   args.n_epochs = 250
+   args.delay = 8
+   args.filter_gain = 2
+   args.n_filters = 7
+   args.save_step = 5
+   args.height = 321
+   args.width = 481
+
+   args.n_channels = 3
+   args.lr_div = 10.
+   args.augment = True
+   args.sparsity = True
+
+   args.test_path = args.save_name
+   args.log_path = os.path.join('./logs/', args.test_path)
+   args.checkpoint_path = os.path.join('./checkpoints/', args.test_path)
+   args.test_path = os.path.join('./', args.test_path)
+
    args.batch_size = dimension[0]
-   args.height = dimension[1]
-   args.width = args.height
-   args.learning_rate = dimension[2]
-   args.learning_rate_divisor = dimension[3]
-   args.jitter = dimension[4]
+   args.learning_rate = dimension[1]
+   args.std_mult = dimension[2]
+   args.filter_size = dimension[3]
+   args.n_rings = dimension[4]
+   args.phase_preconditioner = dimension[5]
 
    for arg in vars(args):
       print arg, getattr(args, arg)
    print
 
-   valid_acc = main(args)
-   return 1 - valid_acc
+   train_loss = main(args)
+   return train_loss
 
 
 if __name__ == '__main__':

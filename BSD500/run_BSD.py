@@ -44,6 +44,7 @@ def settings(args):
    data['train_y'] = load_pkl('./data/bsd_pkl_float/train_labels.pkl')
    data['valid_x'] = load_pkl('./data/bsd_pkl_float/valid_images.pkl')
    data['valid_y'] = load_pkl('./data/bsd_pkl_float/valid_labels.pkl')
+   args.display_step = len(data['train_x'])/46
    # Default configuration
    if args.default_settings:
       args.n_epochs = 250
@@ -56,7 +57,6 @@ def settings(args):
       args.filter_size = 3
       args.n_rings = 2
       args.n_filters = 7
-      args.display_step = len(data['train_x'])/46
       args.save_step = 5
       args.height = 321
       args.width = 481
@@ -71,9 +71,9 @@ def settings(args):
       args.checkpoint_path = os.path.join('./checkpoints/', args.test_path)
       args.test_path = os.path.join('./', args.test_path)
 
-      make_dirs(args, args.test_path)
-      make_dirs(args, args.log_path)
-      make_dirs(args, args.checkpoint_path)
+   make_dirs(args, args.test_path)
+   make_dirs(args, args.log_path)
+   make_dirs(args, args.checkpoint_path)
 
    return args, data
 
