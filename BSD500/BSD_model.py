@@ -37,50 +37,50 @@ def hnet_bsd(args, x, train_phase):
 
     # Convolutional Layers
     with tf.name_scope('stage1') as scope:
-        cv1 = hl.conv2d(x, nf, fs, stddev=std, n_rings=nr, name='1_1')
+        cv1 = hl.conv2d(x, nf, fs, stddev=std, padding='SAME', n_rings=nr, name='1_1')
         cv1 = hl.non_linearity(cv1, name='1_1')
 
-        cv2 = hl.conv2d(cv1, nf, fs, stddev=std, n_rings=nr, name='1_2')
+        cv2 = hl.conv2d(cv1, nf, fs, stddev=std, padding='SAME', n_rings=nr, name='1_2')
         cv2 = hl.batch_norm(cv2, tp, name='bn1')
         mags = to_4d(hl.stack_magnitudes(cv2))
         fm[1] = linear(mags, 1, 1, name='sw1')
 
     with tf.name_scope('stage2') as scope:
         cv3 = hl.mean_pooling(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
-        cv3 = hl.conv2d(cv3, nf2, fs, stddev=std, n_rings=nr, name='2_1')
+        cv3 = hl.conv2d(cv3, nf2, fs, stddev=std, padding='SAME', n_rings=nr, name='2_1')
         cv3 = hl.non_linearity(cv3, name='2_1')
 
-        cv4 = hl.conv2d(cv3, nf2, fs, stddev=std, n_rings=nr, name='2_2')
+        cv4 = hl.conv2d(cv3, nf2, fs, stddev=std, padding='SAME', n_rings=nr, name='2_2')
         cv4 = hl.batch_norm(cv4, train_phase, name='bn2')
         mags = to_4d(hl.stack_magnitudes(cv4))
         fm[2] = linear(mags, 1, 1, name='sw2')
 
     with tf.name_scope('stage3') as scope:
         cv5 = hl.mean_pooling(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
-        cv5 = hl.conv2d(cv5, nf3, fs, stddev=std, n_rings=nr, name='3_1')
+        cv5 = hl.conv2d(cv5, nf3, fs, stddev=std, padding='SAME', n_rings=nr, name='3_1')
         cv5 = hl.non_linearity(cv5, name='3_1')
 
-        cv6 = hl.conv2d(cv5, nf3, fs, stddev=std, n_rings=nr, name='3_2')
+        cv6 = hl.conv2d(cv5, nf3, fs, stddev=std, padding='SAME', n_rings=nr, name='3_2')
         cv6 = hl.batch_norm(cv6, train_phase, name='bn3')
         mags = to_4d(hl.stack_magnitudes(cv6))
         fm[3] = linear(mags, 1, 1, name='sw3')
 
     with tf.name_scope('stage4') as scope:
         cv7 = hl.mean_pooling(cv6, ksize=(1,2,2,1), strides=(1,2,2,1))
-        cv7 = hl.conv2d(cv7, nf4, fs, stddev=std, n_rings=nr, name='4_1')
+        cv7 = hl.conv2d(cv7, nf4, fs, stddev=std, padding='SAME', n_rings=nr, name='4_1')
         cv7 = hl.non_linearity(cv7, name='4_1')
 
-        cv8 = hl.conv2d(cv7, nf4, fs, stddev=std, n_rings=nr, name='4_2')
+        cv8 = hl.conv2d(cv7, nf4, fs, stddev=std, padding='SAME', n_rings=nr, name='4_2')
         cv8 = hl.batch_norm(cv8, train_phase, name='bn4')
         mags = to_4d(hl.stack_magnitudes(cv8))
         fm[4] = linear(mags, 1, 1, name='sw4')
 
     with tf.name_scope('stage5') as scope:
         cv9 = hl.mean_pooling(cv8, ksize=(1,2,2,1), strides=(1,2,2,1))
-        cv9 = hl.conv2d(cv9, nf4, fs, stddev=std, n_rings=nr, name='5_1')
+        cv9 = hl.conv2d(cv9, nf4, fs, stddev=std, padding='SAME', n_rings=nr, name='5_1')
         cv9 = hl.non_linearity(cv9, name='5_1')
 
-        cv10 = hl.conv2d(cv9, nf4, fs, stddev=std, n_rings=nr, name='5_2')
+        cv10 = hl.conv2d(cv9, nf4, fs, stddev=std, padding='SAME', n_rings=nr, name='5_2')
         cv10 = hl.batch_norm(cv10, train_phase, name='bn5')
         mags = to_4d(hl.stack_magnitudes(cv10))
         fm[5] = linear(mags, 1, 1, name='sw5')

@@ -262,7 +262,7 @@ def main(args):
       # Save model
       saver.save(sess, args.checkpoint_path + 'model.ckpt')
    sess.close()
-   return train_loss, n_vars
+   return train_loss
 
 
 if __name__ == '__main__':
