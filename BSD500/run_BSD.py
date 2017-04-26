@@ -44,6 +44,11 @@ def settings(args):
    data['train_y'] = load_pkl('./data/bsd_pkl_float/train_labels.pkl')
    data['valid_x'] = load_pkl('./data/bsd_pkl_float/valid_images.pkl')
    data['valid_y'] = load_pkl('./data/bsd_pkl_float/valid_labels.pkl')
+   if args.combine_train_val:
+      data['train_x'].update(data['valid_x'])
+      data['train_y'].update(data['valid_y'])
+      data['valid_x'] = load_pkl('./data/bsd_pkl_float/test_images.pkl')
+      data['valid_y'] = load_pkl('./data/bsd_pkl_float/test_labels.pkl')
    args.display_step = len(data['train_x'])/46
    # Default configuration
    if args.default_settings:
@@ -198,15 +203,10 @@ def main(args):
    train_op = optim.apply_gradients(modified_gvs)
 
    # TRAIN
-   # Configure tensorflow session
-   config = tf.ConfigProto()
-   config.gpu_options.allow_growth = True
-   config.log_device_placement = False
-
    print('TRAINING')
    lr = args.learning_rate
    saver = tf.train.Saver()
-   sess = tf.Session(config=config)
+   sess = tf.Session()
    print('...Initializing variables')
    init = tf.global_variables_initializer()
    init_local = tf.local_variables_initializer()
@@ -216,7 +216,6 @@ def main(args):
    epoch = 0
 
    while epoch < args.n_epochs:
-      anneal = 0.1 + np.minimum(epoch/30.,1.)
       # Training steps
       batcher = pklbatcher(data['train_x'], data['train_y'], args.batch_size, shuffle=True, augment=True)
       train_loss = 0.
