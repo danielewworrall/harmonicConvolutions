@@ -13,14 +13,22 @@ unzip bsd_pkl_float.zip
 rm bsd_pkl_float.zip
 ```
 
+#2 Run the model
 The model is defined in `BSD_model.py`. To run the code, just run
 ```bash
 python run_BSD.py --combine_train_val True
 ```
 
-The default settings for the model are those we have arrived at for this task.
-Feel free to experiment with them. If you find anything interesting, or any
-bugs for that matter, we'll be happy to hear from you.
+The default settings for the model are will produce similar results to in our
+paper---feel free to experiment with them. If you find anything interesting, 
+or any bugs for that matter, we'll be happy to hear from you.
+
+#3 Bayesian hyperparameter optimization
+It may be that you wish to use our code on your own datasets. If this is so,
+then it may be the case that the default hyperparameters are not the best 
+settings. The script ```bayesian_optimization.py``` is a useful tool to quickly
+come to a set of hyperparameters which perform well on a given validation set.
+Details can be found at: https://scikit-optimize.github.io/.
 
 TODO
 - [ ] Include pretrained model
