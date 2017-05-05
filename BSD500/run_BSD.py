@@ -40,22 +40,26 @@ def load_pkl(file_name):
 def settings(args):
    """Load the data and default settings"""
    data = {}
-   data['train_x'] = load_pkl('./data/bsd_pkl_float/train_images.pkl')
-   data['train_y'] = load_pkl('./data/bsd_pkl_float/train_labels.pkl')
-   data['valid_x'] = load_pkl('./data/bsd_pkl_float/valid_images.pkl')
-   data['valid_y'] = load_pkl('./data/bsd_pkl_float/valid_labels.pkl')
+   data['train_x'] = load_pkl(os.path.join(args.data_dir, 'train_images.pkl'))
+   data['train_y'] = load_pkl(os.path.join(args.data_dir, 'train_labels.pkl'))
+   data['valid_x'] = load_pkl(os.path.join(args.data_dir, 'valid_images.pkl'))
+   data['valid_y'] = load_pkl(os.path.join(args.data_dir, 'valid_labels.pkl'))
+   if args.combine_train_val:
+      data['train_x'].update(data['valid_x'])
+      data['train_y'].update(data['valid_y'])
+      data['valid_x'] = load_pkl(os.path.join(args.data_dir, 'test_images.pkl'))
+      data['valid_y'] = load_pkl(os.path.join(args.data_dir, './data/bsd_pkl_float/test_labels.pkl'))
    args.display_step = len(data['train_x'])/46
    # Default configuration
    if args.default_settings:
       args.n_epochs = 250
-      args.batch_size = 5 #10
-      args.learning_rate = 1e-2
-      args.std_mult = 1.
+      args.batch_size = 10
+      args.learning_rate = 3e-2
+      args.std_mult = 0.8
       args.delay = 8
-      args.phase_preconditioner = 3.4
       args.filter_gain = 2
-      args.filter_size = 3
-      args.n_rings = 2
+      args.filter_size = 5
+      args.n_rings = 4
       args.n_filters = 7
       args.save_step = 5
       args.height = 321
@@ -189,24 +193,13 @@ def main(args):
    ## Optimizer
    print('...Building optimizer')
    optim = tf.train.AdamOptimizer(learning_rate=learning_rate)
-   grads_and_vars = optim.compute_gradients(loss)
-   modified_gvs = []
-   for g, v in grads_and_vars:
-      if ('phase' in v.name) and (g is not None):
-         g = args.phase_preconditioner*g
-      modified_gvs.append((g, v))
-   train_op = optim.apply_gradients(modified_gvs)
+   train_op = optim.minimize(loss)
 
    # TRAIN
-   # Configure tensorflow session
-   config = tf.ConfigProto()
-   config.gpu_options.allow_growth = True
-   config.log_device_placement = False
-
    print('TRAINING')
    lr = args.learning_rate
    saver = tf.train.Saver()
-   sess = tf.Session(config=config)
+   sess = tf.Session()
    print('...Initializing variables')
    init = tf.global_variables_initializer()
    init_local = tf.local_variables_initializer()
@@ -216,7 +209,6 @@ def main(args):
    epoch = 0
 
    while epoch < args.n_epochs:
-      anneal = 0.1 + np.minimum(epoch/30.,1.)
       # Training steps
       batcher = pklbatcher(data['train_x'], data['train_y'], args.batch_size, shuffle=True, augment=True)
       train_loss = 0.
@@ -268,8 +260,8 @@ def main(args):
 if __name__ == '__main__':
    parser = argparse.ArgumentParser()
    parser.add_argument("--mode", help="model to run {hnet,baseline}", default="hnet")
-   parser.add_argument("--save_name", help="name of the checkpoint path", default="my_model")
-   parser.add_argument("--data_dir", help="data directory", default='./data')
+   parser.add_argument("--save_name", help="name of the checkpoint path", default="./output")
+   parser.add_argument("--data_dir", help="data directory", default='./bsd_pkl_float')
    parser.add_argument("--default_settings", help="use default settings", type=bool, default=True)
    parser.add_argument("--combine_train_val", help="combine the training and validation sets for testing", type=bool, default=False)
    parser.add_argument("--delete_existing", help="delete the existing auxilliary files", type=bool, default=True)

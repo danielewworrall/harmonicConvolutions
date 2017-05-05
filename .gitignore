@@ -5,7 +5,7 @@ pics/
 data/
 *.pyc
 results/
-#*.png
+*.png
 deepboundaries/
 bsd/
 *.pdf
@@ -15,4 +15,5 @@ bsd/
 rotated_mnist/
 cifar10/
 *.jpg
+my_model/
 *.pkl
