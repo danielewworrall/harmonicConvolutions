@@ -40,15 +40,15 @@ def load_pkl(file_name):
 def settings(args):
    """Load the data and default settings"""
    data = {}
-   data['train_x'] = load_pkl('./data/bsd_pkl_float/train_images.pkl')
-   data['train_y'] = load_pkl('./data/bsd_pkl_float/train_labels.pkl')
-   data['valid_x'] = load_pkl('./data/bsd_pkl_float/valid_images.pkl')
-   data['valid_y'] = load_pkl('./data/bsd_pkl_float/valid_labels.pkl')
+   data['train_x'] = load_pkl(os.path.join(args.data_dir, 'train_images.pkl'))
+   data['train_y'] = load_pkl(os.path.join(args.data_dir, 'train_labels.pkl'))
+   data['valid_x'] = load_pkl(os.path.join(args.data_dir, 'valid_images.pkl'))
+   data['valid_y'] = load_pkl(os.path.join(args.data_dir, 'valid_labels.pkl'))
    if args.combine_train_val:
       data['train_x'].update(data['valid_x'])
       data['train_y'].update(data['valid_y'])
-      data['valid_x'] = load_pkl('./data/bsd_pkl_float/test_images.pkl')
-      data['valid_y'] = load_pkl('./data/bsd_pkl_float/test_labels.pkl')
+      data['valid_x'] = load_pkl(os.path.join(args.data_dir, 'test_images.pkl'))
+      data['valid_y'] = load_pkl(os.path.join(args.data_dir, './data/bsd_pkl_float/test_labels.pkl'))
    args.display_step = len(data['train_x'])/46
    # Default configuration
    if args.default_settings:
@@ -260,8 +260,8 @@ def main(args):
 if __name__ == '__main__':
    parser = argparse.ArgumentParser()
    parser.add_argument("--mode", help="model to run {hnet,baseline}", default="hnet")
-   parser.add_argument("--save_name", help="name of the checkpoint path", default="my_model")
-   parser.add_argument("--data_dir", help="data directory", default='./data')
+   parser.add_argument("--save_name", help="name of the checkpoint path", default="./output")
+   parser.add_argument("--data_dir", help="data directory", default='./bsd_pkl_float')
    parser.add_argument("--default_settings", help="use default settings", type=bool, default=True)
    parser.add_argument("--combine_train_val", help="combine the training and validation sets for testing", type=bool, default=False)
    parser.add_argument("--delete_existing", help="delete the existing auxilliary files", type=bool, default=True)
