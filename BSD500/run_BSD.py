@@ -53,14 +53,13 @@ def settings(args):
    # Default configuration
    if args.default_settings:
       args.n_epochs = 250
-      args.batch_size = 5 #10
-      args.learning_rate = 1e-2
-      args.std_mult = 1.
+      args.batch_size = 10
+      args.learning_rate = 3e-2
+      args.std_mult = 0.8
       args.delay = 8
-      args.phase_preconditioner = 3.4
       args.filter_gain = 2
-      args.filter_size = 3
-      args.n_rings = 2
+      args.filter_size = 5
+      args.n_rings = 4
       args.n_filters = 7
       args.save_step = 5
       args.height = 321
@@ -194,13 +193,7 @@ def main(args):
    ## Optimizer
    print('...Building optimizer')
    optim = tf.train.AdamOptimizer(learning_rate=learning_rate)
-   grads_and_vars = optim.compute_gradients(loss)
-   modified_gvs = []
-   for g, v in grads_and_vars:
-      if ('phase' in v.name) and (g is not None):
-         g = args.phase_preconditioner*g
-      modified_gvs.append((g, v))
-   train_op = optim.apply_gradients(modified_gvs)
+   train_op = optim.minimize(loss)
 
    # TRAIN
    print('TRAINING')

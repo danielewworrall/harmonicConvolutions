@@ -66,12 +66,12 @@ def test_forward_invariance_90():
    # Look at the difference in order 0 vectors...should be EXACTLY 0
    for i in xrange(4):
       for j in xrange(i):
-         print Y[j,0,:] - Y[i,0,:]
+         assert np.amax(np.abs(Y[j,0,:] - Y[i,0,:])) < 1e-5
    print
    # Look at the difference in magnitudes
    for i in xrange(4):
       for j in xrange(i):
-         print Inv[j,:] - Inv[i,:]
+         assert np.amax(np.abs(Inv[j,:] - Inv[i,:])) < 1e-5
 
 
 test_forward_pass_shape()

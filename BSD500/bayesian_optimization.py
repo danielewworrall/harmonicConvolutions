@@ -31,7 +31,7 @@ def optimize(n_trials):
                  (1.,9.)]       # phase_preconditioner
 
 
-   print gp_minimize(wrapper_function, dimensions, n_calls=100, verbose=True, callback=dump)
+   print gp_minimize(wrapper_function, dimensions, n_calls=n_trials, verbose=True, callback=dump)
 
 
 def wrapper_function(dimension):
