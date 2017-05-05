@@ -23,7 +23,7 @@ The default settings for the model are will produce similar results to in our
 paper---feel free to experiment with them. If you find anything interesting, 
 or any bugs for that matter, we'll be happy to hear from you.
 
-#3 Bayesian hyperparameter optimization
+# 3 Bayesian hyperparameter optimization
 It may be that you wish to use our code on your own datasets. If this is so,
 then it may be the case that the default hyperparameters are not the best 
 settings. The script ```bayesian_optimization.py``` is a useful tool to quickly
