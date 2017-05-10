@@ -2,7 +2,8 @@
 
 > This code requires Tensorflow version 1.0
 
-This code accompanies the paper [Harmonic Networks: Deep Translation and Rotation Equivariance](https://arxiv.org/abs/1612.04642) by [Daniel E. Worrall](http://www0.cs.ucl.ac.uk/staff/D.Worrall/), [Stephan J. Garbin](http://stephangarbin.com/), [Daniyar Turmukhambetov](http://www0.cs.ucl.ac.uk/staff/d.turmukhambetov/), and [Gabriel J. Brostow](http://www0.cs.ucl.ac.uk/staff/G.Brostow/).
+This code accompanies the paper [Harmonic Networks: Deep Translation and Rotation Equivariance](https://arxiv.org/abs/1612.04642)
+Authors: [Daniel E. Worrall](http://www0.cs.ucl.ac.uk/staff/D.Worrall/), [Stephan J. Garbin](http://stephangarbin.com/), [Daniyar Turmukhambetov](http://www0.cs.ucl.ac.uk/staff/d.turmukhambetov/), and [Gabriel J. Brostow](http://www0.cs.ucl.ac.uk/staff/G.Brostow/).
 
 [Watch the video](https://www.youtube.com/watch?v=qoWAFBYOtoU&feature=youtu.be)
 
