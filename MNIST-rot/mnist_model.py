@@ -28,7 +28,7 @@ def deep_mnist(args, x, train_phase):
    # Create bias for final layer
    bias = tf.get_variable('b7', shape=[args.n_classes],
                      initializer=tf.constant_initializer(1e-2))
-   x = tf.reshape(x, shape=[bs,args.dim,args.dim,1,1,1])
+   x = tf.reshape(x, shape=[bs,args.height,args.width,1,1,1])
 
    # Convolutional Layers with pooling
    with tf.name_scope('block1') as scope:

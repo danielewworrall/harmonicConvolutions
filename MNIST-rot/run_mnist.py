@@ -59,27 +59,25 @@ def settings(args):
    data['test_x'] = test['x']
    data['test_y'] = test['y']
 
-   
+
    # Other options
    if args.default_settings:
-      args.n_epochs = 200
+      args.n_epochs = 250
       args.batch_size = 46
-      args.learning_rate = 0.0076
-      args.std_mult = 0.7
-      args.delay = 12
-      args.phase_preconditioner = 7.8
+      args.learning_rate = 0.0016
+      args.std_mult = 0.79
       args.filter_gain = 2
       args.filter_size = 5
       args.n_rings = 4
       args.n_filters = 8
-      args.display_step = len(data['train_x'])/46
-      args.is_classification = True
-      args.dim = 28
+      args.height = 28
+      args.width = 28
       args.crop_shape = 0
       args.n_channels = 1
       args.n_classes = 10
       args.lr_div = 10.
 
+   args.display_step = len(data['train_x'])/46
    args.log_path = add_folder('./logs')
    args.checkpoint_path = add_folder('./checkpoints') + '/model.ckpt'
    return args, data
@@ -104,27 +102,13 @@ def minibatcher(inputs, targets, batchsize, shuffle=False):
          excerpt = slice(start_idx, start_idx + batchsize)
       yield inputs[excerpt], targets[excerpt]
 
-def get_learning_rate(args, current, best, counter, learning_rate):
-   """If have not seen accuracy improvement in delay epochs, then divide 
-   learning rate by 10
-   """
-   if current > best:
-      best = current
-      counter = 0
-   elif counter > args.delay:
-      learning_rate = learning_rate / args.lr_div
-      counter = 0
-   else:
-      counter += 1
-   return (best, counter, learning_rate)
-
 
 def main(args):
    """The magic happens here"""
    tf.reset_default_graph()
    ##### SETUP AND LOAD DATA #####
    args, data = settings(args)
-   
+
    ##### BUILD MODEL #####
    ## Placeholders
    x = tf.placeholder(tf.float32, [args.batch_size,784], name='x')
@@ -142,15 +126,8 @@ def main(args):
 
    # Optimizer
    optim = tf.train.AdamOptimizer(learning_rate=learning_rate)
-   grads_and_vars = optim.compute_gradients(loss)
-   modified_gvs = []
-   # We precondition the phases, for faster descent, in the same way as biases
-   for g, v in grads_and_vars:
-      if 'psi' in v.name:
-         g = args.phase_preconditioner*g
-      modified_gvs.append((g, v))
-   train_op = optim.apply_gradients(modified_gvs)
-   
+   train_op = optim.minimize(loss)
+
    ##### TRAIN ####
    # Configure tensorflow session
    init_global = tf.global_variables_initializer()
@@ -158,16 +135,15 @@ def main(args):
    config = tf.ConfigProto()
    config.gpu_options.allow_growth = True
    config.log_device_placement = False
-   
+
    lr = args.learning_rate
    saver = tf.train.Saver()
    sess = tf.Session(config=config)
    sess.run([init_global, init_local], feed_dict={train_phase : True})
-   
+
    start = time.time()
    epoch = 0
    step = 0.
-   counter = 0
    best = 0.
    print('Starting training loop...')
    while epoch < args.n_epochs:
@@ -184,7 +160,7 @@ def main(args):
          sys.stdout.flush()
       train_loss /= (i+1.)
       train_acc /= (i+1.)
-      
+
       if not args.combine_train_val:
          batcher = minibatcher(data['valid_x'], data['valid_y'], args.batch_size)
          valid_acc = 0.
@@ -200,14 +176,14 @@ def main(args):
       else:
          print('[{:04d} | {:0.1f}] Loss: {:04f}, Train Acc.: {:04f}, Learning rate: {:.2e}'.format(epoch,
             time.time()-start, train_loss, train_acc, lr))
-            
+
       # Save model
-      if epoch % 10 == 0:
+      if (not args.combine_train_val) and (valid_acc > best):
          saver.save(sess, args.checkpoint_path)
+         best = valid_acc
          print('Model saved')
-      
+
       # Updates to the training scheme
-      #best, counter, lr = get_learning_rate(args, valid_acc, best, counter, lr)
       lr = args.learning_rate * np.power(0.1, epoch / 50)
       epoch += 1
 
@@ -221,10 +197,11 @@ def main(args):
       sys.stdout.write('Testing\r')
       sys.stdout.flush()
    test_acc /= (i+1.)
-   
+
    print('Test Acc.: {:04f}'.format(test_acc))
    sess.close()
-      
+   return best
+
 
 if __name__ == '__main__':
    parser = argparse.ArgumentParser()
@@ -232,40 +209,3 @@ if __name__ == '__main__':
    parser.add_argument("--default_settings", help="use default settings", type=bool, default=True)
    parser.add_argument("--combine_train_val", help="combine the training and validation sets for testing", type=bool, default=False)
    main(parser.parse_args())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
