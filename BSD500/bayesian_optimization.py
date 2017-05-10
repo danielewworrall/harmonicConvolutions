@@ -23,15 +23,16 @@ def dump(res):
 
 def optimize(n_trials):
    """Run the gp_minimize function"""
-   dimensions = [(5, 25),       # batch size
-                 (1e-6, 1e-2),  # learning rate
-                 (0.1, 1.),     # std mult
+   dimensions = [(4, 10),       # batch size
+                 (1e-3, 1e-1),  # learning rate
+                 (0.7, 1.5),     # std mult
                  (3, 6),        # filter_size
-                 (2, 5),        # n_rings
-                 (1.,9.)]       # phase_preconditioner
+                 (2, 4),        # n_rings
+                 (0.5,1.5)]       # phase_preconditioner
 
+   x0 = [5, 1e-2, 1., 5, 2, 1.]
 
-   print gp_minimize(wrapper_function, dimensions, n_calls=n_trials, verbose=True, callback=dump)
+   print gp_minimize(wrapper_function, dimensions, x0=x0, n_calls=n_trials, verbose=True, callback=dump)
 
 
 def wrapper_function(dimension):
