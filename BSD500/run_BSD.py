@@ -71,9 +71,8 @@ def settings(args):
       args.sparsity = True
 
       args.test_path = args.save_name
-      args.log_path = os.path.join('./logs/', args.test_path)
-      args.checkpoint_path = os.path.join('./checkpoints/', args.test_path)
-      args.test_path = os.path.join('./', args.test_path)
+      args.log_path = './logs'
+      args.checkpoint_path = './checkpoints'
 
    make_dirs(args, args.test_path)
    make_dirs(args, args.log_path)
