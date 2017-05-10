@@ -4,7 +4,7 @@
 
 This code accompanies the paper [Harmonic Networks: Deep Translation and Rotation Equivariance](https://arxiv.org/abs/1612.04642) by [Daniel E. Worrall](http://www0.cs.ucl.ac.uk/staff/D.Worrall/), [Stephan J. Garbin](http://stephangarbin.com/), [Daniyar Turmukhambetov](http://www0.cs.ucl.ac.uk/staff/d.turmukhambetov/), and [Gabriel J. Brostow](http://www0.cs.ucl.ac.uk/staff/G.Brostow/).
 
-[![Watch the video](https://raw.github.com/GabLeRoux/WebMole/master/ressources/WebMole_Youtube_Video.png)](https://www.youtube.com/watch?v=qoWAFBYOtoU&feature=youtu.be)]
+[![Watch the video](http://img.youtube.com/vi/qoWAFBYOtoU/0.jpg)](https://www.youtube.com/watch?v=qoWAFBYOtoU&feature=youtu.be)]
 
 # 1 Running the code
 To run code for a specific experiment, run the file `run_<myscript>.py` in the relevant folder.
