@@ -126,21 +126,6 @@ def bsd_preprocess(im, tg):
     return im, tg
 
 
-def get_learning_rate(opt, current, best, counter, learning_rate):
-   """If have not seen accuracy improvement in delay epochs, then divide
-   learning rate by 10
-   """
-   if current > best:
-      best = current
-      counter = 0
-   elif counter > opt['delay']:
-      learning_rate = learning_rate / 10.
-      counter = 0
-   else:
-      counter += 1
-   return (best, counter, learning_rate)
-
-
 def sparsity_regularizer(x, sparsity):
    """Define a sparsity regularizer"""
    q = tf.reduce_mean(tf.nn.sigmoid(x))
