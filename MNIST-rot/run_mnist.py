@@ -44,7 +44,7 @@ def settings(args):
          args.data_dir, "/mnist_rotation_new.zip")
    # Load dataset
    mnist_dir = args.data_dir + '/mnist_rotation_new'
-   train = np.load(mnist_dir + '/rotated_train.npz')
+   train = np.load(os.path.join(mnist_dir,'/rotated_train.npz'))
    valid = np.load(mnist_dir + '/rotated_valid.npz')
    test = np.load(mnist_dir + '/rotated_test.npz')
    data = {}
@@ -59,7 +59,7 @@ def settings(args):
    data['test_x'] = test['x']
    data['test_y'] = test['y']
 
-   
+
    # Other options
    if args.default_settings:
       args.n_epochs = 200
@@ -105,7 +105,7 @@ def minibatcher(inputs, targets, batchsize, shuffle=False):
       yield inputs[excerpt], targets[excerpt]
 
 def get_learning_rate(args, current, best, counter, learning_rate):
-   """If have not seen accuracy improvement in delay epochs, then divide 
+   """If have not seen accuracy improvement in delay epochs, then divide
    learning rate by 10
    """
    if current > best:
@@ -124,7 +124,7 @@ def main(args):
    tf.reset_default_graph()
    ##### SETUP AND LOAD DATA #####
    args, data = settings(args)
-   
+
    ##### BUILD MODEL #####
    ## Placeholders
    x = tf.placeholder(tf.float32, [args.batch_size,784], name='x')
@@ -150,7 +150,7 @@ def main(args):
          g = args.phase_preconditioner*g
       modified_gvs.append((g, v))
    train_op = optim.apply_gradients(modified_gvs)
-   
+
    ##### TRAIN ####
    # Configure tensorflow session
    init_global = tf.global_variables_initializer()
@@ -158,12 +158,12 @@ def main(args):
    config = tf.ConfigProto()
    config.gpu_options.allow_growth = True
    config.log_device_placement = False
-   
+
    lr = args.learning_rate
    saver = tf.train.Saver()
    sess = tf.Session(config=config)
    sess.run([init_global, init_local], feed_dict={train_phase : True})
-   
+
    start = time.time()
    epoch = 0
    step = 0.
@@ -184,7 +184,7 @@ def main(args):
          sys.stdout.flush()
       train_loss /= (i+1.)
       train_acc /= (i+1.)
-      
+
       if not args.combine_train_val:
          batcher = minibatcher(data['valid_x'], data['valid_y'], args.batch_size)
          valid_acc = 0.
@@ -200,12 +200,12 @@ def main(args):
       else:
          print('[{:04d} | {:0.1f}] Loss: {:04f}, Train Acc.: {:04f}, Learning rate: {:.2e}'.format(epoch,
             time.time()-start, train_loss, train_acc, lr))
-            
+
       # Save model
       if epoch % 10 == 0:
          saver.save(sess, args.checkpoint_path)
          print('Model saved')
-      
+
       # Updates to the training scheme
       #best, counter, lr = get_learning_rate(args, valid_acc, best, counter, lr)
       lr = args.learning_rate * np.power(0.1, epoch / 50)
@@ -221,10 +221,10 @@ def main(args):
       sys.stdout.write('Testing\r')
       sys.stdout.flush()
    test_acc /= (i+1.)
-   
+
    print('Test Acc.: {:04f}'.format(test_acc))
    sess.close()
-      
+
 
 if __name__ == '__main__':
    parser = argparse.ArgumentParser()
@@ -232,40 +232,3 @@ if __name__ == '__main__':
    parser.add_argument("--default_settings", help="use default settings", type=bool, default=True)
    parser.add_argument("--combine_train_val", help="combine the training and validation sets for testing", type=bool, default=False)
    main(parser.parse_args())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
