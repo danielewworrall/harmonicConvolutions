@@ -81,7 +81,7 @@ def settings(args):
       args.lr_div = 10.
 
    args.log_path = add_folder("./logs")
-   args.checkpoint_path = os.path.join(add_folder("./checkpoints") ,"/model.ckpt")
+   args.checkpoint_path = os.path.join(add_folder("./checkpoints") ,"model.ckpt")
    return args, data
 
 
@@ -225,6 +225,7 @@ def main(args):
 
    print('Test Acc.: {:04f}'.format(test_acc))
    sess.close()
+   return valid_acc
 
 
 if __name__ == '__main__':
