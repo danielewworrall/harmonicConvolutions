@@ -39,14 +39,14 @@ def download2FileAndExtract(url, folder, fileName):
 def settings(args):
    # Download MNIST if it doesn't exist
    args.dataset = 'rotated_mnist'
-   if not os.path.exists(args.data_dir + '/mnist_rotation_new.zip'):
+   if not os.path.exists(os.path.join(args.data_dir,"mnist_rotation_new.zip")):
       download2FileAndExtract("https://www.dropbox.com/s/0fxwai3h84dczh0/mnist_rotation_new.zip?dl=1",
          args.data_dir, "/mnist_rotation_new.zip")
    # Load dataset
-   mnist_dir = os.path.join(args.data_dir,"/mnist_rotation_new")
-   train = np.load(os.path.join(mnist_dir,"/rotated_train.npz"))
-   valid = np.load(os.path.join(mnist_dir,"/rotated_valid.npz"))
-   test = np.load(os.path.join(mnist_dir,"/rotated_test.npz"))
+   mnist_dir = os.path.join(args.data_dir,"mnist_rotation_new")
+   train = np.load(os.path.join(mnist_dir,"rotated_train.npz"))
+   valid = np.load(os.path.join(mnist_dir,"rotated_valid.npz"))
+   test = np.load(os.path.join(mnist_dir,"rotated_test.npz"))
    data = {}
    if args.combine_train_val:
       data['train_x'] = np.vstack((train['x'], valid['x']))
