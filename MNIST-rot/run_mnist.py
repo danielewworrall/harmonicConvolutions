@@ -45,7 +45,7 @@ def settings(args):
    # Load dataset
    mnist_dir = os.path.join(args.data_dir,"/mnist_rotation_new")
    train = np.load(os.path.join(mnist_dir,"/rotated_train.npz"))
-   valid = np.load(os.path.join(mnist_dir,"/rotated_valid.npz")
+   valid = np.load(os.path.join(mnist_dir,"/rotated_valid.npz"))
    test = np.load(os.path.join(mnist_dir,"/rotated_test.npz"))
    data = {}
    if args.combine_train_val:
