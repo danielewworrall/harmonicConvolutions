@@ -43,10 +43,10 @@ def settings(args):
       download2FileAndExtract("https://www.dropbox.com/s/0fxwai3h84dczh0/mnist_rotation_new.zip?dl=1",
          args.data_dir, "/mnist_rotation_new.zip")
    # Load dataset
-   mnist_dir = args.data_dir + '/mnist_rotation_new'
-   train = np.load(os.path.join(mnist_dir,'/rotated_train.npz'))
-   valid = np.load(mnist_dir + '/rotated_valid.npz')
-   test = np.load(mnist_dir + '/rotated_test.npz')
+   mnist_dir = os.path.join(args.data_dir,"/mnist_rotation_new")
+   train = np.load(os.path.join(mnist_dir,"/rotated_train.npz"))
+   valid = np.load(os.path.join(mnist_dir,"/rotated_valid.npz")
+   test = np.load(os.path.join(mnist_dir,"/rotated_test.npz")
    data = {}
    if args.combine_train_val:
       data['train_x'] = np.vstack((train['x'], valid['x']))
@@ -80,8 +80,8 @@ def settings(args):
       args.n_classes = 10
       args.lr_div = 10.
 
-   args.log_path = add_folder('./logs')
-   args.checkpoint_path = add_folder('./checkpoints') + '/model.ckpt'
+   args.log_path = add_folder("./logs")
+   args.checkpoint_path = os.path.join(add_folder("./checkpoints") ,"/model.ckpt")
    return args, data
 
 
@@ -195,11 +195,12 @@ def main(args):
             sys.stdout.write('Validating\r')
             sys.stdout.flush()
          valid_acc /= (i+1.)
-         print('[{:04d} | {:0.1f}] Loss: {:04f}, Train Acc.: {:04f}, Validation Acc.: {:04f}, Learning rate: {:.2e}'.format(epoch,
-            time.time()-start, train_loss, train_acc, valid_acc, lr))
+         print("[{:04d} | {:0.1f}] Loss: {:04f}, Train Acc.: {:04f}, Validation" \
+               " Acc.: {:04f}, Learning rate: {:.2e}".format(epoch, time.time()-start, 
+               train_loss, train_acc, valid_acc, lr))
       else:
-         print('[{:04d} | {:0.1f}] Loss: {:04f}, Train Acc.: {:04f}, Learning rate: {:.2e}'.format(epoch,
-            time.time()-start, train_loss, train_acc, lr))
+         print("[{:04d} | {:0.1f}] Loss: {:04f}, Train Acc.: {:04f}, Learning" \
+               " rate: {:.2e}".format(epoch, time.time()-start, train_loss, train_acc, lr))
 
       # Save model
       if epoch % 10 == 0:
