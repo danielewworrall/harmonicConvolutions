@@ -30,9 +30,10 @@ def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
     """
     xsh = x.get_shape().as_list()
     shape = [ksize, ksize, xsh[5], n_channels]
-    Q = get_weights_dict(shape, max_order, std_mult=stddev, n_rings=n_rings, name='W'+name)
+    weight_order = np.maximum(max_order, xsh[3])
+    Q = get_weights_dict(shape, weight_order, std_mult=stddev, n_rings=n_rings, name='W'+name)
     if phase == True:
-        P = get_phase_dict(xsh[5], n_channels, max_order, name='phase'+name)
+        P = get_phase_dict(xsh[5], n_channels, weight_order, name='phase'+name)
     else:
         P = None
     W = get_filters(Q, ksize, bw, P=P, n_rings=n_rings)

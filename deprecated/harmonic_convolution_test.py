@@ -9,6 +9,9 @@
 #          starts to fail.
 #
 
+import sys
+sys.path.append('../')
+
 import numpy as np
 from scipy.ndimage import rotate
 from skimage.color import rgb2gray
@@ -34,11 +37,11 @@ def rotate_batch(batch):
     batch_size = batch.shape[0]
     return np.stack([rotate(batch[i],  circle_degrees[i],
                             axes=(1,0), reshape=False, order=3) for i in range(batch_size)])
-        
-    
+
+
 def unrotate_batch(batch):
     batch_size = batch.shape[0]
-    return np.stack([rotate(batch[i], -circle_degrees[i], 
+    return np.stack([rotate(batch[i], -circle_degrees[i],
                             axes=(1,0), reshape=False, order=3) for i in range(batch_size)])
 
 
@@ -86,7 +89,7 @@ for layer_index in range(LAYER_COUNT):
     #    hconv = hn_lite.mean_pool(hconv, ksize=(1,2,2,1), strides=(1,2,2,1))
     hconv = hn_lite.conv2d(hconv, 1, KERNEL_WIDTH, padding='SAME', strides=(1,STRIDE,STRIDE,1),
                            max_order=MAX_ORDER, name='hc'+str(layer_index))
-real = hn_lite.sum_magnitudes(hconv)                                                                                     
+real = hn_lite.sum_magnitudes(hconv)
 output_images = tf.nn.tanh(tf.reduce_mean(real, reduction_indices=[3,4]))
 
 
@@ -99,8 +102,8 @@ with tf.Session() as sess:
         real_output = sess.run(output_images, feed_dict={input_images: input_image})[0,:,:,0]
         real_output = rotate(real_output, -i, axes=(1,0), reshape=False, order=3) / 1.2
         print np.amin(real_output), np.amax(real_output)
-        imsave('./nate_experiments/activations/nate_{:d}_/{:04d}.jpg'.format(LAYER_COUNT,i), real_output)
-    
+        imsave('./nathan/activations/nate_{:d}_/{:04d}.jpg'.format(LAYER_COUNT,i), real_output)
+
 '''
 print('no fault')
 batch_plot(unrotate_batch(ROTATED_INPUT), title="input")

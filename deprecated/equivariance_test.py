@@ -1,4 +1,4 @@
-"""Unit tests"""
+"""Equivariance tests"""
 
 import os
 import sys
@@ -9,38 +9,6 @@ import numpy as np
 import tensorflow as tf
 
 import harmonic_network_lite as hl
-
-
-def test_forward_pass_shape():
-   """Convolve with random noise"""
-   for i in xrange(3,13):
-      tf.reset_default_graph()
-      x = tf.placeholder(tf.float32, [6,i,i,1,1,4])
-      y = hl.conv2d(x, 5, 3, name='conv_forward_pass_shape')
-
-      X = np.random.randn(6,i,i,1,1,4)
-
-      with tf.Session() as sess:
-         init_op = tf.global_variables_initializer()
-         sess.run(init_op)
-         Y = sess.run(y, feed_dict={x: X})
-      assert Y.shape == (6,i-2,i-2,2,2,5)
-
-
-def test_backward_pass_shape():
-   """Make sure that a gradient is created"""
-   tf.reset_default_graph()
-   x = tf.placeholder(tf.float32, [2,3,3,1,1,1])
-   y = hl.conv2d(x, 1, 3, name='conv_backward_pass')
-   g = tf.gradients(y, x)
-
-   X = np.random.randn(2,3,3,1,1,1)
-
-   with tf.Session() as sess:
-      init_op = tf.global_variables_initializer()
-      sess.run(init_op)
-      G = sess.run(g, feed_dict={x: X})
-   assert G[0].shape == (2,3,3,1,1,1)
 
 
 def test_forward_invariance_90():
@@ -67,13 +35,9 @@ def test_forward_invariance_90():
    for i in xrange(4):
       for j in xrange(i):
          assert np.amax(np.abs(Y[j,0,:] - Y[i,0,:])) < 1e-5
+         print np.amax(np.abs(Y[j,0,:] - Y[i,0,:]))
    print
    # Look at the difference in magnitudes
    for i in xrange(4):
       for j in xrange(i):
          assert np.amax(np.abs(Inv[j,:] - Inv[i,:])) < 1e-5
-
-
-test_forward_pass_shape()
-test_backward_pass_shape()
-test_forward_invariance_90()
