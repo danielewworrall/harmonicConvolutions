@@ -16,9 +16,9 @@ def deep_mnist(args, x, train_phase):
    # Sure layers weight & bias
    order = 1
    # Number of Filters
-   nf = args.n_filters
-   nf2 = int(nf*args.filter_gain)
-   nf3 = int(nf*(args.filter_gain**2.))
+   nf = args.n_filters[0]
+   nf2 = args.n_filters[1]
+   nf3 = args.n_filters[2]
    bs = args.batch_size
    fs = args.filter_size
    ncl = args.n_classes
@@ -34,31 +34,40 @@ def deep_mnist(args, x, train_phase):
    # Convolutional Layers with pooling
    with tf.name_scope('block1') as scope:
       cv1 = hn_lite.conv2d(x, nf, fs, padding='SAME', n_rings=nr, bw=bw, name='1')
-      cv1 = hn_lite.non_linearity(cv1, tf.nn.relu, name='1')
+      cv1 = hn_lite.batch_norm(cv1, train_phase, name='1')
+      print(cv1)
 
       cv2 = hn_lite.conv2d(cv1, nf, fs, padding='SAME', n_rings=nr, bw=bw, name='2')
       cv2 = hn_lite.batch_norm(cv2, train_phase, name='bn1')
+      print(cv2)
 
    with tf.name_scope('block2') as scope:
       cv2 = hn_lite.mean_pool(cv2, ksize=(1,2,2,1), strides=(1,2,2,1))
       cv3 = hn_lite.conv2d(cv2, nf2, fs, padding='SAME', n_rings=nr, bw=bw, name='3')
-      cv3 = hn_lite.non_linearity(cv3, tf.nn.relu, name='3')
+      cv3 = hn_lite.batch_norm(cv3, train_phase, name='3')
+      print(cv3)
 
       cv4 = hn_lite.conv2d(cv3, nf2, fs, padding='SAME', n_rings=nr, bw=bw, name='4')
       cv4 = hn_lite.batch_norm(cv4, train_phase, name='bn2')
+      print(cv4)
 
    with tf.name_scope('block3') as scope:
       cv4 = hn_lite.mean_pool(cv4, ksize=(1,2,2,1), strides=(1,2,2,1))
       cv5 = hn_lite.conv2d(cv4, nf3, fs, padding='SAME', n_rings=nr, bw=bw, name='5')
-      cv5 = hn_lite.non_linearity(cv5, tf.nn.relu, name='5')
+      cv5 = hn_lite.batch_norm(cv5, train_phase, name='5')
+      print(cv5)
 
       cv6 = hn_lite.conv2d(cv5, nf3, fs, padding='SAME', n_rings=nr, bw=bw, name='6')
       cv6 = hn_lite.batch_norm(cv6, train_phase, name='bn3')
+      print(cv6)
 
    # Final Layer
    with tf.name_scope('block4') as scope:
       cv7 = hn_lite.conv2d(cv6, ncl, fs, padding='SAME', n_rings=nr, bw=bw, phase=False,
-               name='7')
+               max_order=0, name='7')
+      print(cv7)
       real = hn_lite.sum_magnitudes(cv7)
+      print(real)
       cv7 = tf.reduce_mean(real, axis=[1,2,3,4])
+      print(cv7)
       return tf.nn.bias_add(cv7, bias)

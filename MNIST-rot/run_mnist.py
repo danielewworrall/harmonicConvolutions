@@ -68,10 +68,9 @@ def settings(args):
       args.std_mult = 0.7
       args.delay = 12
       args.phase_preconditioner = 7.8
-      args.filter_gain = 2
       args.filter_size = 5
       args.n_rings = 4
-      args.n_filters = 8
+      args.n_filters = [8,16,35]
       args.display_step = len(data['train_x'])/46
       args.is_classification = True
       args.dim = 28
