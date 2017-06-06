@@ -11,7 +11,7 @@ from harmonic_network_ops import *
 
 
 def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
-             max_order=1, stddev=0.4, n_rings=None, name='conv2d'):
+             max_order=1, stddev=0.4, n_rings=None, bw=1./np.pi, name='conv2d'):
     """Harmonic Convolution lite
 
     x: input tf tensor, shape [batchsize,height,width,order,complex,channels],
@@ -35,7 +35,7 @@ def conv2d(x, n_channels, ksize, strides=(1,1,1,1), padding='VALID', phase=True,
         P = get_phase_dict(xsh[5], n_channels, max_order, name='phase'+name)
     else:
         P = None
-    W = get_filters(Q, filter_size=ksize, P=P, n_rings=n_rings)
+    W = get_filters(Q, ksize, bw, P=P, n_rings=n_rings)
     R = h_conv(x, W, strides=strides, padding=padding, max_order=max_order,
                name=name)
     return R

@@ -79,6 +79,7 @@ def settings(args):
       args.n_channels = 1
       args.n_classes = 10
       args.lr_div = 10.
+      args.bw = 1./np.pi
 
    args.log_path = add_folder("./logs")
    args.checkpoint_path = os.path.join(add_folder("./checkpoints") ,"model.ckpt")
@@ -196,7 +197,7 @@ def main(args):
             sys.stdout.flush()
          valid_acc /= (i+1.)
          print("[{:04d} | {:0.1f}] Loss: {:04f}, Train Acc.: {:04f}, Validation" \
-               " Acc.: {:04f}, Learning rate: {:.2e}".format(epoch, time.time()-start, 
+               " Acc.: {:04f}, Learning rate: {:.2e}".format(epoch, time.time()-start,
                train_loss, train_acc, valid_acc, lr))
       else:
          print("[{:04d} | {:0.1f}] Loss: {:04f}, Train Acc.: {:04f}, Learning" \
@@ -225,7 +226,7 @@ def main(args):
 
    print('Test Acc.: {:04f}'.format(test_acc))
    sess.close()
-   return valid_acc
+   return test_acc
 
 
 if __name__ == '__main__':

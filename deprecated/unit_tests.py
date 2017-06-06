@@ -67,6 +67,7 @@ def test_forward_invariance_90():
    for i in xrange(4):
       for j in xrange(i):
          assert np.amax(np.abs(Y[j,0,:] - Y[i,0,:])) < 1e-5
+         print np.amax(np.abs(Y[j,0,:] - Y[i,0,:]))
    print
    # Look at the difference in magnitudes
    for i in xrange(4):

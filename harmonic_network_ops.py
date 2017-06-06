@@ -247,7 +247,7 @@ def get_weights(filter_shape, W_init=None, std_mult=0.4, name='W'):
 
 
 ##### FUNCTIONS TO CONSTRUCT STEERABLE FILTERS #####
-def get_interpolation_weights(filter_size, m, n_rings=None):
+def get_interpolation_weights(filter_size, m, bw, n_rings=None):
     """Resample the patches on rings using Gaussian interpolation"""
     if n_rings is None:
         n_rings = np.maximum(filter_size/2, 2)
@@ -267,13 +267,13 @@ def get_interpolation_weights(filter_size, m, n_rings=None):
     diff = radii*ring_locations - coords[np.newaxis,:,np.newaxis,:]
     dist2 = np.sum(diff**2, axis=1)
     # Convert distances to weightings
-    bandwidth = (1. / np.pi) #0.5 ## Need to compute the optimal bandwid
+    bandwidth = bw #(1. / np.pi) #0.5 ## Need to compute the optimal bandwidth
     weights = np.exp(-0.5*dist2/(bandwidth**2))
     # Normalize
     return weights/np.sum(weights, axis=2, keepdims=True)
 
 
-def get_filters(R, filter_size, P=None, n_rings=None):
+def get_filters(R, filter_size, bw, P=None, n_rings=None):
     """Perform single-frequency DFT on each ring of a polar-resampled patch"""
     k = filter_size
     filters = {}
@@ -282,7 +282,7 @@ def get_filters(R, filter_size, P=None, n_rings=None):
     for m, r in R.iteritems():
         rsh = r.get_shape().as_list()
         # Get the basis matrices
-        weights = get_interpolation_weights(k, m, n_rings=n_rings)
+        weights = get_interpolation_weights(k, m, bw, n_rings=n_rings)
         DFT = dft(N)[m,:]
         LPF = np.dot(DFT, weights).T
 
