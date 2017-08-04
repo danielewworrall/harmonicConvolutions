@@ -162,14 +162,13 @@ def upconvlayer(i, inp, ksize, inpdim, outdim, outshape, reuse, nonlin=tf.nn.elu
 
 def encoder_conv(x, num_latents, is_training, reuse=False):
     """Encoder Conv"""
-    l0 = convlayer(0, x,  3,   1,    8, 1, reuse, nonlin=tf_nn_lrelu, is_training=is_training) # 28
-    l1 = convlayer(1, l0, 3,  8,    16, 2, reuse, nonlin=tf_nn_lrelu, is_training=is_training) # 14
-    l2 = convlayer(2, l1, 3,  16,   16, 2, reuse, nonlin=tf_nn_lrelu, is_training=is_training) # 7
-    l3 = convlayer(3, l2, 3,  16,   32, 1, reuse, padding='VALID', nonlin=tf_nn_lrelu, is_training=is_training) # 5
-    l4 = convlayer(4, l3, 3,  32,   64, 1, reuse, padding='VALID', nonlin=tf_nn_lrelu, is_training=is_training) # 3
-    l5 = convlayer(5, l4, 3,  64,  256, 1, reuse, padding='VALID', nonlin=tf_nn_lrelu, is_training=is_training) # 1
-    l6 = convlayer(6, l5, 1,  256,  num_latents, 1, reuse, nonlin=tf.identity, is_training=is_training, padding='VALID', dobn=False)
-    l6 = tf.reshape(l6, [-1, num_latents])
+    l0 = convlayer(0, x,  3,   1,    8, 1, reuse, padding='VALID', nonlin=tf_nn_lrelu, is_training=is_training) # 26
+    l1 = convlayer(1, l0, 4,  8,    16, 2, reuse, padding='VALID', nonlin=tf_nn_lrelu, is_training=is_training) # 13
+    l2 = convlayer(2, l1, 4,  16,   32, 2, reuse, padding='VALID', nonlin=tf_nn_lrelu, is_training=is_training) # 5
+    l3 = convlayer(3, l2, 3,  32,   64, 1, reuse, padding='VALID', nonlin=tf_nn_lrelu, is_training=is_training) # 3
+    l4 = convlayer(4, l3, 3,  64,  256, 1, reuse, padding='VALID', nonlin=tf_nn_lrelu, is_training=is_training) # 1
+    l5 = convlayer(5, l4, 1,  256,  num_latents, 1, reuse, nonlin=tf.identity, is_training=is_training, padding='VALID', dobn=False)
+    l6 = tf.reshape(l5, [-1, num_latents])
     return l6
 
 
@@ -178,13 +177,12 @@ def decoder_conv(z, is_training, reuse=False):
     batch_size = z.get_shape().as_list()[0]
     num_latents = z.get_shape().as_list()[-1]
     z = tf.reshape(z, [batch_size, 1, 1, num_latents])
-    l6 = upconvlayer(6, z,  1,  num_latents, 256,   1, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
-    l5 = upconvlayer(5, l6, 3,  256, 64,   3, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
-    l4 = upconvlayer(4, l5, 3,  64,  32,   5, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
-    l3 = upconvlayer(3, l4, 3,  32,  16,   7, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
-    l2 = upconvlayer(2, l3, 3,  16,  16,  14, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
-    l1 = upconvlayer(1, l2, 3,  16,   8,  28, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
-    l0 = upconvlayer(0, l1, 1,  8,    1,  28, reuse, nonlin=tf.identity, is_training=is_training, dobn=False)
+    l5 = upconvlayer(5, z,  1,  num_latents, 256,   1, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
+    l4 = upconvlayer(4, l5, 3,  256, 64,   3, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
+    l3 = upconvlayer(3, l4, 3,  64,  32,   5, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
+    l2 = upconvlayer(2, l3, 4,  32,  16,  13, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
+    l1 = upconvlayer(1, l2, 4,  16,   8,  26, reuse, nonlin=tf_nn_lrelu, is_training=is_training)
+    l0 = upconvlayer(0, l1, 3,  8,    1,  28, reuse, nonlin=tf.identity, is_training=is_training, dobn=False)
 
     recons_logits = l0
     recons = tf.sigmoid(recons_logits)
