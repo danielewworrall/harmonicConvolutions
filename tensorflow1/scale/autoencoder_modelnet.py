@@ -33,6 +33,7 @@ flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
 flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
+flags.DEFINE_boolean('Mac', False, 'Dopey execution environment')
 flags.DEFINE_boolean('TEST', False, 'Evaluate model on the test set')
 flags.DEFINE_boolean('VIS', False, 'Visualize feature space transformations')
 
@@ -45,6 +46,7 @@ def load_data():
     #shapenet = shapenet_loader.read_data_sets('~/scratch/Datasets/ShapeNetVox32', one_hot=True)
     #return shapenet
     modelnet = modelnet_loader.read_data_sets('~/scratch/Datasets/ModelNet', one_hot=True)
+    #modelnet = modelnet_loader.read_data_sets('~/Documents/Datasets/ModelNet', one_hot=True)
     return modelnet
 
 
@@ -131,7 +133,7 @@ def classifier(codes, f_params_dim, is_training, reuse=False):
     inpdim = feats.get_shape().as_list()[1]
     print(feats)
 
-    def mul_noise(inp, is_training, stddev=0.5):
+    def mul_noise(inp, is_training, stddev=0.3):
         switch = tf.cast(is_training, tf.float32)
         noise = 1.0 + switch*tf.truncated_normal(inp.get_shape(), stddev=stddev)
         out = inp*noise
@@ -157,11 +159,16 @@ def classifier(codes, f_params_dim, is_training, reuse=False):
     l1 = add_noise(l1, is_training, 0.1)
     l2 = mlplayer(1, l1, 256, 128, reuse=reuse, is_training=is_training, dobn=True)
     l2 = add_noise(l2, is_training, 0.1)
-    y_logits = mlplayer(2, l2, 128, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
+    #### TODO retraining 10_ta 
+    #feats = add_noise(feats, is_training)
+    #l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse, is_training=is_training, dobn=True)
+    #l1 = add_noise(l1, is_training)
+    #l2 = mlplayer(1, l1, 256, 128, reuse=reuse, is_training=is_training, dobn=True)
+    #l2 = add_noise(l2, is_training)
+    #y_logits = mlplayer(2, l2, 128, 10, nonlin=tf.identity, reuse=reuse, is_training=is_training, dobn=False)
 
     ### TODO retraining 10_2m
     #feats = mul_noise(feats, is_training)
-    ##feats = mul_noise(feats, is_training)
     #l1 = mlplayer(0, feats, inpdim, 256, reuse=reuse, is_training=is_training, dobn=True)
     #l1 = mul_noise(l1, is_training)
     #l2 = mlplayer(1, l1, 256, 128, reuse=reuse, is_training=is_training, dobn=True)
@@ -182,12 +189,15 @@ def bernoulli_xentropy(target, output):
     return tf.reduce_sum(wx_entropy, axis=(1,2,3,4))
 
 
-def identity_stl_transmats(batch_size):
-    _, stl_transmat_inp, _, _ = random_transmats(batch_size)
-    stl_transmat_inp[:,:,:] = 0.0
-    stl_transmat_inp[:,0,0] = 1.0
-    stl_transmat_inp[:,1,1] = 1.0
-    stl_transmat_inp[:,2,2] = 1.0
+def identity_stl_transmats(batch_size, rot_ax=0, theta=0):
+    #_, stl_transmat_inp, _, _ = random_transmats(batch_size)
+    params_inp_rot = np.zeros([batch_size,3])
+    params_inp_rot[:, rot_ax] = theta
+    stl_transmat_inp = get_3drotmat(params_inp_rot)
+    #stl_transmat_inp[:,:,:] = 0.0
+    #stl_transmat_inp[:,0,0] = 1.0
+    #stl_transmat_inp[:,1,1] = 1.0
+    #stl_transmat_inp[:,2,2] = 1.0
     return stl_transmat_inp.astype(np.float32)
 
 
@@ -310,13 +320,10 @@ def load_sess(sess, load_path, load_classifier=True):
             vars_to_pop = [var for var in vars_to_restore if 'classifier' in var.name]
             for var in vars_to_pop:
                 vars_to_restore.remove(var)
+
         # Restores from checkpoint
         model_checkpoint_path = os.path.abspath(ckpt.model_checkpoint_path)
-        print(model_checkpoint_path)
-        res_saver.restore(sess, model_checkpoint_path)
-        
-        # Restores from checkpoint
-        model_checkpoint_path = os.path.abspath(ckpt.model_checkpoint_path)
+        #model_checkpoint_path = load_path + ckpt.model_checkpoint_path[-14:]
         print(model_checkpoint_path)
         res_saver.restore(sess, model_checkpoint_path)
     else:
@@ -347,7 +354,7 @@ def vis(inputs, outputs, ops, opt, data):
         return
     
     # check test set
-    num_steps = 50#data.test.num_steps(1)
+    num_steps = 30#data.test.num_steps(1)
     for step_i in xrange(num_steps):
         print(step_i)
         val_recons = []
@@ -355,54 +362,57 @@ def vis(inputs, outputs, ops, opt, data):
         #pick a random initial transformation
         _, cur_stl_params_in, _, cur_f_params = random_transmats(1)
 
-        max_angles = 5
+        max_angles_i = 2
+        max_angles = 24
         
         cur_x, cur_y_true = data.test.next_batch(1)
-        fangles = np.linspace(-np.pi, np.pi, num=max_angles*max_angles)
+        fangles_i = np.linspace(0, np.pi/4, num=max_angles_i)
+        fangles_j = np.linspace(0, 2*np.pi, num=max_angles)
         rot_ax = 0
 
-        for i in xrange(max_angles):
+        save_folder = './vis/' + opt['flag'] + '/'
+        checkFolder(save_folder)
+        for i in xrange(max_angles_i):
+            cur_stl_params_i = identity_stl_transmats(1, rot_ax, fangles_i[i])
             for j in xrange(max_angles):
-                cur_f_params_j = update_f_params(cur_f_params, 0, rot_ax, fangles[i*max_angles + j])
+                cur_f_params_j = update_f_params(cur_f_params, 0, rot_ax, fangles_j[j])
                 feed_dict = {
                             test_x : cur_x,
-                            test_stl_params_in : cur_stl_params_in, 
+                            test_stl_params_in : cur_stl_params_i, 
                             val_f_params: cur_f_params_j,
                             is_training : False
                         }
 
                 y = sess.run(test_recon, feed_dict=feed_dict)
-                val_recons.append(y[0,:,:,:,:].copy())
-                val_vox.append(y[0,:,:,:,0].copy()>0.5)
+                #val_recons.append(y[0,:,:,:,:].copy())
+                val_vox = (y[0,:,:,:,0].copy()>0.5)
+
+                save_name = save_folder + '/binvox_%04d_%04d_%04d' % (step_i, i, j)
+                save_binvox(val_vox, save_name)
 
                 if j==0:
+                    save_name = save_folder + '/inp_binvox_%04d_%04d' % (step_i, i)
                     cur_x_in = sess.run(test_x_in, feed_dict=feed_dict)
                     val_vox_in = cur_x_in[0,:,:,:,0].copy()>0.5
+                    save_binvox(val_vox_in, save_name)
         
-        samples_ = np.stack(val_recons)
-        print(samples_.shape)
+        #samples_ = np.stack(val_recons)
+        #print(samples_.shape)
 
-        tile_image = np.reshape(samples_, [max_angles*max_angles, opt['outsize'][0], opt['outsize'][1], opt['outsize'][2], opt['color_chn']])
-        tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(tile_image, max_angles, max_angles)
+        #tile_image = np.reshape(samples_, [max_angles, opt['outsize'][0], opt['outsize'][1], opt['outsize'][2], opt['color_chn']])
+        #tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(tile_image, max_angles, max_angles)
 
-        save_folder = './vis/' + opt['flag'] + '/'
-        checkFolder(save_folder)
-        save_name = save_folder + '/image_%04d' % step_i
-        imsave(save_name + '_d.png', tile_image_d) 
-        imsave(save_name + '_h.png', tile_image_h) 
-        imsave(save_name + '_w.png', tile_image_w) 
+        #save_name = save_folder + '/image_%04d' % step_i
+        #imsave(save_name + '_d.png', tile_image_d) 
+        #imsave(save_name + '_h.png', tile_image_h) 
+        #imsave(save_name + '_w.png', tile_image_w) 
 
-        for i, v in enumerate(val_vox):
-            save_name = save_folder + '/binvox_%04d_%004d' % (step_i, i)
-            save_binvox(v, save_name)
-        save_name = save_folder + '/inp_binvox_%04d' % step_i
-        save_binvox(val_vox_in, save_name)
 
-        tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(cur_x_in, 1, 1)
-        save_name = save_folder + '/input_%04d' % step_i
-        imsave(save_name + '_d.png', tile_image_d) 
-        imsave(save_name + '_h.png', tile_image_h) 
-        imsave(save_name + '_w.png', tile_image_w) 
+        #tile_image_d, tile_image_h, tile_image_w = get_imgs_from_vol(cur_x_in, 1, 1)
+        #save_name = save_folder + '/input_%04d' % step_i
+        #imsave(save_name + '_d.png', tile_image_d) 
+        #imsave(save_name + '_h.png', tile_image_h) 
+        #imsave(save_name + '_w.png', tile_image_w) 
 
 
 
@@ -596,6 +606,10 @@ def main(_):
         print('Hello Daniyar!')
         opt['root'] = '/home/daniyar'
         dir_ = opt['root'] + '/deep_learning/harmonicConvolutions/tensorflow1/scale'
+    elif FLAGS.Mac:
+        print('Hello Daniyar!')
+        opt['root'] = '/Users/dturmukh'
+        dir_ = opt['root'] + '/Documents/Code/harmonicConvolutions/tensorflow1/scale'
     elif FLAGS.DaniyarSleepy:
         print('Hello Daniyar!')
         opt['root'] = '/home/daniyar'
@@ -624,30 +638,40 @@ def main(_):
     #opt['flag'] = 'modelnet_classify100_ae'
     #opt['flag'] = 'modelnet_classify1000_scratch'
     #opt['flag'] = 'modelnet_classify10000_cont2'
-    #opt['flag'] = 'modelnet_vis'
+    opt['flag'] = 'modelnet_vis'
     #opt['flag'] = 'modelnet_classify100_cont'
     #opt['flag'] = 'modelnet_classify1000_scratch'
     #opt['flag'] = 'modelnet_classify10000_scratch'
     #opt['flag'] = 'modelnet2_classify1000'
+    #opt['flag'] = 'modelnet2_classify1000_ta' # threshold augmentation
+    #opt['flag'] = 'modelnet2_classify10_ta' # threshold augmentation
+    #opt['flag'] = 'modelnet2_classify100'
+    #opt['flag'] = 'modelnet2_test'
     #opt['flag'] = 'modelnet2_classify100_ta' # threshold augmentation
     #opt['flag'] = 'modelnet2_classify10_2' # threshold augmentation, 2-layer mlp 256-128 with additive noise
     #opt['flag'] = 'modelnet2_classify1_2' # threshold augmentation, 2-layer mlp 256-128 with additive noise of 0.1
+    #opt['flag'] = 'modelnet2_classify10_2n' # threshold augmentation, 2-layer mlp 256-128 with no noise, but a bit more augmentation
     #opt['flag'] = 'modelnet2_classify10_2m' # threshold augmentation, 2-layer mlp 256-128 with multiplicative noise
     #opt['flag'] = 'modelnet2_classify1_ta' # threshold augmentation
     #opt['flag'] = 'modelnet2_classify100'
-    opt['flag'] = 'modelnet2_test'
+    #opt['flag'] = 'modelnet2_test'
     opt['summary_path'] = dir_ + '/summaries/autotrain_{:s}'.format(opt['flag'])
     opt['save_path'] = dir_ + '/checkpoints/autotrain_{:s}/'.format(opt['flag'])
     
     ###
     #opt['load_path'] = ''
-    opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1_2/'
-    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify10_2/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1_2/'
+    opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify10_2/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify10_2m/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify10_2/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify10_2n/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify10_ta/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1_ta/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify100_ta/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1000/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify1000_ta/'
+    #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet2_classify10_ta/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify100_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_cont/'
@@ -657,7 +681,7 @@ def main(_):
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify100_scratch/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_cont/'
     #opt['load_path'] = dir_ + '/checkpoints/autotrain_modelnet_classify1000_scratch/'
-    opt['do_classify'] = True
+    opt['do_classify'] = False
     
     #check and clear directories
     checkFolder(opt['summary_path'])

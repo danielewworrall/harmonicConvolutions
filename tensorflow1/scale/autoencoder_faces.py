@@ -32,6 +32,7 @@ flags.DEFINE_float('l2_latent_reg', 1e-6, 'Strength of l2 regularisation on late
 flags.DEFINE_integer('save_step', 500, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
+flags.DEFINE_boolean('DaniyarSleepy', True, 'Sleepy execution environment')
 ##---------------------
 
 ################ DATA #################
@@ -161,36 +162,44 @@ def autoencoder_efros(x, d_params, is_training, opt, reuse=False):
 
 
 def encoder(x, is_training, opt, reuse=False):
-	"""Encoder MLP"""
+	"""Encoder conv"""
 	nl = opt['nonlinearity']
 	
 	with tf.variable_scope('encoder_1') as scope:
 		l1 = conv(x, [5,5,opt['color'],32], stride=1, name='e1', padding='VALID')
+                print(l1)
 		l1 = bn4d(l1, is_training, reuse=reuse, name='bn1')
 	
 	with tf.variable_scope('encoder_2') as scope:
 		l2 = conv(nl(l1), [3,3,32,64], stride=2, name='e2', padding='SAME')
+                print(l2)
 		l2 = bn4d(l2, is_training, reuse=reuse, name='bn2')
 	
 	with tf.variable_scope('encoder_3') as scope:
 		l3 = conv(nl(l2), [3,3,64,128], stride=2, name='e3', padding='SAME')
+                print(l3)
 		l3 = bn4d(l3, is_training, reuse=reuse, name='bn3')
 	
 	with tf.variable_scope('encoder_4') as scope:
 		l4 = conv(nl(l3), [3,3,128,256], stride=2, name='e4', padding='SAME')
+                print(l4)
 		l4 = bn4d(l4, is_training, reuse=reuse, name='bn4')
 	
 	with tf.variable_scope('encoder_5') as scope:
 		l5 = conv(nl(l4), [3,3,256,512], stride=2, name='e5', padding='SAME')
+                print(l5)
 		l5 = bn4d(l5, is_training, reuse=reuse, name='bn5')
 	
 	with tf.variable_scope('encoder_6') as scope:
 		l6 = conv(nl(l5), [3,3,512,1024], stride=2, name='e6', padding='SAME')
+                print(l6)
 		l6 = bn4d(l6, is_training, reuse=reuse, name='bn6')
 		l6 = tf.reduce_mean(l6, axis=(1,2))
+                print(l6)
 	
 	with tf.variable_scope('encoder_mid') as scope:
-		return linear(nl(l6), [1024,1026], name='e_out')
+                mid = linear(nl(l6), [1024,1026], name='e_out')
+                return mid
 
 
 def decoder(z, is_training, opt, reuse=False, n_in=1026):
@@ -562,6 +571,10 @@ def main(_):
 		print('Hello dworrall!')
 		opt['root'] = '/home/dworrall'
 		dir_ = '{:s}/Code/harmonicConvolutions/tensorflow1/scale'.format(opt['root'])
+		opt['data_folder'] = '{:s}/Data/faces15'.format(opt['root'])
+	elif FLAGS.DaniyarSleepy:
+		opt['root'] = '/home/daniyar'
+		dir_ = '{:s}/deep_learning/harmonicConvolutions/tensorflow1/scale'.format(opt['root'])
 		opt['data_folder'] = '{:s}/Data/faces15'.format(opt['root'])
 	else:
 		opt['root'] = '/home/sgarbin'

@@ -31,7 +31,7 @@ flags.DEFINE_integer('save_step', 2, 'Interval (epoch) for which to save')
 flags.DEFINE_boolean('Daniel', False, 'Daniel execution environment')
 flags.DEFINE_boolean('Sleepy', False, 'Sleepy execution environment')
 flags.DEFINE_boolean('Dopey', False, 'Dopey execution environment')
-flags.DEFINE_boolean('DaniyarSleepy', True, 'Dopey execution environment')
+flags.DEFINE_boolean('DaniyarSleepy', True, 'Sleepy execution environment')
 flags.DEFINE_boolean('Mac', False, 'Mac execution environment')
 flags.DEFINE_boolean('VIS', False, 'Visualize feature space transformations')
 
@@ -200,6 +200,15 @@ def vis(inputs, outputs, ops, opt, data):
 
         cur_x, cur_y_true = data.test.next_batch(1)
         for j in xrange(max_angles_j):
+            cur_save_folder_j_inp = cur_save_folder + '%04d/inp/' % j
+            cur_save_folder_j_out = cur_save_folder + '%04d/out/' % j
+            cur_save_folder_j_ctrans = cur_save_folder + '%04d/ctrans/' % j
+            cur_save_folder_j_cinp = cur_save_folder + '%04d/cinp/' % j
+            checkFolder(cur_save_folder_j_inp)
+            checkFolder(cur_save_folder_j_out)
+            checkFolder(cur_save_folder_j_ctrans)
+            checkFolder(cur_save_folder_j_cinp)
+
             cur_stl_params_j = update_f_params(cur_stl_params_in, fangles_j[j])
             for i in xrange(max_angles_i):
                 cur_f_params_i = update_f_params(cur_f_params, fangles_i[i])
@@ -212,24 +221,24 @@ def vis(inputs, outputs, ops, opt, data):
 
                 cur_y = sess.run(test_recon, feed_dict=feed_dict)
                 cur_y = np.reshape(cur_y[0,:].copy(), [28, 28])
-                save_name = cur_save_folder + '/image_%04d_%04d' % (j, i)
+                save_name = cur_save_folder_j_out + '/%04d' % (i)
                 imsave(save_name + '.png', cur_y) 
 
-                fcodes_trans = open(cur_save_folder + 'codes_trans_%04d_%04d.txt' % (j, i), 'wa')
+                fcodes_trans = open(cur_save_folder_j_ctrans + '%04d.txt' % (i), 'wa')
                 cur_codes_trans = sess.run(test_codes_trans, feed_dict=feed_dict)
                 np.savetxt(fcodes_trans, cur_codes_trans, fmt='%.6e')
                 fcodes_trans.close()
 
-                fcodes_inp = open(cur_save_folder + 'codes_inp_%04d_%04d.txt' % (j, i), 'wa')
-                cur_codes = sess.run(test_codes, feed_dict=feed_dict)
-                np.savetxt(fcodes_inp, cur_codes, fmt='%.6e')
-                fcodes_inp.close()
+                if i==0:
+                    fcodes_inp = open(cur_save_folder_j_cinp + '%04d.txt' % (j), 'wa')
+                    cur_codes = sess.run(test_codes, feed_dict=feed_dict)
+                    np.savetxt(fcodes_inp, cur_codes, fmt='%.6e')
+                    fcodes_inp.close()
 
-                cur_x_in = sess.run(test_x_in, feed_dict=feed_dict)
-                cur_x_in = np.reshape(cur_x_in[0,:].copy(), [28, 28])
-                save_name = cur_save_folder + '/input_%04d_%04d' % (j, i)
-                imsave(save_name + '.png', cur_x_in) 
-
+                    cur_x_in = sess.run(test_x_in, feed_dict=feed_dict)
+                    cur_x_in = np.reshape(cur_x_in[0,:].copy(), [28, 28])
+                    save_name = cur_save_folder_j_inp + '/%04d' % (j)
+                    imsave(save_name + '.png', cur_x_in) 
 
 
 
@@ -330,8 +339,8 @@ def main(_):
         opt['root'] = '/home/sgarbin'
         dir_ = opt['root'] + '/Projects/harmonicConvolutions/tensorflow1/scale'
     
-    opt['mb_size'] = 32
-    opt['n_epochs'] = 80
+    opt['mb_size'] = 64
+    opt['n_epochs'] = 200
     opt['lr_schedule'] = [20, 40, 60]
     opt['lr'] = 1e-3
     opt['f_params_dim'] = 2
