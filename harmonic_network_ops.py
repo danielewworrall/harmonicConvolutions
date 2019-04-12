@@ -43,7 +43,7 @@ def h_conv(X, W, strides=(1,1,1,1), padding='VALID', max_order=1, name='h_conv')
                 # conjugate weights.
                 if Xsh[4] == 2:
                     Wr += [weights[0],-sign*weights[1]]
-                    Wi += [weights[1],sign*weights[0]]
+                    Wi += [sign*weights[1],weights[0]]
                 else:
                     Wr += [weights[0]]
                     Wi += [weights[1]]
